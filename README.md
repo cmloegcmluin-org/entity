@@ -24,14 +24,15 @@ The brain is **one persistent Claude session** held open through the Agent SDK
 `claude` CLI every turn — is what makes it feel live:
 
 - `allowed_tools=[]` strips the coding-agent tool suite, so the context stays small.
-- `setting_sources=["project", "local"]` (no `user`) keeps the Max OAuth login but drops the
-  global coding instructions, so the Entity talks like a companion, not a code reviewer.
+- `setting_sources=[]` loads **none** of your user/project/local settings — so the Entity never
+  inherits your global coding `CLAUDE.md` or hooks. (Loading them made it answer in `>>`/`>`
+  quote blocks and fire the terminal's Stop hook every turn, which exploded latency to ~50s.)
 - One session threads every turn, so it remembers what you just said.
-- Runs on the **Claude Max subscription** — no separate API key or per-token bill.
+- Runs on the **Claude Max subscription** — OAuth is read independently of settings, so no API key.
 
-Measured: ~0.9s to connect at startup, then **~1.7–2.5s per turn** (versus ~5s when the CLI
-was re-spawned each turn). The SDK is async; `SdkBrain` runs it on a private background event
-loop so the rest of the app keeps a plain synchronous `respond(text) -> text`.
+The SDK is async; `SdkBrain` runs it on a private background event loop so the rest of the app
+keeps a plain synchronous `respond(text) -> text`. Per-turn latency is a few seconds and varies
+with the server; a startup warmup absorbs the worst first-turn cold start.
 
 ## Architecture
 
@@ -52,8 +53,8 @@ Swapping any layer touches one adapter and nothing else.
 ~/workspace/entity/.venv/Scripts/python -m entity --timings # show per-turn think/speak seconds
 ```
 
-Say "goodbye entity" or press Ctrl-D to end. (In Git Bash's default terminal, prefix with
-`winpty` so the typing prompt shows.)
+Say "goodbye entity" or press Ctrl-C to end. (In Git Bash's default terminal, prefix with
+`winpty` so the typing prompt shows; note Ctrl-D does not send EOF there.)
 
 ## Develop
 

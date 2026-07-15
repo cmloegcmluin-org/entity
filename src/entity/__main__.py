@@ -39,7 +39,7 @@ def main(argv=None):
         brain.respond = _timed(brain.respond, "think")
         tts.speak = _timed(tts.speak, "speak")
 
-    print("Entity is here. Type to talk; say 'goodbye entity' or press Ctrl-D to end.")
+    print("Entity is here. Type to talk; say 'goodbye entity' or press Ctrl-C to end.")
     if muted:
         print("(muted: replies are shown, not spoken)")
     print()

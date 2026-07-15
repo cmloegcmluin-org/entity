@@ -1,9 +1,15 @@
 """The Entity's brain: one persistent Claude session via the Agent SDK.
 
 Keeping a single warm session - instead of re-spawning the `claude` CLI every turn -
-drops per-turn latency from ~5s to ~1.7s. It runs on the Max subscription:
-allowed_tools=[] keeps the context lean, and setting_sources without "user" keeps the
-OAuth login while dropping the global coding instructions so it talks like a companion.
+drops per-turn latency to a few seconds. It runs on the Max subscription (OAuth is read
+independently of settings, so no API key is needed).
+
+Isolation is critical: `setting_sources=[]` loads NONE of the user's user/project/local
+settings, so the Entity never inherits his global coding CLAUDE.md or hooks. If it did,
+the terminal reply-format instructions AND the Stop hook that enforces them bleed into the
+companion - it starts answering in ">>"/">" quote blocks, the hook fires every turn and
+injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. (`allowed_tools=[]`
+likewise keeps the context lean.)
 
 The SDK is async; SdkBrain runs it on a private background event loop so the rest of the
 app keeps the plain synchronous `respond(text) -> text` interface.
@@ -35,14 +41,18 @@ def _extract_text(messages):
     return text.strip()
 
 
+def _make_options(persona, model):
+    return ClaudeAgentOptions(
+        system_prompt=persona,
+        allowed_tools=[],
+        setting_sources=[],  # load NO user/project/local settings: no global CLAUDE.md, no hooks
+        model=model,
+    )
+
+
 class SdkBrain:
-    def __init__(self, *, persona=DEFAULT_PERSONA, model="sonnet", setting_sources=("project", "local")):
-        self._options = ClaudeAgentOptions(
-            system_prompt=persona,
-            allowed_tools=[],
-            setting_sources=list(setting_sources),
-            model=model,
-        )
+    def __init__(self, *, persona=DEFAULT_PERSONA, model="sonnet"):
+        self._options = _make_options(persona, model)
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()

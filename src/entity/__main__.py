@@ -47,9 +47,9 @@ def main(argv=None):
     muted = "--mute" in argv
     timings = "--timings" in argv
 
-    # A single stop signal drives shutdown, however it's triggered: Enter, Ctrl-C, or a
-    # spoken/typed farewell. Ctrl-C is unreliable under Git Bash's terminal, so Enter is
-    # the guaranteed quit; the SIGINT handler just sets the same flag if it does fire.
+    # Shutdown is driven by one stop flag. The reliable trigger is a spoken/typed farewell
+    # ("goodbye entity", "quit") which the transcriber always catches; Enter (stdin watcher)
+    # and Ctrl-C (SIGINT handler) also set it, but both are flaky under Git Bash's terminal.
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
@@ -66,9 +66,11 @@ def main(argv=None):
     if not text_mode:
         threading.Thread(target=lambda: (sys.stdin.readline(), stop.set()), daemon=True).start()
 
-    entry = "Type to talk" if text_mode else "Speak when you see '(listening...)'"
-    quit_hint = "say 'quit'" if text_mode else "press Enter (or say 'quit')"
-    print(f"Entity is here. {entry}; {quit_hint} to end.")
+    if text_mode:
+        print("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
+    else:
+        print("Entity is here. Speak, and say 'over' when you finish each turn.")
+        print("To end, say 'goodbye entity over' (or press Enter).")
     if muted:
         print("(muted: replies are shown, not spoken)")
     print()
@@ -81,12 +83,20 @@ def main(argv=None):
     try:
         Conversation(stt, brain, tts).run(should_continue=lambda: not stop.is_set(), on_turn=show)
     except KeyboardInterrupt:
-        pass
+        stop.set()
     finally:
+        if stop.is_set():
+            try:
+                tts.speak("Talk soon.")  # farewell words already speak their own goodbye
+            except Exception:
+                pass
         print("Talk soon.")
-        brain.close()
-        if mic is not None:
-            mic.close()
+        for closer in (brain.close, mic.close if mic is not None else None):
+            try:
+                if closer is not None:
+                    closer()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

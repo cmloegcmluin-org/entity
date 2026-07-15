@@ -11,7 +11,7 @@ better voice, the life-goal work itself) is deliberately out of scope here.
 
 | | Subtask | v1 choice |
 |---|---|---|
-| a | **Speech-to-text** | local Parakeet (`onnx-asr`) + energy VAD; you just talk (`--text` to type instead) |
+| a | **Speech-to-text** | local Parakeet (`onnx-asr`); talk and say "over" to end your turn (`--text` to type) |
 | b | **Text-to-speech** | Windows System.Speech via PowerShell — cheapest robot voice, zero deps; Piper/Cartesia later |
 | c | **Context management** | durable markdown facts + SQLite log + small always-loaded index + scheduled consolidation |
 | d | **Brain** | one persistent Claude session (Agent SDK) on the Max plan — ~1.7s/turn, no API bill |
@@ -38,13 +38,13 @@ with the server; a startup warmup absorbs the worst first-turn cold start.
 
 Three swappable adapters behind small interfaces, tied together by one orchestrator:
 
-- `SpeechToText.listen() -> str` — `MicSTT` (Parakeet + VAD) by default; `ConsoleSTT` with `--text`.
+- `SpeechToText.listen() -> str` — `MicSTT` (Parakeet, "over"-terminated) by default; `ConsoleSTT` with `--text`.
 - `Brain.respond(utterance) -> str` — `SdkBrain`.
 - `TextToSpeech.speak(text)` — `SystemTTS` (or `NullTTS` when muted).
 - `Conversation` — the listen → think → speak loop, with farewell exit and error resilience.
 
-Swapping any layer touches one adapter and nothing else. Speech-in is split three ways:
-`mic` (hardware capture), `vad` (energy segmentation into utterances), `transcribe` (Parakeet).
+Swapping any layer touches one adapter and nothing else. Speech-in is split two ways: `mic`
+(hardware capture) and `transcribe` (Parakeet); `MicSTT` ends a turn on the spoken word "over".
 
 ## Run it
 
@@ -54,9 +54,9 @@ Swapping any layer touches one adapter and nothing else. Speech-in is split thre
 ~/workspace/entity/.venv/Scripts/python -m entity --timings # show per-turn think/speak seconds
 ```
 
-Speak after `(listening...)`; it transcribes once you pause. To end: **press Enter**, or say
-(or type) "quit" or "goodbye entity". Ctrl-C/Ctrl-D are unreliable under Git Bash's terminal,
-so Enter is the guaranteed quit.
+Speak, then say **"over"** to hand the turn back (silence-detection was too flaky). To end,
+say (or type) **"goodbye entity"** or **"quit"** — in voice mode that's "goodbye entity over".
+Enter and Ctrl-C also try to quit but are unreliable under Git Bash's terminal.
 
 ## Develop
 

@@ -9,6 +9,41 @@ and relays it back — never interrupting while he's mid-answer. `io` is how it 
 
 import threading
 import time
+from pathlib import Path
+
+TASK = (
+    "You are in a git worktree. Look at the branch name and the working tree, work out what "
+    "this session is meant to be doing, and continue it. You'll be asked to approve anything that "
+    "changes files or runs commands, so go ahead and propose your next action."
+)
+
+
+def find_worktrees(directory):
+    """The immediate sub-directories of `directory` (each a worktree). Empty if it isn't a dir."""
+    path = Path(directory).expanduser()
+    if not path.is_dir():
+        return []
+    return sorted(str(child) for child in path.iterdir() if child.is_dir())
+
+
+def supervise(worktree_paths, io, *, model="sonnet", task=TASK, agent_factory=None):
+    """Launch a supervised agent per worktree path and manage them through `io`."""
+    from entity.fleet import FleetSupervisor
+    from entity.fleet_runner import Fleet
+    from entity.supervised_agent import SupervisedAgent
+
+    make_agent = agent_factory or (lambda name, cwd, decide: SupervisedAgent(name, cwd, decide, model=model))
+    fleet = Fleet(FleetSupervisor())
+    agents = {Path(p).name: make_agent(Path(p).name, p, fleet.decide) for p in worktree_paths}
+    tasks = {name: task for name in agents}
+    try:
+        return run_fleet(agents, tasks, fleet, io)
+    finally:
+        for agent in agents.values():
+            try:
+                agent.close()
+            except Exception:
+                pass
 
 
 def drive_fleet(fleet, io, still_working, *, poll=0.1):

@@ -12,6 +12,7 @@ import time
 
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
+from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
 from entity.memory import (
     CONSOLIDATION_PROMPT,
     append_learned,
@@ -21,6 +22,7 @@ from entity.memory import (
     parse_facts,
 )
 from entity.stt_console import ConsoleSTT
+from entity.supervising_brain import SupervisingBrain
 from entity.tts_system import NullTTS, SystemTTS
 
 
@@ -66,6 +68,11 @@ def main(argv=None):
     brain.warmup()
     stt, mic = _build_ears(text_mode, stop)
     tts = NullTTS() if muted else SystemTTS(rate=2)
+
+    # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper
+    # catches a "[SUPERVISE] ..." directive from the brain and runs the agents through the same voice.
+    fleet_io = ConsoleFleetIO() if text_mode else VoiceFleetIO(speak=tts.speak, listen=stt.listen)
+    brain = SupervisingBrain(brain, fleet_io)
 
     if timings:
         brain.respond = _timed(brain.respond, "think")

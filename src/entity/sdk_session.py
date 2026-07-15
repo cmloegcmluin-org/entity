@@ -22,6 +22,19 @@ def extract_text(messages):
     return text.strip()
 
 
+def _context_tokens(usage):
+    """How many tokens the model just processed as input = fresh input + both cache tiers. This
+    is what grows as a conversation runs on and what makes each turn slower, so it's the number
+    the brain watches to decide when to compact. Output tokens are excluded - they aren't context
+    the next turn re-reads."""
+    if not usage:
+        return 0
+    return sum(
+        int(usage.get(key, 0) or 0)
+        for key in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    )
+
+
 class SdkSession:
     def __init__(self, options):
         self._loop = asyncio.new_event_loop()
@@ -29,6 +42,7 @@ class SdkSession:
         self._thread.start()
         self._client = ClaudeSDKClient(options=options)
         self._submit(self._client.connect())
+        self.last_context_tokens = 0  # size of the context the most recent ask processed
 
     def _submit(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
@@ -39,6 +53,7 @@ class SdkSession:
         async for message in self._client.receive_response():
             messages.append(message)
             if isinstance(message, ResultMessage):
+                self.last_context_tokens = _context_tokens(message.usage)
                 break
         return extract_text(messages)
 

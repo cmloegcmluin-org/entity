@@ -1,4 +1,4 @@
-from entity.sdk_session import extract_text
+from entity.sdk_session import _context_tokens, extract_text
 
 
 class FakeBlock:
@@ -33,3 +33,20 @@ def test_extract_text_skips_messages_without_content():
     msgs = [ResultLike(), FakeMsg([FakeBlock("Only this.")])]
 
     assert extract_text(msgs) == "Only this."
+
+
+def test_context_tokens_sums_every_input_side_count():
+    # the true size of the context the model just processed = fresh input + both cache tiers;
+    # that's what governs how slow the turn was, so it's what we watch to decide on compaction.
+    usage = {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 576,
+        "cache_read_input_tokens": 21319,
+        "output_tokens": 4,  # output is NOT context the next turn re-processes
+    }
+    assert _context_tokens(usage) == 2 + 576 + 21319
+
+
+def test_context_tokens_is_zero_when_usage_is_missing_or_empty():
+    assert _context_tokens(None) == 0
+    assert _context_tokens({}) == 0

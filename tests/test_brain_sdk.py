@@ -19,6 +19,7 @@ def test_respond_rebuilds_a_wedged_session_and_retries_once():
         def __init__(self, options):
             made.append(self)
             self.closed = False
+            self.last_context_tokens = 0
 
         def ask(self, message):
             if made.index(self) == 0:  # the first session is wedged
@@ -33,3 +34,98 @@ def test_respond_rebuilds_a_wedged_session_and_retries_once():
     assert brain.respond("hi") == "recovered reply"
     assert len(made) == 2  # rebuilt the session after the error
     assert made[0].closed  # and closed the wedged one
+
+
+class GrowingSession:
+    """A fake whose context grows by `per_turn` tokens each ask and echoes the message, so a test
+    can watch context climb and then check what the reseeded session was handed."""
+
+    def __init__(self, options, *, per_turn=20000):
+        self.options = options
+        self.asks = []
+        self.closed = False
+        self.last_context_tokens = 0
+        self._per_turn = per_turn
+
+    def ask(self, message):
+        self.asks.append(message)
+        self.last_context_tokens += self._per_turn
+        return f"reply to {message}"
+
+    def close(self):
+        self.closed = True
+
+
+def _growing_factory(sessions, *, per_turn=20000):
+    def factory(options):
+        s = GrowingSession(options, per_turn=per_turn)
+        sessions.append(s)
+        return s
+
+    return factory
+
+
+def test_stays_on_one_session_while_context_stays_small():
+    sessions = []
+    brain = SdkBrain(session_factory=_growing_factory(sessions, per_turn=1000), compact_growth_budget=30000)
+    for _ in range(6):
+        brain.respond("hi")
+
+    assert len(sessions) == 1  # 6 small turns never crossed the budget, so no compaction
+
+
+def test_compacts_onto_a_fresh_session_when_context_grows_past_budget():
+    sessions = []
+    brain = SdkBrain(
+        persona="BASE PERSONA", session_factory=_growing_factory(sessions), compact_growth_budget=30000
+    )
+    # turn1 -> 20k (baseline). turn2 -> 40k. turn3 -> 60k. turn4 sees 60k-20k=40k >= 30k -> compact.
+    replies = [brain.respond(f"q{i}") for i in range(4)]
+
+    assert len(sessions) == 2  # compacted exactly once
+    assert sessions[0].closed  # the bloated session was closed
+    assert replies[-1] == "reply to q3"  # the caller got its real reply, uninterrupted
+    # compaction is a cheap reseed, NOT an expensive summary call - the old session got no extra ask
+    assert sessions[0].asks == ["q0", "q1", "q2"]
+
+
+def test_the_reseeded_session_carries_the_base_persona_plus_the_recent_turns_verbatim():
+    sessions = []
+    brain = SdkBrain(
+        persona="BASE PERSONA", session_factory=_growing_factory(sessions), compact_growth_budget=30000
+    )
+    for i in range(4):
+        brain.respond(f"q{i}")
+
+    seeded = sessions[1].options.system_prompt
+    assert seeded.startswith("BASE PERSONA")  # the base persona is preserved, not lost
+    # the turns that happened before the reset are carried forward verbatim, so nothing is fabricated
+    assert "q0" in seeded and "q2" in seeded
+    assert "reply to q1" in seeded
+
+
+def test_only_the_most_recent_turns_are_carried_across_a_reset():
+    sessions = []
+    brain = SdkBrain(
+        session_factory=_growing_factory(sessions),
+        compact_growth_budget=30000,
+        recent_turns_kept=2,
+    )
+    for i in range(4):
+        brain.respond(f"q{i}")
+
+    seeded = sessions[1].options.system_prompt
+    assert "q2" in seeded  # kept (recent)
+    assert "q0" not in seeded  # dropped - only the last 2 turns are carried, bounding the reseed size
+
+
+def test_a_compacted_session_does_not_immediately_compact_again():
+    sessions = []
+    brain = SdkBrain(session_factory=_growing_factory(sessions), compact_growth_budget=30000)
+    for _ in range(7):  # enough to cross the budget a second time if the baseline reset works
+        brain.respond("hi")
+
+    # first epoch: turns 1-3 on session0, compact at turn4 -> session1 re-baselines at 20k;
+    # session1 grows 20k,40k,60k over turns 4-6, compact again at turn7 -> session2. Two compactions.
+    assert len(sessions) == 3
+    assert sessions[1].closed

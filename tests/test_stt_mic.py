@@ -1,6 +1,6 @@
 import numpy as np
 
-from entity.stt_mic import MicSTT, _strip_terminator
+from entity.stt_mic import FRAME, MicSTT, _strip_terminator
 
 
 class FakeMic:
@@ -56,12 +56,32 @@ def test_pausing_after_over_ends_the_turn_and_fires_the_cue():
 
 
 def test_a_thinking_pause_without_over_keeps_listening():
+    # two speech bursts split by a mid-thought pause; each burst is transcribed on its own and the
+    # pieces join, so the turn only ends when the LATEST piece carries the terminator.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
-    transcriber = SeqTranscriber(["still thinking", "still thinking it over"])
+    transcriber = SeqTranscriber(["still thinking", "it over"])
     stt = MicSTT(transcriber, mic, pause_frames=3, prompt="")
 
     assert stt.listen() == "still thinking it"  # the first pause did NOT end the turn
     assert transcriber.calls == 2
+
+
+def test_each_pause_transcribes_only_new_audio_not_the_whole_buffer():
+    # the bug that stalled and crashed long turns: every pause re-transcribed the ENTIRE growing
+    # buffer, so work per pause climbed without bound. Each pause must hand the transcriber only
+    # the audio captured since the previous pause.
+    sizes = []
+
+    class MeasuringTranscriber:
+        def transcribe(self, audio):
+            sizes.append(len(audio))
+            return "chunk"
+
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 5 + [_sil()] * 3)
+    stt = MicSTT(MeasuringTranscriber(), mic, pause_frames=3, prompt="")
+    stt.listen()
+
+    assert sizes == [7 * FRAME, 8 * FRAME]  # NOT [7*FRAME, 15*FRAME] - the old buffer wasn't re-sent
 
 
 def test_leading_silence_is_skipped():

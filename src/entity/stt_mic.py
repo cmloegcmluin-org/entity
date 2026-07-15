@@ -2,10 +2,13 @@
 
 You end a turn by saying a terminator word ("over") - not by going silent, and not on any time
 limit. The end is only checked when you actually PAUSE: `listen()` captures once you start
-talking, and each time you stop for a moment it transcribes what it has and looks for a trailing
-"over". If it's there, the turn is done (and a cue fires so you see it registered); if not, you
-just paused mid-thought and it keeps listening, however long you take. Saying "over" in the
-middle of a sentence doesn't cut you off - there's no pause after it.
+talking, and each time you stop for a moment it transcribes just the new stretch since your last
+pause, tacks it onto the running transcript, and looks for a trailing "over". If it's there, the
+turn is done (and a cue fires so you see it registered); if not, you just paused mid-thought and
+it keeps listening, however long you take. Because each pause only transcribes the newest chunk -
+never the whole turn again - the cost of a pause stays flat no matter how long you've been
+talking, so a long turn can't slow to a crawl or run the machine out of memory. Saying "over" in
+the middle of a sentence doesn't cut you off - there's no pause after it.
 """
 
 import numpy as np
@@ -57,7 +60,8 @@ class MicSTT:
     def listen(self):
         if self._prompt:
             print(self._prompt, flush=True)
-        buffer = []
+        segments = []  # transcribed text so far, one entry per pause-delimited chunk
+        segment = []  # frames captured since the last pause - only this chunk gets transcribed
         silence_run = 0
         started = False
         for frame in self._mic.frames():
@@ -71,21 +75,30 @@ class MicSTT:
                     started = True
                 else:
                     continue
-            buffer.append(frame)
+            segment.append(frame)
             silence_run = 0 if speech else silence_run + 1
             if silence_run == self._pause_frames:  # you paused - did you say "over"?
-                done = self._finish(buffer, forced=False)
+                done = self._absorb(segments, segment)
+                segment = []  # this chunk is now text; the next one starts fresh
                 if done is not None:
                     return done
-        return self._finish(buffer, forced=True) if buffer else ""
+        if segment:  # a finite source ran out mid-chunk (a real mic never does)
+            done = self._absorb(segments, segment)
+            if done is not None:
+                return done
+        return " ".join(segments).strip()
 
-    def _finish(self, buffer, *, forced):
-        """On a pause (or the stream ending), transcribe and return the turn if it ended with the
-        terminator; on a plain mid-thought pause return None to keep listening."""
-        text = self._transcriber.transcribe(np.concatenate(buffer))
-        without_terminator = _strip_terminator(text, self._terminator)
+    def _absorb(self, segments, chunk):
+        """Transcribe one pause-delimited chunk, append it to the running transcript, and return
+        the finished turn if the transcript now ends with the terminator - else None to keep
+        listening. Only this chunk is transcribed, never the whole turn, so the work per pause
+        stays flat however long the turn runs."""
+        text = self._transcriber.transcribe(np.concatenate(chunk)).strip()
+        if text:
+            segments.append(text)
+        without_terminator = _strip_terminator(" ".join(segments), self._terminator)
         if without_terminator is not None:
             if self._cue is not None:
                 self._cue()
             return without_terminator
-        return text if forced else None
+        return None

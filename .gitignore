@@ -19,6 +19,9 @@ models/
 *.m4a
 *.onnx
 
+# Agent worktrees (never committed)
+.claude/worktrees/
+
 # OS
 Thumbs.db
 .DS_Store

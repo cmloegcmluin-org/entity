@@ -3,12 +3,11 @@ name = "entity"
 version = "0.1.0"
 description = "The Entity — a local, voice-in/voice-out, memory-persistent Claude pairing partner."
 requires-python = ">=3.11"
-dependencies = [
-    "onnx-asr[cpu,hub]>=0.11",   # local Parakeet STT (shares Notecraft' model cache)
-    "sounddevice>=0.4",           # microphone capture
-    "numpy>=1.26",
-    "pyttsx3>=2.90",              # cheapest local robot voice (Windows SAPI) for now
-]
+# The brain is the `claude` CLI (external) and v1 text-to-speech is Windows'
+# built-in System.Speech (via PowerShell), so this milestone needs no third-party
+# runtime packages. Microphone speech-to-text (Parakeet) adds onnx-asr + sounddevice
+# in the next increment.
+dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

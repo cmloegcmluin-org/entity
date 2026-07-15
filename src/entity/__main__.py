@@ -12,7 +12,14 @@ import time
 
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
-from entity.profile import compose_persona, load_profile
+from entity.memory import (
+    CONSOLIDATION_PROMPT,
+    append_learned,
+    compose_persona,
+    load_learned,
+    load_profile,
+    parse_facts,
+)
 from entity.stt_console import ConsoleSTT
 from entity.tts_system import NullTTS, SystemTTS
 
@@ -55,7 +62,7 @@ def main(argv=None):
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     print("Entity is waking up...")
-    brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile()))
+    brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()))
     brain.warmup()
     stt, mic = _build_ears(text_mode, stop)
     tts = NullTTS() if muted else SystemTTS(rate=2)
@@ -76,7 +83,10 @@ def main(argv=None):
         print("(muted: replies are shown, not spoken)")
     print()
 
+    had_conversation = []
+
     def show(turn):
+        had_conversation.append(True)
         if not text_mode:
             print(f"you said: {turn.heard}")
         print(f"entity> {turn.said}\n")
@@ -92,6 +102,11 @@ def main(argv=None):
             except Exception:
                 pass
         print("Talk soon.")
+        if had_conversation:  # ask the brain what it learned and remember it for next time
+            try:
+                append_learned(parse_facts(brain.respond(CONSOLIDATION_PROMPT)))
+            except Exception:
+                pass
         for closer in (brain.close, mic.close if mic is not None else None):
             try:
                 if closer is not None:

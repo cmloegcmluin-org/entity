@@ -38,18 +38,25 @@ def _timed(call, label):
 
 
 def _build_ears(text_mode, stop):
-    """Return (stt, mic) — mic is None in text mode, otherwise an open stream to close on exit."""
+    """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit."""
     if text_mode:
-        return ConsoleSTT(), None
+        return ConsoleSTT(), None, None
+    from datetime import datetime
+    from pathlib import Path
+
     from entity.mic import Microphone
+    from entity.recorder import AudioRecorder
     from entity.stt_mic import MicSTT
     from entity.transcribe import ParakeetTranscriber
 
     transcriber = ParakeetTranscriber()
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
     mic = Microphone()
+    audio_dir = Path(__file__).resolve().parents[2] / "runtime" / "audio"
+    recorder = AudioRecorder(audio_dir / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
+    print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"
-    return MicSTT(transcriber, mic, stop=stop, cue=cue), mic
+    return MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder), mic, recorder
 
 
 def main(argv=None):
@@ -67,7 +74,7 @@ def main(argv=None):
     print("Entity is waking up...")
     brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()))
     brain.warmup()
-    stt, mic = _build_ears(text_mode, stop)
+    stt, mic, recorder = _build_ears(text_mode, stop)
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
     # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper
@@ -118,7 +125,11 @@ def main(argv=None):
                 append_learned(parse_facts(brain.respond(CONSOLIDATION_PROMPT)))
             except Exception:
                 pass
-        for closer in (brain.close, mic.close if mic is not None else None):
+        for closer in (
+            brain.close,
+            mic.close if mic is not None else None,
+            recorder.close if recorder is not None else None,
+        ):
             try:
                 if closer is not None:
                     closer()

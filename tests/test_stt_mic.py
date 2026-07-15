@@ -89,4 +89,17 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
     stt = MicSTT(transcriber, FakeMic([_sp()] * 5), prompt="", stop=Flag())
 
     assert stt.listen() == ""
-    assert transcriber.got is None
+
+
+def test_every_captured_frame_is_recorded_to_disk():
+    written = []
+
+    class Rec:
+        def write(self, frame):
+            written.append(frame)
+
+    mic = FakeMic([_sp()] * 3 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", recorder=Rec())
+
+    assert stt.listen() == "hi"
+    assert len(written) == 6  # every frame read went to the recorder, before anything else

@@ -42,6 +42,7 @@ class MicSTT:
         prompt="(listening... say 'over' when you're done)",
         stop=None,
         cue=None,
+        recorder=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -51,6 +52,7 @@ class MicSTT:
         self._prompt = prompt
         self._stop = stop
         self._cue = cue
+        self._recorder = recorder
 
     def listen(self):
         if self._prompt:
@@ -59,6 +61,8 @@ class MicSTT:
         silence_run = 0
         started = False
         for frame in self._mic.frames():
+            if self._recorder is not None:
+                self._recorder.write(frame)  # to disk first, so a crash can't lose what he said
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
             speech = rms(frame) >= self._threshold

@@ -11,7 +11,7 @@ better voice, the life-goal work itself) is deliberately out of scope here.
 
 | | Subtask | v1 choice |
 |---|---|---|
-| a | **Speech-to-text** | local Parakeet (`onnx-asr`), shares Notecraft' model cache; VAD-gated turns (next increment) |
+| a | **Speech-to-text** | local Parakeet (`onnx-asr`) + energy VAD; you just talk (`--text` to type instead) |
 | b | **Text-to-speech** | Windows System.Speech via PowerShell — cheapest robot voice, zero deps; Piper/Cartesia later |
 | c | **Context management** | durable markdown facts + SQLite log + small always-loaded index + scheduled consolidation |
 | d | **Brain** | one persistent Claude session (Agent SDK) on the Max plan — ~1.7s/turn, no API bill |
@@ -38,23 +38,24 @@ with the server; a startup warmup absorbs the worst first-turn cold start.
 
 Three swappable adapters behind small interfaces, tied together by one orchestrator:
 
-- `SpeechToText.listen() -> str` — `ConsoleSTT` today (typed); Parakeet mic next.
+- `SpeechToText.listen() -> str` — `MicSTT` (Parakeet + VAD) by default; `ConsoleSTT` with `--text`.
 - `Brain.respond(utterance) -> str` — `SdkBrain`.
 - `TextToSpeech.speak(text)` — `SystemTTS` (or `NullTTS` when muted).
 - `Conversation` — the listen → think → speak loop, with farewell exit and error resilience.
 
-Swapping any layer touches one adapter and nothing else.
+Swapping any layer touches one adapter and nothing else. Speech-in is split three ways:
+`mic` (hardware capture), `vad` (energy segmentation into utterances), `transcribe` (Parakeet).
 
 ## Run it
 
 ```
-~/workspace/entity/.venv/Scripts/python -m entity          # talk by typing, hear spoken replies
-~/workspace/entity/.venv/Scripts/python -m entity --mute   # text only
+~/workspace/entity/.venv/Scripts/python -m entity           # speak to it, hear spoken replies
+~/workspace/entity/.venv/Scripts/python -m entity --text    # type instead of speaking
 ~/workspace/entity/.venv/Scripts/python -m entity --timings # show per-turn think/speak seconds
 ```
 
-Say "goodbye entity" or press Ctrl-C to end. (In Git Bash's default terminal, prefix with
-`winpty` so the typing prompt shows; note Ctrl-D does not send EOF there.)
+Speak after `(listening...)`; it transcribes once you pause. Say "goodbye entity" or press
+Ctrl-C to end. (In Git Bash's default terminal, prefix with `winpty`; note Ctrl-D sends no EOF.)
 
 ## Develop
 

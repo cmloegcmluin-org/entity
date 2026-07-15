@@ -1,0 +1,25 @@
+[project]
+name = "entity"
+version = "0.1.0"
+description = "The Entity — a local, voice-in/voice-out, memory-persistent Claude pairing partner."
+requires-python = ">=3.11"
+dependencies = [
+    "onnx-asr[cpu,hub]>=0.11",   # local Parakeet STT (shares Notecraft' model cache)
+    "sounddevice>=0.4",           # microphone capture
+    "numpy>=1.26",
+    "pyttsx3>=2.90",              # cheapest local robot voice (Windows SAPI) for now
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

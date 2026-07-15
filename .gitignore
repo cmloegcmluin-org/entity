@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Environment / secrets
+.env
+
+# Entity runtime state (memory + session live here; not source)
+runtime/
+*.db
+
+# Models / large audio artifacts
+models/
+*.wav
+*.m4a
+*.onnx
+
+# OS
+Thumbs.db
+.DS_Store

@@ -10,8 +10,9 @@ import sys
 import threading
 import time
 
-from entity.brain_sdk import SdkBrain
+from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
+from entity.profile import compose_persona, load_profile
 from entity.stt_console import ConsoleSTT
 from entity.tts_system import NullTTS, SystemTTS
 
@@ -54,7 +55,7 @@ def main(argv=None):
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     print("Entity is waking up...")
-    brain = SdkBrain()
+    brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile()))
     brain.warmup()
     stt, mic = _build_ears(text_mode, stop)
     tts = NullTTS() if muted else SystemTTS(rate=2)

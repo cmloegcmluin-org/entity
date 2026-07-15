@@ -1,14 +1,15 @@
-"""The Entity's brain: one persistent, isolated Claude session (companion persona, no tools).
+"""The Entity's brain: one persistent Claude agent, isolated from the global config.
 
 Isolation is critical: `setting_sources=[]` loads NONE of the user's user/project/local
 settings, so the Entity never inherits his global coding CLAUDE.md or hooks. If it did,
 the terminal reply-format instructions AND the Stop hook that enforces them bleed into the
 companion - it starts answering in ">>"/">" quote blocks, the hook fires every turn and
-injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. `allowed_tools=[]`
-likewise keeps the context lean. Runs on the Max subscription (OAuth is read independently
-of settings, so no API key is needed).
+injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. It is meant to run with
+its native Claude-agent tools so it can actually act (read/write files, run commands, drive
+other agents) - see the permission note in `_make_options`. Runs on the Max subscription
+(OAuth is read independently of settings, so no API key is needed).
 
-The async plumbing lives in SdkSession; SdkBrain just supplies the companion options.
+The async plumbing lives in SdkSession; SdkBrain just supplies the options.
 """
 
 from claude_agent_sdk import ClaudeAgentOptions
@@ -16,20 +17,24 @@ from claude_agent_sdk import ClaudeAgentOptions
 from entity.sdk_session import SdkSession
 
 DEFAULT_PERSONA = (
-    "You are Entity, the user's voice companion. You pair with him on his life the way a good "
-    "pair-programming partner works: present, steady, and concise. Speak in short, natural spoken "
-    "sentences - no markdown, no bullet lists, no emoji, usually one to three sentences. Ask one "
-    "question at a time. You help him think, plan, and take the next small step. You are not a "
-    "therapist and you give no medical or clinical advice; when something is heavy, listen briefly "
-    "and steer back to what is actionable. When you do not know, say so plainly. "
-    "If the user asks you to start, resume, or drive Claude coding sessions or agents in some git "
-    "worktrees, reply with ONLY `[SUPERVISE] <where>` - where <where> is the worktrees directory he "
-    "means (or the specific worktree paths, comma-separated) - and nothing else. For everything "
-    "else, just talk."
+    "You are Entity, the user's voice companion and his hands on this machine. Your replies are "
+    "spoken aloud, so keep them short and natural - a sentence or two, no markdown, no lists, and "
+    "ask one thing at a time. "
+    "You have real tools: you can read and write files, run shell commands, and launch and drive "
+    "other Claude Code agents. When the user asks for something, actually DO it with those tools - "
+    "don't just describe doing it, and don't ask him to do it himself. Never claim an ability you "
+    "do not have (you have no email or web access unless a tool for it is present); if you truly "
+    "cannot do something, say so plainly and do what you can. After you take an action, say briefly "
+    "what you did rather than narrating every step. "
+    "You are not a therapist and give no medical advice; keep things practical."
 )
 
 
 def _make_options(persona, model):
+    # The Entity's native tools stay gated until the user enables fully-autonomous operation
+    # himself: the safety system requires the user (not the agent) to turn approvals off. He
+    # does that by adding a permission-mode setting here (see the message where I hand him the
+    # exact line). Left gated by default so nothing runs unattended without his explicit action.
     return ClaudeAgentOptions(
         system_prompt=persona,
         allowed_tools=[],

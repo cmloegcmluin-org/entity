@@ -39,11 +39,26 @@ def _make_options(persona, model):
 
 
 class SdkBrain:
-    def __init__(self, *, persona=DEFAULT_PERSONA, model="sonnet"):
-        self._session = SdkSession(_make_options(persona, model))
+    def __init__(self, *, persona=DEFAULT_PERSONA, model="sonnet", session_factory=SdkSession):
+        self._options = _make_options(persona, model)
+        self._new_session = session_factory
+        self._session = self._new_session(self._options)
 
     def respond(self, utterance):
-        return self._session.ask(utterance)
+        try:
+            return self._session.ask(utterance)
+        except Exception:
+            # The session may be wedged (a dropped connection strands every later turn as a
+            # "glitch"). Rebuild it and try once more; only give up if that also fails.
+            self._reconnect()
+            return self._session.ask(utterance)
+
+    def _reconnect(self):
+        try:
+            self._session.close()
+        except Exception:
+            pass
+        self._session = self._new_session(self._options)
 
     def warmup(self):
         """Pay the variable cold-start of the first query now, so the user's first real turn is fast."""

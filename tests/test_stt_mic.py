@@ -46,43 +46,36 @@ def test_strip_terminator_handles_case_and_punctuation():
     assert _strip_terminator("Over", "over") == ""
 
 
-def test_listen_ends_the_turn_on_the_over_keyword():
-    mic = FakeMic([_sp()] * 33)
-    transcriber = FakeTranscriber("hello there over")
-
-    stt = MicSTT(transcriber, mic, check_every=33, prompt="")
+def test_pausing_after_over_ends_the_turn_and_fires_the_cue():
+    fired = []
+    mic = FakeMic([_sp()] * 5 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("hello there over"), mic, pause_frames=3, prompt="", cue=lambda: fired.append(True))
 
     assert stt.listen() == "hello there"
+    assert fired == [True]  # the "registered" cue fired the moment it caught the terminator
 
 
-def test_listen_keeps_going_until_the_terminator_is_heard():
-    mic = FakeMic([_sp()] * 66)
-    transcriber = SeqTranscriber(["still talking", "still talking over"])
+def test_a_thinking_pause_without_over_keeps_listening():
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
+    transcriber = SeqTranscriber(["still thinking", "still thinking it over"])
+    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="")
 
-    stt = MicSTT(transcriber, mic, check_every=33, prompt="")
-
-    assert stt.listen() == "still talking"
-    assert transcriber.calls == 2  # checked, kept going, checked again
-
-
-def test_listen_gives_up_and_sends_after_max_frames():
-    mic = FakeMic([_sp()] * 40)
-    transcriber = FakeTranscriber("no terminator spoken")
-
-    stt = MicSTT(transcriber, mic, check_every=100, max_frames=40, prompt="")
-
-    assert stt.listen() == "no terminator spoken"
+    assert stt.listen() == "still thinking it"  # the first pause did NOT end the turn
+    assert transcriber.calls == 2
 
 
-def test_listen_waits_for_speech_before_transcribing():
-    mic = FakeMic([_sil()] * 5 + [_sp()] * 33)
-    transcriber = FakeTranscriber("finally over")
+def test_leading_silence_is_skipped():
+    mic = FakeMic([_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("finally over"), mic, pause_frames=3, prompt="")
 
-    stt = MicSTT(transcriber, mic, check_every=33, prompt="")
-
-    # the leading silence is skipped; only the 33 speech frames are transcribed
     assert stt.listen() == "finally"
-    assert transcriber.got.shape[0] == 480 * 33
+
+
+def test_max_frames_ends_the_turn_even_without_a_pause():
+    mic = FakeMic([_sp()] * 10)  # continuous speech, no pause, no "over"
+    stt = MicSTT(FakeTranscriber("going on and on"), mic, pause_frames=100, max_frames=10, prompt="")
+
+    assert stt.listen() == "going on and on"
 
 
 def test_listen_aborts_without_transcribing_when_stop_is_set():
@@ -90,10 +83,8 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
         def is_set(self):
             return True
 
-    mic = FakeMic([_sp()] * 40)
     transcriber = FakeTranscriber("should not run over")
-
-    stt = MicSTT(transcriber, mic, prompt="", stop=Flag())
+    stt = MicSTT(transcriber, FakeMic([_sp()] * 5), prompt="", stop=Flag())
 
     assert stt.listen() == ""
     assert transcriber.got is None

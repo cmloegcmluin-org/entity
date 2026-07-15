@@ -48,7 +48,8 @@ def _build_ears(text_mode, stop):
     transcriber = ParakeetTranscriber()
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
     mic = Microphone()
-    return MicSTT(transcriber, mic, stop=stop), mic
+    cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"
+    return MicSTT(transcriber, mic, stop=stop, cue=cue), mic
 
 
 def main(argv=None):
@@ -89,6 +90,9 @@ def main(argv=None):
     if muted:
         print("(muted: replies are shown, not spoken)")
     print()
+
+    if not text_mode and not muted:
+        tts.speak("I'm ready. What's on your mind?")  # say out loud that startup finished
 
     had_conversation = []
 

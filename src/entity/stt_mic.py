@@ -1,18 +1,19 @@
 """Microphone speech-to-text with a walkie-talkie end-of-turn keyword.
 
-You end a turn by saying a terminator word ("over") - not by going silent. Guessing the end
-of a turn from silence was unreliable (it either cut the user off or never fired in a noisy
-room), so instead `listen()` keeps capturing once you start talking, re-transcribes every
-second or so, and returns the moment the transcript ends with "over" (which is stripped off).
-A max length is the safety net if you forget to say it.
+You end a turn by saying a terminator word ("over") - not by going silent. The end is only
+checked when you actually PAUSE: `listen()` captures once you start talking, and each time you
+stop for a moment it transcribes what it has and looks for a trailing "over". If it's there,
+the turn is done (and a cue fires so you see it registered); if not, you just paused mid-thought
+and it keeps listening. This is why saying "over" in the middle of a sentence no longer cuts you
+off - there's no pause after it. A max length is the safety net if you forget to say it.
 """
 
 import numpy as np
 
 FRAME = 480  # 30 ms at 16 kHz
-CHECK_EVERY = 33  # ~1 s: how often to transcribe-and-check for the terminator
-MAX_FRAMES = 666  # ~20 s: send the turn even if "over" is never said
-START_THRESHOLD = 0.01  # RMS above this = you've started talking
+PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
+MAX_FRAMES = 2000  # ~60 s: send the turn even if "over" is never said
+THRESHOLD = 0.01  # RMS above this counts as speech
 
 
 def rms(frame):
@@ -37,50 +38,55 @@ class MicSTT:
         mic,
         *,
         terminator="over",
-        start_threshold=START_THRESHOLD,
-        check_every=CHECK_EVERY,
+        threshold=THRESHOLD,
+        pause_frames=PAUSE_FRAMES,
         max_frames=MAX_FRAMES,
         prompt="(listening... say 'over' when you're done)",
         stop=None,
+        cue=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
         self._terminator = terminator
-        self._start_threshold = start_threshold
-        self._check_every = check_every
+        self._threshold = threshold
+        self._pause_frames = pause_frames
         self._max_frames = max_frames
         self._prompt = prompt
         self._stop = stop
+        self._cue = cue
 
     def listen(self):
         if self._prompt:
             print(self._prompt, flush=True)
         buffer = []
-        since_check = 0
+        silence_run = 0
         started = False
         for frame in self._mic.frames():
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
+            speech = rms(frame) >= self._threshold
             if not started:
-                if rms(frame) >= self._start_threshold:
+                if speech:
                     started = True
                 else:
                     continue
             buffer.append(frame)
-            since_check += 1
-            forced = len(buffer) >= self._max_frames
-            if since_check >= self._check_every or forced:
-                since_check = 0
-                result = self._transcribe(buffer, forced=forced)
-                if result is not None:
-                    return result
-        return self._transcribe(buffer, forced=True) if buffer else ""
+            silence_run = 0 if speech else silence_run + 1
+            if len(buffer) >= self._max_frames:
+                return self._finish(buffer, forced=True)
+            if silence_run == self._pause_frames:  # you paused - did you say "over"?
+                done = self._finish(buffer, forced=False)
+                if done is not None:
+                    return done
+        return self._finish(buffer, forced=True) if buffer else ""
 
-    def _transcribe(self, buffer, *, forced):
-        """Transcribe the buffer; return text minus a trailing 'over', or the raw text if we're
-        forced to end (max length / stream ended), or None to keep listening."""
+    def _finish(self, buffer, *, forced):
+        """On a pause (or the max/stream end), transcribe and return the turn if it ended with
+        the terminator; on a plain mid-thought pause return None to keep listening."""
         text = self._transcriber.transcribe(np.concatenate(buffer))
         without_terminator = _strip_terminator(text, self._terminator)
         if without_terminator is not None:
+            if self._cue is not None:
+                self._cue()
             return without_terminator
         return text if forced else None

@@ -117,3 +117,16 @@ def test_run_reports_each_completed_turn_to_on_turn():
 
     assert [t.heard for t in seen] == ["a", "goodbye entity"]
     assert seen[-1].farewell is True
+
+
+def test_suspend_pauses_the_brain_until_resume():
+    stt = FakeSTT(["suspend", "what's the weather", "resume", "hi there", "goodbye entity"])
+    brain = FakeBrain()
+    tts = FakeTTS()
+    convo = Conversation(stt, brain, tts)
+
+    convo.run()
+
+    assert brain.heard == ["hi there"]  # nothing reached the brain while paused
+    assert convo.suspend_reply in tts.spoken
+    assert convo.resume_reply in tts.spoken

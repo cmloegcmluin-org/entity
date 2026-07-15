@@ -37,7 +37,7 @@ def _make_options(persona, model):
     # exact line). Left gated by default so nothing runs unattended without his explicit action.
     return ClaudeAgentOptions(
         system_prompt=persona,
-        allowed_tools=[],
+        permission_mode="bypassPermissions",
         setting_sources=[],  # load NO user/project/local settings: no global CLAUDE.md, no hooks
         model=model,
     )

@@ -54,8 +54,9 @@ Swapping any layer touches one adapter and nothing else. Speech-in is split thre
 ~/workspace/entity/.venv/Scripts/python -m entity --timings # show per-turn think/speak seconds
 ```
 
-Speak after `(listening...)`; it transcribes once you pause. Say "goodbye entity" or press
-Ctrl-C to end. (In Git Bash's default terminal, prefix with `winpty`; note Ctrl-D sends no EOF.)
+Speak after `(listening...)`; it transcribes once you pause. To end: **press Enter**, or say
+(or type) "quit" or "goodbye entity". Ctrl-C/Ctrl-D are unreliable under Git Bash's terminal,
+so Enter is the guaranteed quit.
 
 ## Develop
 

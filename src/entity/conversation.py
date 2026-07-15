@@ -6,6 +6,8 @@ DEFAULT_FAREWELLS = (
     "goodnight entity",
     "stop listening",
     "that's all for now",
+    "quit",
+    "exit",
 )
 DEFAULT_FAREWELL_REPLY = "Talk soon."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"

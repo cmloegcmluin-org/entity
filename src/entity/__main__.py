@@ -5,7 +5,9 @@
   --timings   print how long each turn spends thinking vs. speaking
 """
 
+import signal
 import sys
+import threading
 import time
 
 from entity.brain_sdk import SdkBrain
@@ -25,7 +27,7 @@ def _timed(call, label):
     return wrapped
 
 
-def _build_ears(text_mode):
+def _build_ears(text_mode, stop):
     """Return (stt, mic) — mic is None in text mode, otherwise an open stream to close on exit."""
     if text_mode:
         return ConsoleSTT(), None
@@ -36,7 +38,7 @@ def _build_ears(text_mode):
     transcriber = ParakeetTranscriber()
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
     mic = Microphone()
-    return MicSTT(transcriber, mic), mic
+    return MicSTT(transcriber, mic, stop=stop), mic
 
 
 def main(argv=None):
@@ -45,18 +47,28 @@ def main(argv=None):
     muted = "--mute" in argv
     timings = "--timings" in argv
 
+    # A single stop signal drives shutdown, however it's triggered: Enter, Ctrl-C, or a
+    # spoken/typed farewell. Ctrl-C is unreliable under Git Bash's terminal, so Enter is
+    # the guaranteed quit; the SIGINT handler just sets the same flag if it does fire.
+    stop = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+
     print("Entity is waking up...")
     brain = SdkBrain()
     brain.warmup()
-    stt, mic = _build_ears(text_mode)
+    stt, mic = _build_ears(text_mode, stop)
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
     if timings:
         brain.respond = _timed(brain.respond, "think")
         tts.speak = _timed(tts.speak, "speak")
 
+    if not text_mode:
+        threading.Thread(target=lambda: (sys.stdin.readline(), stop.set()), daemon=True).start()
+
     entry = "Type to talk" if text_mode else "Speak when you see '(listening...)'"
-    print(f"Entity is here. {entry}; say 'goodbye entity' or press Ctrl-C to end.")
+    quit_hint = "say 'quit'" if text_mode else "press Enter (or say 'quit')"
+    print(f"Entity is here. {entry}; {quit_hint} to end.")
     if muted:
         print("(muted: replies are shown, not spoken)")
     print()
@@ -67,10 +79,11 @@ def main(argv=None):
         print(f"entity> {turn.said}\n")
 
     try:
-        Conversation(stt, brain, tts).run(on_turn=show)
+        Conversation(stt, brain, tts).run(should_continue=lambda: not stop.is_set(), on_turn=show)
     except KeyboardInterrupt:
-        print("\nTalk soon.")
+        pass
     finally:
+        print("Talk soon.")
         brain.close()
         if mic is not None:
             mic.close()

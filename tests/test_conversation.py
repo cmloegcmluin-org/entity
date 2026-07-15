@@ -87,6 +87,12 @@ def test_farewell_ends_the_conversation_without_asking_the_brain():
     assert tts.spoken[-1] == convo.farewell_reply
 
 
+def test_quit_and_exit_are_also_farewells():
+    for word in ["quit", "Exit.", "goodbye entity"]:
+        convo = Conversation(FakeSTT([word]), FakeBrain(), FakeTTS())
+        assert convo.turn().farewell is True
+
+
 def test_brain_failure_is_spoken_and_loop_survives():
     class BoomBrain:
         def respond(self, utterance):

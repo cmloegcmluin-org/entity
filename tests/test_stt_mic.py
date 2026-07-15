@@ -64,3 +64,18 @@ def test_missing_segmenter_is_calibrated_from_ambient_frames():
     MicSTT(FakeTranscriber("x"), mic, calibration_frames=3, prompt="")
 
     assert mic.reads == 3  # construction sampled exactly the ambient frames it was told to
+
+
+def test_listen_aborts_without_transcribing_when_stop_is_set():
+    class Flag:
+        def is_set(self):
+            return True
+
+    mic = FakeMic([_sp()] * 6 + [_sil()] * 4)
+    seg = VadSegmenter(threshold=0.05, silence_tail_frames=3, min_speech_frames=2)
+    transcriber = FakeTranscriber("should not run")
+
+    stt = MicSTT(transcriber, mic, segmenter=seg, prompt="", stop=Flag())
+
+    assert stt.listen() == ""
+    assert transcriber.got is None

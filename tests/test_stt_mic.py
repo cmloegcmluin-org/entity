@@ -71,11 +71,13 @@ def test_leading_silence_is_skipped():
     assert stt.listen() == "finally"
 
 
-def test_max_frames_ends_the_turn_even_without_a_pause():
-    mic = FakeMic([_sp()] * 10)  # continuous speech, no pause, no "over"
-    stt = MicSTT(FakeTranscriber("going on and on"), mic, pause_frames=100, max_frames=10, prompt="")
+def test_stream_end_returns_what_it_captured():
+    # a real mic never ends, so nothing but "over" (or quitting) stops a turn; this only guards
+    # the fallback for a finite source that runs out without a terminator.
+    mic = FakeMic([_sp()] * 5)
+    stt = MicSTT(FakeTranscriber("just some words"), mic, pause_frames=100, prompt="")
 
-    assert stt.listen() == "going on and on"
+    assert stt.listen() == "just some words"
 
 
 def test_listen_aborts_without_transcribing_when_stop_is_set():

@@ -1,18 +1,17 @@
 """Microphone speech-to-text with a walkie-talkie end-of-turn keyword.
 
-You end a turn by saying a terminator word ("over") - not by going silent. The end is only
-checked when you actually PAUSE: `listen()` captures once you start talking, and each time you
-stop for a moment it transcribes what it has and looks for a trailing "over". If it's there,
-the turn is done (and a cue fires so you see it registered); if not, you just paused mid-thought
-and it keeps listening. This is why saying "over" in the middle of a sentence no longer cuts you
-off - there's no pause after it. A max length is the safety net if you forget to say it.
+You end a turn by saying a terminator word ("over") - not by going silent, and not on any time
+limit. The end is only checked when you actually PAUSE: `listen()` captures once you start
+talking, and each time you stop for a moment it transcribes what it has and looks for a trailing
+"over". If it's there, the turn is done (and a cue fires so you see it registered); if not, you
+just paused mid-thought and it keeps listening, however long you take. Saying "over" in the
+middle of a sentence doesn't cut you off - there's no pause after it.
 """
 
 import numpy as np
 
 FRAME = 480  # 30 ms at 16 kHz
 PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
-MAX_FRAMES = 2000  # ~60 s: send the turn even if "over" is never said
 THRESHOLD = 0.01  # RMS above this counts as speech
 
 
@@ -40,7 +39,6 @@ class MicSTT:
         terminator="over",
         threshold=THRESHOLD,
         pause_frames=PAUSE_FRAMES,
-        max_frames=MAX_FRAMES,
         prompt="(listening... say 'over' when you're done)",
         stop=None,
         cue=None,
@@ -50,7 +48,6 @@ class MicSTT:
         self._terminator = terminator
         self._threshold = threshold
         self._pause_frames = pause_frames
-        self._max_frames = max_frames
         self._prompt = prompt
         self._stop = stop
         self._cue = cue
@@ -72,8 +69,6 @@ class MicSTT:
                     continue
             buffer.append(frame)
             silence_run = 0 if speech else silence_run + 1
-            if len(buffer) >= self._max_frames:
-                return self._finish(buffer, forced=True)
             if silence_run == self._pause_frames:  # you paused - did you say "over"?
                 done = self._finish(buffer, forced=False)
                 if done is not None:
@@ -81,8 +76,8 @@ class MicSTT:
         return self._finish(buffer, forced=True) if buffer else ""
 
     def _finish(self, buffer, *, forced):
-        """On a pause (or the max/stream end), transcribe and return the turn if it ended with
-        the terminator; on a plain mid-thought pause return None to keep listening."""
+        """On a pause (or the stream ending), transcribe and return the turn if it ended with the
+        terminator; on a plain mid-thought pause return None to keep listening."""
         text = self._transcriber.transcribe(np.concatenate(buffer))
         without_terminator = _strip_terminator(text, self._terminator)
         if without_terminator is not None:

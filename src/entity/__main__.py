@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+from pathlib import Path
 
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
@@ -21,9 +22,13 @@ from entity.memory import (
     load_profile,
     parse_facts,
 )
+from entity.startup import ScriptedFirstTurn, load_startup_instructions
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
 from entity.tts_system import NullTTS, SystemTTS
+
+RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
+STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
 
 
 def _timed(call, label):
@@ -42,7 +47,6 @@ def _build_ears(text_mode, stop):
     if text_mode:
         return ConsoleSTT(), None, None
     from datetime import datetime
-    from pathlib import Path
 
     from entity.mic import Microphone
     from entity.recorder import AudioRecorder
@@ -52,8 +56,7 @@ def _build_ears(text_mode, stop):
     transcriber = ParakeetTranscriber()
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
     mic = Microphone()
-    audio_dir = Path(__file__).resolve().parents[2] / "runtime" / "audio"
-    recorder = AudioRecorder(audio_dir / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
+    recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"
     return MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder), mic, recorder
@@ -75,6 +78,16 @@ def main(argv=None):
     brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()))
     brain.warmup()
     stt, mic, recorder = _build_ears(text_mode, stop)
+
+    # Standing kickoff: whatever he's dropped in the startup-instructions file becomes his first
+    # turn automatically, so he never retypes the same long instructions to get going.
+    first = load_startup_instructions(STARTUP_INSTRUCTIONS)
+    if first is not None:
+        print(f"(read your startup instructions from {STARTUP_INSTRUCTIONS})")
+    else:
+        print(f"(tip: drop standing startup instructions in {STARTUP_INSTRUCTIONS} to skip retyping them)")
+    stt = ScriptedFirstTurn(stt, first)
+
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
     # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper

@@ -52,6 +52,9 @@ class SupervisingBrain:
         reports = self._supervise(paths, self._io, model=self._model, log=log)
         return f"Done. I supervised {len(reports)} agents."
 
+    def interrupt(self):
+        self._inner.interrupt()
+
     def warmup(self):
         self._inner.warmup()
 

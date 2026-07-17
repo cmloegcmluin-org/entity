@@ -1,4 +1,6 @@
-from entity.sdk_session import _context_tokens, extract_text
+import threading
+
+from entity.sdk_session import SdkSession, _context_tokens, extract_text
 
 
 class FakeBlock:
@@ -61,3 +63,31 @@ def test_context_tokens_sums_every_input_side_count():
 def test_context_tokens_is_zero_when_usage_is_missing_or_empty():
     assert _context_tokens(None) == 0
     assert _context_tokens({}) == 0
+
+
+class FakeClient:
+    """A stand-in ClaudeSDKClient whose async methods just record that they ran, so the session's
+    threading/loop plumbing can be tested without the real CLI."""
+
+    def __init__(self, *, options=None):
+        self.interrupted = threading.Event()
+        self.disconnected = threading.Event()
+
+    async def connect(self):
+        pass
+
+    async def interrupt(self):
+        self.interrupted.set()
+
+    async def disconnect(self):
+        self.disconnected.set()
+
+
+def test_interrupt_runs_the_clients_interrupt_on_the_session_loop():
+    client = FakeClient()
+    session = SdkSession(object(), client_factory=lambda options: client)
+
+    session.interrupt()
+
+    assert client.interrupted.is_set()  # the cancel was driven on the session's own event loop
+    session.close()

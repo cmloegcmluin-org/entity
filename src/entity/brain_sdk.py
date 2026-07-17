@@ -22,11 +22,17 @@ facts from older turns are preserved separately by the memory system, not here.
 The async plumbing lives in SdkSession; SdkBrain just supplies the options and the compaction policy.
 """
 
+import threading
 from collections import deque
 
 from claude_agent_sdk import ClaudeAgentOptions
 
 from entity.sdk_session import SdkSession
+
+
+class BrainInterrupted(Exception):
+    """Raised by `respond` when the user barges in mid-thought: the in-flight call was cancelled, so
+    there's no reply to speak and nothing to remember - the caller just returns to listening."""
 
 DEFAULT_PERSONA = (
     "You are Entity, the user's voice companion and his hands on this machine. "
@@ -116,18 +122,33 @@ class SdkBrain:
         self._new_session = session_factory
         self._baseline = None  # context size at the start of the current session's life
         self._recent = deque(maxlen=recent_turns_kept)  # last turns, carried across a compaction
+        self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
         self._session = self._new_session(_make_options(persona, model))
 
+    def interrupt(self):
+        """Cancel the ask in flight so a barge-in doesn't have to wait it out. The flag is set
+        first, and it's what makes `respond` abandon the turn rather than reconnect-and-retry -
+        so cancellation holds even if the underlying interrupt call itself fails."""
+        self._interrupting.set()
+        self._session.interrupt()
+
     def respond(self, utterance):
+        self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
         if self._should_compact():
             self._compact()
         try:
             reply = self._session.ask(utterance)
         except Exception:
-            # The session may be wedged (a dropped connection strands every later turn as a
-            # "glitch"). Rebuild it and try once more; only give up if that also fails.
+            # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
+            # retry - re-asking would re-run the very work we just cancelled.
+            if self._interrupting.is_set():
+                raise BrainInterrupted from None
+            # Otherwise the session may be wedged (a dropped connection strands every later turn as
+            # a "glitch"). Rebuild it and try once more; only give up if that also fails.
             self._reconnect()
             reply = self._session.ask(utterance)
+        if self._interrupting.is_set():
+            raise BrainInterrupted  # a reply may have landed, but he cut it off - drop it unspoken
         if _is_usage_limit(reply):
             # Usage ran out and the session is stuck on the spend-limit notice. Rebuild it and try
             # once more: a fresh session recovers the moment usage is back, instead of parroting the

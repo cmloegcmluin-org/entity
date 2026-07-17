@@ -34,6 +34,18 @@ DEFAULT_ACK = "Message received."
 DEFAULT_PATIENCE = 6.0
 DEFAULT_CHECK_IN = 30.0
 
+# While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
+# instant rather than waiting out the next check-in.
+DEFAULT_INTERRUPT_POLL = 0.05
+# After telling the brain to cancel, wait up to this long for the call to actually unwind before
+# moving on - so the loop never starts a second brain call overlapping a half-cancelled one.
+DEFAULT_CANCEL_WAIT = 10.0
+
+
+class _ThinkInterrupted(Exception):
+    """Internal signal that a barge-in cancelled the brain call - the turn is abandoned and the
+    loop goes straight back to listening, with no reply and no error spoken."""
+
 
 def _humanize_elapsed(seconds):
     seconds = max(5, int(round(seconds / 5.0)) * 5)  # nearest 5s, never below 5
@@ -93,6 +105,8 @@ class Conversation:
         reassurer=None,
         patience=DEFAULT_PATIENCE,
         check_in=DEFAULT_CHECK_IN,
+        interrupt_poll=DEFAULT_INTERRUPT_POLL,
+        cancel_wait=DEFAULT_CANCEL_WAIT,
         outbox=None,
         interrupt=None,
     ):
@@ -111,9 +125,12 @@ class Conversation:
         self._reassure = reassurer or _default_reassurance
         self._patience = patience
         self._check_in = check_in
+        self._interrupt_poll = interrupt_poll
+        self._cancel_wait = cancel_wait
         self._outbox = outbox
         self._interrupt = interrupt  # set (e.g. by a keypress) to cut off whatever it's saying
         self._paused = False
+        self._floor_watched = False  # true while a stop-watcher already holds the mic (see _say)
 
     def _is_farewell(self, heard):
         return _ends_with_command(_canonical(heard), self._farewells)
@@ -125,11 +142,13 @@ class Conversation:
         """Speak, unless he's cut in. Once the interrupt is set, every later line this turn stays
         unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
         watcher listens for him saying "stop", which trips the same interrupt - so he can cut it off
-        by voice, not just the Enter key. A voice hiccup is logged, not fatal - a failed utterance
-        must never crash the loop (it did, and he lost the whole run)."""
+        by voice, not just the Enter key. When a watcher already holds the mic (a check-in spoken
+        mid-think), we don't open a second one - two readers on one mic corrupt each other. A voice
+        hiccup is logged, not fatal - a failed utterance must never crash the loop (it did, and he
+        lost the whole run)."""
         if self._interrupted():
             return
-        stop_watching = self._watch_for_spoken_stop()
+        stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
             self._tts.speak(text, interrupt=self._interrupt)
         except Exception as exc:
@@ -177,9 +196,11 @@ class Conversation:
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
-        check-in comes after `patience`, then it keeps checking in every `check_in` seconds -
-        each time saying how long it's been - until the reply lands. Re-raises whatever the brain
-        raised, so the caller's error handling is unchanged."""
+        check-in comes after `patience`, then it keeps checking in every `check_in` seconds - each
+        time saying how long it's been - until the reply lands. If he barges in while it's thinking,
+        the call is cancelled and `_ThinkInterrupted` is raised so the loop drops the turn and goes
+        back to listening. Re-raises whatever the brain raised, so the caller's error handling is
+        unchanged."""
         outcome = {}
         done = threading.Event()
 
@@ -193,13 +214,42 @@ class Conversation:
 
         start = time.monotonic()
         threading.Thread(target=work, daemon=True).start()
-        wait_for = self._patience
-        while not done.wait(wait_for):  # still thinking - tell him how long, then keep waiting
-            self._say(self._reassure(time.monotonic() - start))
-            wait_for = self._check_in
+        # Listen for a spoken "stop" for the whole think, not just during a check-in - so he can cut
+        # off a slow brain call by voice even in its silent stretches, the same as pressing Enter.
+        stop_watching = self._watch_for_spoken_stop()
+        self._floor_watched = stop_watching is not None
+        try:
+            next_check_in = start + self._patience
+            while not done.is_set():
+                if self._interrupted():  # he cut in - cancel the call and abandon the turn
+                    self._cancel_think(done)
+                    raise _ThinkInterrupted
+                timeout = min(self._interrupt_poll, max(0.0, next_check_in - time.monotonic()))
+                if done.wait(timeout):
+                    break
+                now = time.monotonic()
+                if now >= next_check_in:  # still thinking - tell him how long, then keep waiting
+                    self._say(self._reassure(now - start))
+                    next_check_in = now + self._check_in
+        finally:
+            self._floor_watched = False
+            if stop_watching is not None:
+                stop_watching()
         if "error" in outcome:
             raise outcome["error"]
         return outcome["reply"]
+
+    def _cancel_think(self, done):
+        """Tell the brain to drop the in-flight call, then wait for the worker to unwind before
+        returning - so the next turn never starts a second brain call overlapping this one. A brain
+        with no `interrupt` (e.g. a fake) can't be cancelled; we still wait out the bounded window."""
+        interrupt = getattr(self._brain, "interrupt", None)
+        if interrupt is not None:
+            try:
+                interrupt()
+            except Exception as exc:
+                print(f"[interrupt error] {exc!r}", file=sys.stderr)
+        done.wait(self._cancel_wait)
 
     def turn(self):
         if self._interrupt is not None:
@@ -229,11 +279,13 @@ class Conversation:
         self._say(self._acknowledgement)  # let him know he was heard before the thinking pause
         try:
             said = self._think(heard)
+        except _ThinkInterrupted:  # he cut the thinking off - no reply, straight back to listening
+            return None
         except Exception as exc:  # surface the real cause instead of a silent "glitch"
             print(f"[brain error] {exc!r}", file=sys.stderr)
             self._say(self.error_reply)
             return Turn(heard=heard, said=self.error_reply, error=True)
-        self._say(said)  # if he hit Enter while it was thinking or talking, this is cut off
+        self._say(said)  # if he hit Enter while it was talking, this is cut off
         return Turn(heard=heard, said=said)
 
     def run(self, should_continue=lambda: True, on_turn=None):

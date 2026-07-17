@@ -49,6 +49,147 @@ def test_a_barge_in_before_the_reply_leaves_it_unspoken():
     assert tts.spoken == ["ACK"]  # the ack got out before the cut; the reply is silenced
 
 
+def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
+    interrupt = threading.Event()
+    thinking = threading.Event()
+    release = threading.Event()
+
+    class SlowInterruptibleBrain:
+        def __init__(self):
+            self.interrupted = False
+
+        def respond(self, utterance):
+            thinking.set()  # we're now inside the brain call
+            release.wait(2.0)  # block until cancelled (safety timeout so a bug can't hang the suite)
+            return "an essay he never wanted to sit through"
+
+        def interrupt(self):
+            self.interrupted = True
+            release.set()  # cancelling unblocks the call, as the real SDK interrupt does
+
+    brain = SlowInterruptibleBrain()
+    tts = FakeTTS()
+
+    def barge():
+        thinking.wait(2.0)
+        interrupt.set()  # he hits Enter / says "stop" while it's still thinking
+
+    threading.Thread(target=barge, daemon=True).start()
+    convo = Conversation(
+        FakeSTT(["do the big thing"]), brain, tts,
+        acknowledgement="ACK", interrupt=interrupt, patience=30,
+    )
+    turn = convo.turn()
+
+    assert turn is None  # the turn was abandoned - the loop is free to listen again
+    assert brain.interrupted is True  # the brain was told to drop the in-flight call
+    assert "an essay he never wanted to sit through" not in tts.spoken  # cancelled reply stayed unsaid
+    assert tts.spoken == ["ACK"]  # only the heard-you ack made it out
+
+
+def test_a_barge_in_while_thinking_does_not_start_the_next_brain_call_until_the_last_unwinds():
+    # The cancel must WAIT for the cancelled call to finish unwinding, so the loop never runs two
+    # overlapping brain calls on the one session.
+    interrupt = threading.Event()
+    thinking = threading.Event()
+    release = threading.Event()
+    order = []
+
+    class SlowInterruptibleBrain:
+        def respond(self, utterance):
+            thinking.set()
+            release.wait(2.0)
+            order.append("unwound")
+            return "late reply"
+
+        def interrupt(self):
+            release.set()
+
+    brain = SlowInterruptibleBrain()
+
+    def barge():
+        thinking.wait(2.0)
+        interrupt.set()
+
+    threading.Thread(target=barge, daemon=True).start()
+    convo = Conversation(FakeSTT(["go"]), brain, FakeTTS(), interrupt=interrupt, patience=30)
+    convo.turn()
+    order.append("turn_returned")
+
+    assert order == ["unwound", "turn_returned"]  # the worker finished before turn() handed control back
+
+
+def test_a_spoken_stop_word_while_thinking_cancels_the_brain():
+    interrupt = threading.Event()
+    thinking = threading.Event()
+    release = threading.Event()
+
+    class SlowInterruptibleBrain:
+        def __init__(self):
+            self.interrupted = False
+
+        def respond(self, utterance):
+            thinking.set()
+            release.wait(2.0)
+            return "a monologue he tried to stop"
+
+        def interrupt(self):
+            self.interrupted = True
+            release.set()
+
+    class SpokenStopSTT:
+        def listen(self):
+            return "do the big thing"
+
+        def catch_stop(self, active):
+            # honour the active window like the real mic; report a spoken "stop" once it's thinking
+            while active():
+                if thinking.is_set():
+                    return True
+                time.sleep(0.005)
+            return False
+
+    brain = SlowInterruptibleBrain()
+    tts = FakeTTS()
+    convo = Conversation(
+        SpokenStopSTT(), brain, tts,
+        acknowledgement="ACK", interrupt=interrupt, patience=30,
+    )
+    turn = convo.turn()
+
+    assert turn is None
+    assert brain.interrupted is True  # a spoken "stop" mid-think cancelled it, not only the Enter key
+    assert "a monologue he tried to stop" not in tts.spoken
+
+
+def test_check_ins_still_fire_while_a_stop_watcher_holds_the_mic():
+    # A slow think runs a stop-watcher on the mic; a spoken check-in must not need its own second
+    # watcher (two readers corrupt one mic) yet must still be spoken.
+    class QuietMicSTT:
+        def listen(self):
+            return "go"
+
+        def catch_stop(self, active):
+            while active():
+                time.sleep(0.005)
+            return False  # he never says stop
+
+    class SlowBrain:
+        def respond(self, utterance):
+            time.sleep(0.15)
+            return "done"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        QuietMicSTT(), SlowBrain(), tts,
+        acknowledgement="ACK", reassurer=lambda seconds: "WAIT",
+        patience=0.02, check_in=0.02, interrupt=threading.Event(),
+    )
+    convo.turn()
+
+    assert "WAIT" in tts.spoken and tts.spoken[-1] == "done"  # check-ins survive the held mic
+
+
 def test_a_stale_interrupt_is_cleared_at_the_start_of_a_turn():
     interrupt = threading.Event()
     interrupt.set()  # left over from cutting off the previous turn

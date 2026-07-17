@@ -44,16 +44,23 @@ def _context_tokens(usage):
 
 
 class SdkSession:
-    def __init__(self, options):
+    def __init__(self, options, *, client_factory=ClaudeSDKClient):
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
-        self._client = ClaudeSDKClient(options=options)
+        self._client = client_factory(options=options)
         self._submit(self._client.connect())
         self.last_context_tokens = 0  # size of the context the most recent ask processed
 
     def _submit(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+
+    def interrupt(self):
+        """Cancel the ask currently in flight. Safe to call from another thread while `ask` is
+        blocked: the interrupt coroutine is scheduled on this session's loop, where it interleaves
+        with the streaming receive at its next await and stops the turn. The CLI then closes the
+        turn out with a result message, so the blocked `ask` returns of its own accord."""
+        self._submit(self._client.interrupt())
 
     async def _ask(self, prompt):
         await self._client.query(prompt)

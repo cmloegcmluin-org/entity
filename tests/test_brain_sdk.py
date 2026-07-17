@@ -1,4 +1,6 @@
-from entity.brain_sdk import SdkBrain, _is_usage_limit, _make_options
+import pytest
+
+from entity.brain_sdk import BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
 
 _LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
 
@@ -51,6 +53,105 @@ def test_a_persistent_usage_limit_is_surfaced_once_not_looped_forever():
 
     assert _is_usage_limit(brain.respond("hi"))  # says it once
     assert len(made) == 2  # exactly one rebuild+retry, not an unbounded loop
+
+
+def test_interrupt_cancels_the_current_session():
+    made = []
+
+    class InterruptibleSession:
+        def __init__(self, options):
+            made.append(self)
+            self.interrupted = False
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            return "hi"
+
+        def interrupt(self):
+            self.interrupted = True
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=InterruptibleSession)
+    brain.interrupt()
+
+    assert made[0].interrupted is True  # the barge-in was forwarded to the live session
+
+
+def test_respond_does_not_retry_after_an_interrupt():
+    # A barge-in lands mid-ask and the stream aborts. respond must NOT reconnect-and-re-ask
+    # (that would re-run the very work we cancelled) - it surfaces the cancellation instead.
+    made = []
+
+    class AbortedSession:
+        def __init__(self, options):
+            made.append(self)
+            self.asks = 0
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            self.asks += 1
+            brain.interrupt()  # he barges in while we're waiting on the model
+            raise RuntimeError("stream aborted by interrupt")
+
+        def interrupt(self):
+            pass
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=AbortedSession)
+
+    with pytest.raises(BrainInterrupted):
+        brain.respond("a big job")
+    assert made[0].asks == 1  # asked once
+    assert len(made) == 1  # and did NOT reconnect a fresh session to retry
+
+
+def test_respond_discards_a_partial_reply_after_an_interrupt():
+    # When the interrupt lands, the CLI may still return a half-finished reply. respond must drop
+    # it - not speak it, and not seed it into the history carried across a compaction.
+    class PartialSession:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            brain.interrupt()
+            return "half a sentence he never asked to h"
+
+        def interrupt(self):
+            pass
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=PartialSession)
+
+    with pytest.raises(BrainInterrupted):
+        brain.respond("x")
+    assert list(brain._recent) == []  # the abandoned partial was not remembered
+
+
+def test_a_fresh_respond_after_an_interrupt_works_normally():
+    # The cancel flag from one turn must not gag the next turn.
+    class Session:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            return f"reply to {message}"
+
+        def interrupt(self):
+            pass
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=Session)
+    brain.interrupt()  # a leftover cancel from a previous turn
+
+    assert brain.respond("hello") == "reply to hello"  # the new turn is not cancelled
 
 
 def test_brain_is_isolated_from_user_settings_and_hooks():

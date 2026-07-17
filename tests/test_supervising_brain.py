@@ -32,6 +32,23 @@ def test_resolve_takes_explicit_comma_separated_paths():
     assert _resolve("/x/one, /x/two") == ["/x/one", "/x/two"]
 
 
+def test_interrupt_is_forwarded_to_the_inner_brain():
+    class Interruptible(FakeInner):
+        def __init__(self):
+            super().__init__("reply")
+            self.interrupted = False
+
+        def interrupt(self):
+            self.interrupted = True
+
+    inner = Interruptible()
+    brain = SupervisingBrain(inner, io=None)
+
+    brain.interrupt()
+
+    assert inner.interrupted is True  # a barge-in reaches the real brain through the wrapper
+
+
 def test_normal_replies_pass_straight_through():
     inner = FakeInner("just a normal spoken reply")
 

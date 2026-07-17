@@ -14,6 +14,7 @@ from pathlib import Path
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
 from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
+from entity.inbox_watcher import InboxWatcher
 from entity.memory import (
     CONSOLIDATION_PROMPT,
     append_learned,
@@ -22,6 +23,7 @@ from entity.memory import (
     load_profile,
     parse_facts,
 )
+from entity.outbox import Outbox
 from entity.startup import ScriptedFirstTurn, load_startup_instructions
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
@@ -29,6 +31,18 @@ from entity.tts_system import NullTTS, SystemTTS
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
+AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
+
+
+def _agent_inbox_note(inbox):
+    """Persona line telling the Entity how its agents reach the user - the exact absolute path, since
+    the agents run in other projects' worktrees and can't guess where the Entity keeps its inbox."""
+    return (
+        " When you put a background agent on a task, tell that agent - in its own instructions - to "
+        f"write anything it needs from the user (a question, or that it's ready for review) as a single "
+        f"line to {inbox}\\<a-short-agent-name>.txt. the user can't watch the agents' screens, so that "
+        "inbox is the only way he hears from them - always set it up when you delegate."
+    )
 
 
 def _timed(call, label):
@@ -42,8 +56,9 @@ def _timed(call, label):
     return wrapped
 
 
-def _build_ears(text_mode, stop):
-    """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit."""
+def _build_ears(text_mode, stop, interrupt):
+    """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
+    `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
     if text_mode:
         return ConsoleSTT(), None, None
     from datetime import datetime
@@ -59,7 +74,8 @@ def _build_ears(text_mode, stop):
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"
-    return MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder), mic, recorder
+    stt = MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder, interrupt=interrupt)
+    return stt, mic, recorder
 
 
 def main(argv=None):
@@ -74,10 +90,18 @@ def main(argv=None):
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
+    # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
+    # Entity speaks each new line at the next lull (never cutting the user off).
+    AGENT_INBOX.mkdir(parents=True, exist_ok=True)
+    outbox = Outbox()
+    inbox_watcher = InboxWatcher(AGENT_INBOX, outbox)
+    inbox_watcher.start()
+
     print("Entity is waking up...")
-    brain = SdkBrain(persona=compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()))
+    persona = compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()) + _agent_inbox_note(AGENT_INBOX)
+    brain = SdkBrain(persona=persona)
     brain.warmup()
-    stt, mic, recorder = _build_ears(text_mode, stop)
+    stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived)
 
     # Standing kickoff: whatever he's dropped in the startup-instructions file becomes his first
     # turn automatically, so he never retypes the same long instructions to get going.
@@ -123,10 +147,13 @@ def main(argv=None):
         print(f"entity> {turn.said}\n")
 
     try:
-        Conversation(stt, brain, tts).run(should_continue=lambda: not stop.is_set(), on_turn=show)
+        Conversation(stt, brain, tts, outbox=outbox).run(
+            should_continue=lambda: not stop.is_set(), on_turn=show
+        )
     except KeyboardInterrupt:
         stop.set()
     finally:
+        inbox_watcher.stop()
         if stop.is_set():
             try:
                 tts.speak("Talk soon.")  # farewell words already speak their own goodbye

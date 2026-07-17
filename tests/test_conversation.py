@@ -183,6 +183,16 @@ def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
     assert tts.spoken[0] == "Heads up - the auth agent is ready for your review."  # before we listened
 
 
+def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys):
+    outbox = Outbox()
+    outbox.push("the deploy agent needs your call")
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), FakeTTS(), outbox=outbox)
+
+    convo.turn()
+
+    assert "the deploy agent needs your call" in capsys.readouterr().out  # visible, not just audio
+
+
 def test_several_queued_messages_are_all_delivered_in_order():
     outbox = Outbox()
     outbox.push("first")

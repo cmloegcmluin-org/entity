@@ -167,6 +167,7 @@ class Conversation:
         if self._outbox is None:
             return
         for message in self._outbox.drain():
+            print(f"entity (heads-up)> {message}\n", flush=True)  # to the terminal too, not only spoken
             self._say(message)
 
     def _think(self, heard):

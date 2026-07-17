@@ -35,6 +35,9 @@ _BACKCHANNEL = {
     "uhhuh", "yeah", "yep", "yup", "huh", "ah", "oh", "er", "erm",
 }
 
+# Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).
+STOP_WORDS = ("stop", "shut up", "quiet", "enough", "wait")
+
 
 def rms(frame):
     frame = np.asarray(frame, dtype=np.float32)
@@ -160,3 +163,31 @@ class MicSTT:
                 self._cue()
             return without_terminator
         return None
+
+    def catch_stop(self, active, words=STOP_WORDS):
+        """While `active()` is true - i.e. the Entity is talking - listen for him barking a stop
+        word and return True the moment one lands, so the caller can cut the voice off. Returns
+        False when `active()` goes false (the reply finished on its own). Keyword-only, so the
+        Entity's own voice bleeding into the mic rarely trips it - the reply would have to contain
+        one of these words."""
+        floor = NoiseFloor()  # its own room-level, independent of a listen() in progress
+        chunk = []
+        silence = 0
+        started = False
+        for frame in self._mic.frames():
+            if not active():
+                return False
+            speech = floor.is_speech(rms(frame))
+            if not started:
+                if speech:
+                    started = True
+                else:
+                    continue
+            chunk.append(frame)
+            silence = 0 if speech else silence + 1
+            if silence >= self._pause_frames:  # a burst ended - was it a stop word?
+                said = self._transcriber.transcribe(np.concatenate(chunk)).lower()
+                if any(word in said for word in words):
+                    return True
+                chunk, started, silence = [], False, 0  # not a stop; keep watching
+        return False

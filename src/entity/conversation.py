@@ -7,14 +7,17 @@ from dataclasses import dataclass
 DEFAULT_FAREWELLS = (
     "goodbye entity",
     "goodnight entity",
-    "stop listening",
     "that's all for now",
     "quit",
     "exit",
 )
+# "Stop listening" doesn't quit - it puts the Entity to sleep so it stops responding; "hey entity"
+# wakes it. (While asleep it still transcribes, only to catch the wake word - nothing reaches the brain.)
+DEFAULT_SUSPENDS = ("suspend", "stop listening")
+DEFAULT_RESUMES = ("resume", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Talk soon."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
-DEFAULT_SUSPEND_REPLY = "Paused. Say resume when you're back."
+DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Entity' when you want me back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
 # Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
@@ -67,6 +70,8 @@ class Conversation:
         tts,
         *,
         farewells=DEFAULT_FAREWELLS,
+        suspends=DEFAULT_SUSPENDS,
+        resumes=DEFAULT_RESUMES,
         farewell_reply=DEFAULT_FAREWELL_REPLY,
         error_reply=DEFAULT_ERROR_REPLY,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
@@ -82,6 +87,8 @@ class Conversation:
         self._brain = brain
         self._tts = tts
         self._farewells = frozenset(_canonical(f) for f in farewells)
+        self._suspends = frozenset(_canonical(s) for s in suspends)
+        self._resumes = frozenset(_canonical(r) for r in resumes)
         self.farewell_reply = farewell_reply
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
@@ -102,14 +109,46 @@ class Conversation:
 
     def _say(self, text):
         """Speak, unless he's cut in. Once the interrupt is set, every later line this turn stays
-        unsaid, and a line already in progress is killed by the TTS. A voice hiccup is logged, not
-        fatal - a failed utterance must never crash the loop (it did, and he lost the whole run)."""
+        unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
+        watcher listens for him saying "stop", which trips the same interrupt - so he can cut it off
+        by voice, not just the Enter key. A voice hiccup is logged, not fatal - a failed utterance
+        must never crash the loop (it did, and he lost the whole run)."""
         if self._interrupted():
             return
+        stop_watching = self._watch_for_spoken_stop()
         try:
             self._tts.speak(text, interrupt=self._interrupt)
         except Exception as exc:
             print(f"[tts error] {exc!r}", file=sys.stderr)
+        finally:
+            if stop_watching is not None:
+                stop_watching()
+
+    def _watch_for_spoken_stop(self):
+        """If the mic can catch a spoken stop word, listen for one for as long as we're speaking and
+        set the interrupt when it lands. Returns a callable that stops and joins the watcher (so the
+        mic is free again before the next listen), or None when voice-stop isn't available."""
+        catch_stop = getattr(self._stt, "catch_stop", None)
+        if catch_stop is None or self._interrupt is None:
+            return None
+        speaking = threading.Event()
+        speaking.set()
+
+        def watch():
+            try:
+                if catch_stop(speaking.is_set):  # he said "stop" while it was talking
+                    self._interrupt.set()
+            except Exception as exc:
+                print(f"[voice-stop error] {exc!r}", file=sys.stderr)
+
+        thread = threading.Thread(target=watch, daemon=True)
+        thread.start()
+
+        def stop():
+            speaking.clear()  # the reply's done (or was cut) - let the watcher release the mic
+            thread.join(timeout=1.5)
+
+        return stop
 
     def _deliver_outbox(self):
         """Speak anything the Entity has queued to say on its own (word from an agent). Called when
@@ -159,12 +198,12 @@ class Conversation:
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
         canonical = _canonical(heard)
         if self._paused:
-            if canonical == "resume":
+            if canonical in self._resumes:  # "hey entity" wakes it back up
                 self._paused = False
                 self._say(self.resume_reply)
                 return Turn(heard=heard, said=self.resume_reply)
-            return None  # while paused, ignore everything except "resume" (and farewell above)
-        if canonical == "suspend":
+            return None  # while asleep, ignore everything except a wake word (and farewell above)
+        if canonical in self._suspends:  # "stop listening" puts it to sleep, doesn't quit
             self._paused = True
             self._say(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)

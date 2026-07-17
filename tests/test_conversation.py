@@ -74,6 +74,42 @@ def test_the_interrupt_is_forwarded_to_the_tts_so_a_reply_in_progress_can_be_kil
     assert interrupt in passed  # the reply's speak got the interrupt, so a keypress can cut it mid-word
 
 
+def test_a_spoken_stop_word_cuts_the_voice_off():
+    interrupt = threading.Event()
+
+    class StopHearingSTT:  # he says "stop" the instant it starts talking
+        def listen(self):
+            return "tell me a long story"
+
+        def catch_stop(self, active):
+            return True
+
+    convo = Conversation(StopHearingSTT(), FakeBrain(), FakeTTS(), acknowledgement="ACK", interrupt=interrupt)
+    convo.turn()
+
+    assert interrupt.is_set()  # the spoken "stop" tripped the same interrupt the Enter key does
+
+
+def test_stop_listening_sleeps_the_entity_and_hey_entity_wakes_it():
+    brain = FakeBrain()
+    tts = FakeTTS()
+    stt = FakeSTT(["stop listening", "are you there", "hey Entity", "hi again", "goodbye entity"])
+    convo = Conversation(stt, brain, tts)
+
+    convo.run()
+
+    assert brain.heard == ["hi again"]  # nothing reached the brain while it was asleep
+    assert convo.suspend_reply in tts.spoken and convo.resume_reply in tts.spoken
+
+
+def test_stop_listening_does_not_quit():
+    convo = Conversation(FakeSTT(["stop listening"]), FakeBrain(), FakeTTS())
+
+    turn = convo.turn()
+
+    assert turn.farewell is False  # it sleeps, it doesn't end the conversation
+
+
 def test_turn_transcribes_thinks_and_speaks():
     stt = FakeSTT(["hello"])
     brain = FakeBrain()

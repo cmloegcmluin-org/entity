@@ -65,6 +65,34 @@ def test_pure_backchannel_noise_is_dropped_from_the_turn():
     assert stt.listen() == "hello there"  # the hallucinated chunk was dropped, only real speech kept
 
 
+def test_catch_stop_fires_on_a_spoken_stop_word():
+    mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)  # quiet, a burst, then a pause
+    stt = MicSTT(FakeTranscriber("Stop!"), mic, pause_frames=3, prompt="")
+
+    assert stt.catch_stop(lambda: True) is True  # he barked "stop" while it was talking
+
+
+def test_catch_stop_ignores_ordinary_speech():
+    mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("keep going that's fine"), mic, pause_frames=3, prompt="")
+
+    assert stt.catch_stop(lambda: True) is False  # not a stop word, so it lets the reply run
+
+
+def test_catch_stop_gives_up_the_moment_the_reply_finishes():
+    ticks = {"n": 0}
+
+    def still_speaking():
+        ticks["n"] += 1
+        return ticks["n"] < 3  # the reply ends after a couple of frames
+
+    transcriber = FakeTranscriber("stop")
+    stt = MicSTT(transcriber, FakeMic([_sil()] * 100), pause_frames=3, prompt="")
+
+    assert stt.catch_stop(still_speaking) is False
+    assert transcriber.got is None  # stopped watching without transcribing anything
+
+
 def test_a_quiet_voice_on_a_quiet_mic_is_speech():
     # the deaf-mic bug: his voice peaked at 0.009 rms, under the old fixed 0.01 bar, so nothing
     # ever registered. Relative to his room's ~0.002 quiet, 0.009 is clearly speech.

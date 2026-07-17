@@ -2,7 +2,12 @@
 
 `recognize()` takes a float32 mono 16 kHz numpy array (straight from the mic) and returns
 the transcript text. The 2.4 GB model loads once, lazily, on first use (~3s).
+
+`CorrectingTranscriber` wraps any transcriber to bias its output toward the user's own coined names
+(see `vocabulary`) - since Parakeet has no hotword hook, the bias is applied after recognition.
 """
+
+from entity.vocabulary import correct_terms
 
 DEFAULT_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
@@ -32,3 +37,21 @@ class ParakeetTranscriber:
     def warmup(self):
         """Load the model now (at startup) so the first spoken turn isn't the one that waits."""
         self._get_model()
+
+
+class CorrectingTranscriber:
+    """Wraps a transcriber and rewrites its output toward known terms, so Parakeet's "high ideas"
+    comes back as his "Notecraft". Transparent otherwise: same `transcribe`/`warmup` surface, so it
+    drops in wherever a plain transcriber goes."""
+
+    def __init__(self, transcriber, terms, *, threshold=None):
+        self._transcriber = transcriber
+        self._terms = list(terms)
+        # None -> defer to correct_terms' tuned default, so the threshold lives in exactly one place.
+        self._kwargs = {} if threshold is None else {"threshold": threshold}
+
+    def transcribe(self, audio):
+        return correct_terms(self._transcriber.transcribe(audio), self._terms, **self._kwargs)
+
+    def warmup(self):
+        self._transcriber.warmup()

@@ -41,6 +41,8 @@ AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready 
 FLEET_LOGS = RUNTIME_DIR / "fleet-logs"  # one timestamped transcript per driving session
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
+VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for his project names
+WORKSPACE = Path.home() / "workspace"  # his main project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entity flags it to the user
 
 
@@ -72,6 +74,18 @@ def _mic_gain():
         return float(MIC_GAIN.read_text(encoding="utf-8").strip()) if MIC_GAIN.exists() else 1.0
     except ValueError:
         return 1.0
+
+
+def _vocab_terms():
+    """His coined project names, mined off disk so Parakeet can be biased toward them (it keeps
+    hearing "Notecraft" as "high ideas"). Always scans ~/workspace; also any extra roots he lists in
+    vocab-roots.txt, since his projects live in more than one tree."""
+    from entity.vocabulary import scan_terms
+
+    roots = [WORKSPACE]
+    if VOCAB_ROOTS.exists():
+        roots += [Path(line) for line in VOCAB_ROOTS.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return scan_terms(roots)
 
 
 def _agent_inbox_note(inbox):
@@ -108,9 +122,13 @@ def _build_ears(text_mode, stop, interrupt):
     from entity.mic import Microphone, choose_input_device, probe_input_device
     from entity.recorder import AudioRecorder
     from entity.stt_mic import MicSTT
-    from entity.transcribe import ParakeetTranscriber
+    from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
-    transcriber = ParakeetTranscriber()
+    # Bias transcription toward his own project names so "Notecraft" stops coming back as "high ideas".
+    terms = _vocab_terms()
+    if terms:
+        print(f"(custom vocabulary: {len(terms)} of your names, e.g. {', '.join(sorted(terms)[:3])})")
+    transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms)
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
 
     # Don't trust the OS default input - on this machine it's a dead VR-headset mic. Pick the input

@@ -36,16 +36,17 @@ class Microphone:
         self._stream.close()
 
 
-def choose_input_device(devices, probe, *, override=None, floor=0.0005, hostapi=None):
+def choose_input_device(devices, probe, *, override=None, hostapi=None):
     """Pick an input device index from a `sd.query_devices()` list.
 
     Only devices on `hostapi` are considered (when given) - on Windows the same mic is listed under
     several host APIs and some (WDM-KS) can't be opened for blocking reads, so we stick to the API
     the OS default uses. With `override` (a device-name substring), take the first such input whose
     name contains it. Otherwise probe each distinct input's live level via `probe(index) -> rms` and
-    take the liveliest above `floor` - so a silent default (a disconnected VR mic reads ~0) is
-    skipped for a mic that's actually hearing the room. Returns (index, name), or (None, None) to let
-    the OS default stand when nothing clears the floor.
+    take the LIVELIEST - a real mic's self-noise always beats a disconnected virtual device's ~0, so
+    this reliably avoids a dead default (a VR-headset mic) even in a silent room, where an
+    absolute-threshold check would find nothing and fall back to that very dead default. Returns
+    (index, name), or (None, None) only when there's no input device we could probe at all.
     """
     inputs = [
         (i, d)
@@ -57,7 +58,7 @@ def choose_input_device(devices, probe, *, override=None, floor=0.0005, hostapi=
         for index, device in inputs:
             if want and want in device["name"].lower():
                 return index, device["name"]
-    best_index, best_name, best_level = None, None, floor
+    best_index, best_name, best_level = None, None, None
     seen = set()
     for index, device in inputs:
         if device["name"] in seen:
@@ -67,7 +68,9 @@ def choose_input_device(devices, probe, *, override=None, floor=0.0005, hostapi=
             level = probe(index)
         except Exception:
             continue
-        if level is not None and math.isfinite(level) and level > best_level:
+        if level is None or not math.isfinite(level):
+            continue
+        if best_level is None or level > best_level:
             best_index, best_name, best_level = index, device["name"], level
     return best_index, best_name
 

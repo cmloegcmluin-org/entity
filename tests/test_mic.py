@@ -15,21 +15,25 @@ def test_override_name_substring_wins_and_skips_probing():
     assert probed == []  # an explicit choice doesn't need to listen to anything
 
 
-def test_the_liveliest_input_above_the_floor_is_chosen():
+def test_the_liveliest_input_is_chosen():
     devices = [_dev("Dead VR mic"), _dev("Real Mic", in_ch=1), _dev("Speakers", in_ch=0)]
     levels = {0: 0.00001, 1: 0.02}  # VR silent, real mic hears the room
 
-    idx, name = choose_input_device(devices, lambda i: levels[i], floor=0.0005)
+    idx, name = choose_input_device(devices, lambda i: levels[i])
 
     assert (idx, name) == (1, "Real Mic")  # the silent default is passed over
 
 
-def test_none_is_returned_when_every_device_is_silent():
-    devices = [_dev("Dead A"), _dev("Dead B")]
+def test_the_liveliest_is_taken_even_when_the_whole_room_is_quiet():
+    # The bug this guards: an absolute threshold found NOTHING in a quiet room, returned None, and
+    # the app fell back to the dead OS default (a VR mic) - all-zero audio. A real mic's self-noise
+    # still beats a disconnected virtual device, so we always take the liveliest rather than default.
+    devices = [_dev("Dead VR mic"), _dev("Real Mic", in_ch=1)]
+    levels = {0: 0.00001, 1: 0.0003}  # both quiet, but the real mic is measurably alive
 
-    idx, name = choose_input_device(devices, lambda i: 0.00001, floor=0.0005)
+    idx, name = choose_input_device(devices, lambda i: levels[i])
 
-    assert (idx, name) == (None, None)  # nothing clears the floor -> let the OS default stand
+    assert (idx, name) == (1, "Real Mic")
 
 
 def test_a_device_that_fails_to_open_is_skipped():
@@ -40,7 +44,7 @@ def test_a_device_that_fails_to_open_is_skipped():
             raise OSError("cannot open device")
         return 0.01
 
-    idx, name = choose_input_device(devices, probe, floor=0.0005)
+    idx, name = choose_input_device(devices, probe)
 
     assert (idx, name) == (1, "Good")
 
@@ -50,7 +54,7 @@ def test_each_physical_mic_is_probed_only_once():
     devices = [_dev("Onboard", sr=44100), _dev("Onboard", sr=48000), _dev("Onboard", sr=16000)]
     probed = []
 
-    choose_input_device(devices, lambda i: probed.append(i) or 0.01, floor=0.0005)
+    choose_input_device(devices, lambda i: probed.append(i) or 0.01)
 
     assert probed == [0]
 
@@ -86,6 +90,6 @@ def test_a_device_returning_a_non_finite_level_is_ignored():
     def probe(i):
         return float("inf") if i == 0 else 0.01  # a garbage buffer can read as absurdly loud
 
-    idx, name = choose_input_device(devices, probe, floor=0.0005)
+    idx, name = choose_input_device(devices, probe)
 
     assert (idx, name) == (1, "Good")

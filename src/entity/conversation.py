@@ -17,6 +17,9 @@ DEFAULT_SUSPENDS = ("suspend", "stop listening")
 DEFAULT_RESUMES = ("resume", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Talk soon."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
+# He ended a turn ("over") but said nothing in it. Rather than ignore him - which just makes him
+# repeat "over" wondering if he was heard - acknowledge that the turn registered and invite him on.
+DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
 DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Entity' when you want me back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
@@ -85,6 +88,7 @@ class Conversation:
         error_reply=DEFAULT_ERROR_REPLY,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
+        empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
         acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
@@ -102,6 +106,7 @@ class Conversation:
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
+        self.empty_turn_reply = empty_turn_reply
         self._acknowledgement = acknowledgement
         self._reassure = reassurer or _default_reassurance
         self._patience = patience
@@ -202,6 +207,10 @@ class Conversation:
         self._deliver_outbox()  # say any queued agent news before we start listening again
         heard = self._stt.listen()
         if not heard.strip():
+            # An empty turn that still ended on "over" means he said only the terminator - let him
+            # know it registered (the "✓ got it" cue already printed) instead of leaving dead air.
+            if getattr(self._stt, "caught_terminator", False):
+                self._say(self.empty_turn_reply)
             return None
         if self._is_farewell(heard):
             self._say(self.farewell_reply)

@@ -315,6 +315,48 @@ def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
     assert tts.spoken[0] == "ACK" and tts.spoken[-1] == convo.error_reply  # off-thread error re-raised
 
 
+class TerminatedEmptySTT:
+    """Reports, per listen(), whether the (possibly empty) turn ended on the terminator - like MicSTT."""
+
+    def __init__(self, results):
+        self._results = list(results)  # (text, caught_terminator) per call
+        self.caught_terminator = False
+
+    def listen(self):
+        text, self.caught_terminator = self._results.pop(0)
+        return text
+
+
+def test_a_bare_over_gets_a_brief_ack_so_he_knows_it_registered():
+    # he said only "over"; the turn is empty but the terminator registered, so acknowledge it out
+    # loud instead of ignoring him - otherwise he just repeats "over" wondering if he was heard.
+    tts = FakeTTS()
+    convo = Conversation(TerminatedEmptySTT([("", True)]), FakeBrain(), tts)
+
+    result = convo.turn()
+
+    assert result is None  # nothing to think about, so no brain call and no real turn
+    assert tts.spoken == [convo.empty_turn_reply]
+
+
+def test_an_empty_turn_without_a_terminator_stays_silent():
+    # a lull yield (queued agent news) also returns "" - but no terminator was caught, so no ack.
+    tts = FakeTTS()
+    convo = Conversation(TerminatedEmptySTT([("", False)]), FakeBrain(), tts)
+
+    assert convo.turn() is None
+    assert tts.spoken == []
+
+
+def test_a_blank_line_from_an_stt_without_the_flag_stays_silent():
+    # ConsoleSTT has no caught_terminator; a blank typed line must not trigger the spoken ack.
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["   "]), FakeBrain(), tts)
+
+    assert convo.turn() is None
+    assert tts.spoken == []
+
+
 def test_blank_utterance_is_skipped():
     stt = FakeSTT(["   "])
     brain = FakeBrain()

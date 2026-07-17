@@ -116,10 +116,14 @@ class MicSTT:
         self._cue = cue
         self._recorder = recorder
         self._interrupt = interrupt
+        # Set once a turn ends on the terminator - even a bare "over" with nothing before it. Lets the
+        # caller acknowledge an otherwise-empty turn instead of silently ignoring it (he'd repeat "over").
+        self.caught_terminator = False
 
     def listen(self):
         if self._prompt:
             print(self._prompt, flush=True)
+        self.caught_terminator = False  # about this turn only; forget the last one
         segments = []  # transcribed text so far, one entry per pause-delimited chunk
         segment = []  # frames captured since the last pause - only this chunk gets transcribed
         silence_run = 0
@@ -160,6 +164,7 @@ class MicSTT:
             segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence
         without_terminator = _strip_terminator(" ".join(segments), self._terminator)
         if without_terminator is not None:
+            self.caught_terminator = True
             if self._cue is not None:
                 self._cue()
             return without_terminator

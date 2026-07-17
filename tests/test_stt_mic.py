@@ -73,6 +73,34 @@ def test_pure_backchannel_noise_is_dropped_from_the_turn():
     assert stt.listen() == "hello there"  # the hallucinated chunk was dropped, only real speech kept
 
 
+def test_a_bare_over_ends_an_empty_turn_but_is_flagged_as_terminated():
+    # he said only "over" - the transcript strips to nothing, but the terminator WAS caught, so the
+    # caller can tell this apart from a lull and still let him know it registered.
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("over"), mic, pause_frames=3, prompt="", threshold=0.01)
+
+    assert stt.listen() == ""
+    assert stt.caught_terminator is True
+
+
+def test_an_empty_turn_without_a_terminator_is_not_flagged():
+    # a lull yield (the Entity has queued news) returns "" with no terminator - must NOT look like "over".
+    interrupt = threading.Event()
+    interrupt.set()
+    stt = MicSTT(FakeTranscriber("unused"), FakeMic([_sil()] * 3), pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt)
+
+    assert stt.listen() == ""
+    assert stt.caught_terminator is False
+
+
+def test_a_normal_terminated_turn_is_flagged():
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, prompt="", threshold=0.01)
+
+    assert stt.listen() == "hello"
+    assert stt.caught_terminator is True
+
+
 def test_catch_stop_fires_on_a_spoken_stop_word():
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)  # quiet, a burst, then a pause
     stt = MicSTT(FakeTranscriber("Stop!"), mic, pause_frames=3, prompt="")

@@ -1,4 +1,56 @@
-from entity.brain_sdk import SdkBrain, _make_options
+from entity.brain_sdk import SdkBrain, _is_usage_limit, _make_options
+
+_LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
+
+
+def test_is_usage_limit_spots_the_cli_spend_notice():
+    assert _is_usage_limit(_LIMIT) is True
+    assert _is_usage_limit("You've hit your usage limit.") is True
+    assert _is_usage_limit("Merged it - the drive icon opens the folder now.") is False
+
+
+def test_respond_rebuilds_the_session_when_it_hits_a_usage_limit_then_recovers():
+    made = []
+
+    class LimitedThenBackSession:
+        def __init__(self, options):
+            made.append(self)
+            self.closed = False
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            if made.index(self) == 0:  # the wedged session parrots the spend-limit notice
+                return _LIMIT
+            return "Merged. The drive icon opens the folder now."  # a fresh session, usage back
+
+        def close(self):
+            self.closed = True
+
+    brain = SdkBrain(session_factory=LimitedThenBackSession)
+
+    assert brain.respond("merge it") == "Merged. The drive icon opens the folder now."
+    assert len(made) == 2 and made[0].closed  # it rebuilt past the wedged session, didn't loop
+
+
+def test_a_persistent_usage_limit_is_surfaced_once_not_looped_forever():
+    made = []
+
+    class StillLimitedSession:
+        def __init__(self, options):
+            made.append(self)
+            self.closed = False
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            return _LIMIT  # usage genuinely still gone on every session
+
+        def close(self):
+            self.closed = True
+
+    brain = SdkBrain(session_factory=StillLimitedSession)
+
+    assert _is_usage_limit(brain.respond("hi"))  # says it once
+    assert len(made) == 2  # exactly one rebuild+retry, not an unbounded loop
 
 
 def test_brain_is_isolated_from_user_settings_and_hooks():

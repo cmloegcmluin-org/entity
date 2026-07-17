@@ -70,6 +70,16 @@ RECENT_HEADER = (
     "context reset - pick up seamlessly from here and don't announce that any reset happened:\n"
 )
 
+# When usage runs out, the CLI answers with a fixed spend-limit notice instead of a real reply -
+# and the session then stays wedged on it, parroting the notice every turn even after usage resets
+# (he had to kill the app). Spotting the notice lets the brain rebuild the session so it recovers.
+_USAGE_LIMIT_SIGNS = ("claude.ai/settings/usage", "spend limit", "usage limit")
+
+
+def _is_usage_limit(text):
+    low = text.lower()
+    return any(sign in low for sign in _USAGE_LIMIT_SIGNS)
+
 
 def _make_options(persona, model):
     # The Entity's native tools stay gated until the user enables fully-autonomous operation
@@ -110,6 +120,12 @@ class SdkBrain:
         except Exception:
             # The session may be wedged (a dropped connection strands every later turn as a
             # "glitch"). Rebuild it and try once more; only give up if that also fails.
+            self._reconnect()
+            reply = self._session.ask(utterance)
+        if _is_usage_limit(reply):
+            # Usage ran out and the session is stuck on the spend-limit notice. Rebuild it and try
+            # once more: a fresh session recovers the moment usage is back, instead of parroting the
+            # notice forever. If usage is still gone, the retry says so once - not in a loop.
             self._reconnect()
             reply = self._session.ask(utterance)
         self._observe(self._session.last_context_tokens)

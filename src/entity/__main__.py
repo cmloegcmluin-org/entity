@@ -20,6 +20,7 @@ from entity.conversation import Conversation
 from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
 from entity.fleet_log import FleetLog
 from entity.fleet_session import prepare_worktree, supervise
+from entity.heartbeat import HeartbeatMonitor
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
     append_learned,
@@ -165,8 +166,12 @@ def main(argv=None):
 
     print("Entity is waking up...")
     persona = compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()) + _agent_inbox_note(AGENT_INBOX)
-    brain = SdkBrain(persona=persona)
-    brain.warmup()
+    sdk_brain = SdkBrain(persona=persona)
+    sdk_brain.warmup()
+    # Heartbeat: on a quiet timer, ask the brain if any agent has news he doesn't have yet and queue
+    # it to the Outbox, so word from an agent reaches him the moment it lands, not only when he asks.
+    heartbeat = HeartbeatMonitor(sdk_brain, outbox)
+    heartbeat.start()
     stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived)
 
     # Standing kickoff: whatever he's dropped in the startup-instructions file becomes his first
@@ -186,7 +191,7 @@ def main(argv=None):
     # is cut fresh from current origin/main before the agent starts.
     fleet_io = ConsoleFleetIO() if text_mode else VoiceFleetIO(speak=tts.speak, listen=stt.listen)
     brain = SupervisingBrain(
-        brain,
+        sdk_brain,
         fleet_io,
         supervise_fn=functools.partial(supervise, prepare=_prepare_fresh_worktree),
         make_log=_make_fleet_log,
@@ -232,6 +237,7 @@ def main(argv=None):
         stop.set()
     finally:
         inbox_watcher.stop()
+        heartbeat.stop()
         if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
             if not text_mode and not muted:
                 try:

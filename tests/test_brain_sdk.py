@@ -11,6 +11,27 @@ def test_is_usage_limit_spots_the_cli_spend_notice():
     assert _is_usage_limit("Merged it - the drive icon opens the folder now.") is False
 
 
+def test_a_remember_false_turn_stays_out_of_the_recent_window():
+    # the heartbeat's silent "any agent news?" polls must not crowd out the real conversation.
+    class Session:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            return f"reply to {message}"
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=Session)
+    brain.respond("what's the plan for today")
+    brain.respond("HEARTBEAT poll", remember=False)
+
+    carried = [utterance for utterance, _ in brain._recent]
+    assert "what's the plan for today" in carried
+    assert "HEARTBEAT poll" not in carried  # the poll didn't enter the carried-forward memory
+
+
 def test_respond_rebuilds_the_session_when_it_hits_a_usage_limit_then_recovers():
     made = []
 

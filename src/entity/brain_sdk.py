@@ -52,7 +52,13 @@ DEFAULT_PERSONA = (
     "A CORE part of your job is running Claude coding agents for the user. He tells you what he wants "
     "changed; you turn that into a clear task and hand it to a FRESH agent that does the actual work "
     "- you do NOT do the investigation or the coding yourself, the agent does, so delegate quickly "
-    "instead of digging through the code. Your job is to supervise and SHIELD him from the details. "
+    "instead of digging through the code. When you turn his request into the agent's task, translate "
+    "his INTENT, not his literal words: fill in what a smart person would obviously understand (if he "
+    "says a link should open the 'actual folder', he means the item's own subfolder, not some static "
+    "top-level folder - the useless reading is never the right one). If it's genuinely ambiguous in a "
+    "way that changes the work, ask him ONE short question BEFORE you dispatch - never after a wasted "
+    "round. A literal misread that costs him a whole round is the worst thing you can do to him. "
+    "Your job is to supervise and SHIELD him from the details. "
     "He never wants the agent's play-by-play or yours - not which files were read, not what's being "
     "tried. When he asks about a task, tell him only what he cares about: is the thing he asked for "
     "DONE, or does the agent need a decision from him? That's it. "
@@ -123,6 +129,7 @@ class SdkBrain:
         self._baseline = None  # context size at the start of the current session's life
         self._recent = deque(maxlen=recent_turns_kept)  # last turns, carried across a compaction
         self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
+        self._respond_lock = threading.Lock()  # one ask at a time - a real turn and the heartbeat share the session
         self._session = self._new_session(_make_options(persona, model))
 
     def interrupt(self):
@@ -132,32 +139,37 @@ class SdkBrain:
         self._interrupting.set()
         self._session.interrupt()
 
-    def respond(self, utterance):
-        self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
-        if self._should_compact():
-            self._compact()
-        try:
-            reply = self._session.ask(utterance)
-        except Exception:
-            # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
-            # retry - re-asking would re-run the very work we just cancelled.
+    def respond(self, utterance, *, remember=True):
+        """Ask the brain. `remember=False` (used by the background heartbeat) keeps the exchange out
+        of the carried-forward recent-turns window, so its silent "any agent news?" polls don't
+        crowd out the real conversation."""
+        with self._respond_lock:  # serialize the heartbeat and a real turn onto the one session
+            self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
+            if self._should_compact():
+                self._compact()
+            try:
+                reply = self._session.ask(utterance)
+            except Exception:
+                # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
+                # retry - re-asking would re-run the very work we just cancelled.
+                if self._interrupting.is_set():
+                    raise BrainInterrupted from None
+                # Otherwise the session may be wedged (a dropped connection strands every later turn
+                # as a "glitch"). Rebuild it and try once more; only give up if that also fails.
+                self._reconnect()
+                reply = self._session.ask(utterance)
             if self._interrupting.is_set():
-                raise BrainInterrupted from None
-            # Otherwise the session may be wedged (a dropped connection strands every later turn as
-            # a "glitch"). Rebuild it and try once more; only give up if that also fails.
-            self._reconnect()
-            reply = self._session.ask(utterance)
-        if self._interrupting.is_set():
-            raise BrainInterrupted  # a reply may have landed, but he cut it off - drop it unspoken
-        if _is_usage_limit(reply):
-            # Usage ran out and the session is stuck on the spend-limit notice. Rebuild it and try
-            # once more: a fresh session recovers the moment usage is back, instead of parroting the
-            # notice forever. If usage is still gone, the retry says so once - not in a loop.
-            self._reconnect()
-            reply = self._session.ask(utterance)
-        self._observe(self._session.last_context_tokens)
-        self._recent.append((utterance, reply))
-        return reply
+                raise BrainInterrupted  # a reply may have landed, but he cut it off - drop it unspoken
+            if _is_usage_limit(reply):
+                # Usage ran out and the session is stuck on the spend-limit notice. Rebuild it and
+                # try once more: a fresh session recovers the moment usage is back, instead of
+                # parroting the notice forever. If still gone, the retry says so once - not in a loop.
+                self._reconnect()
+                reply = self._session.ask(utterance)
+            self._observe(self._session.last_context_tokens)
+            if remember:
+                self._recent.append((utterance, reply))
+            return reply
 
     def _observe(self, context_tokens):
         """Remember where each fresh session started, so growth is measured from its own floor."""

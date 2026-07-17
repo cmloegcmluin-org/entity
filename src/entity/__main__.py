@@ -5,16 +5,22 @@
   --timings   print how long each turn spends thinking vs. speaking
 """
 
+import functools
+import re
 import signal
+import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.conversation import Conversation
 from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
-from entity.inbox_watcher import InboxWatcher
+from entity.fleet_log import FleetLog
+from entity.fleet_session import prepare_worktree, supervise
+from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
     CONSOLIDATION_PROMPT,
     append_learned,
@@ -32,8 +38,31 @@ from entity.tts_system import NullTTS, SystemTTS
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
+FLEET_LOGS = RUNTIME_DIR / "fleet-logs"  # one timestamped transcript per driving session
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
+AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entity flags it to the user
+
+
+def _make_fleet_log(target):
+    """A fresh timestamped transcript for one driving session, named after what the user asked to drive."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(target).name).strip("-") or "session"
+    return FleetLog(FLEET_LOGS / f"{slug}-{stamp}.log")
+
+
+def _prepare_fresh_worktree(path):
+    """Set up a not-yet-existing worktree fresh from current origin/main, so a newly delegated agent
+    never starts on stale local code. The repo is the git tree the requested path belongs under; the
+    branch mirrors the worktree's own name."""
+    target = Path(path)
+    repo = subprocess.run(
+        ["git", "-C", str(target.parent), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    prepare_worktree(repo, target, f"claude/{target.name}")
 
 
 def _mic_gain():
@@ -120,7 +149,10 @@ def main(argv=None):
     # Entity speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
     outbox = Outbox()
-    inbox_watcher = InboxWatcher(AGENT_INBOX, outbox)
+    # Don't just wait to be told - watch the agents. If one goes silent past the threshold, the
+    # monitor surfaces a heads-up so the user isn't left in the dark by a hung or stalled agent.
+    quiet_monitor = QuietMonitor(outbox, quiet_after=AGENT_QUIET_AFTER)
+    inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor)
     inbox_watcher.start()
 
     print("Entity is waking up...")
@@ -142,8 +174,15 @@ def main(argv=None):
 
     # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper
     # catches a "[SUPERVISE] ..." directive from the brain and runs the agents through the same voice.
+    # Each session gets a fresh timestamped transcript; a worktree it names but that doesn't exist yet
+    # is cut fresh from current origin/main before the agent starts.
     fleet_io = ConsoleFleetIO() if text_mode else VoiceFleetIO(speak=tts.speak, listen=stt.listen)
-    brain = SupervisingBrain(brain, fleet_io)
+    brain = SupervisingBrain(
+        brain,
+        fleet_io,
+        supervise_fn=functools.partial(supervise, prepare=_prepare_fresh_worktree),
+        make_log=_make_fleet_log,
+    )
 
     if timings:
         brain.respond = _timed(brain.respond, "think")

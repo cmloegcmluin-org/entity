@@ -33,6 +33,7 @@ FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
 _BACKCHANNEL = {
     "mm", "mmm", "mmhmm", "mhm", "hmm", "hm", "uh", "uhh", "um", "umm",
     "uhhuh", "yeah", "yep", "yup", "huh", "ah", "oh", "er", "erm",
+    "okay", "ok", "kay", "alright", "aright",  # Parakeet fills his pauses with these too
 }
 
 # Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).

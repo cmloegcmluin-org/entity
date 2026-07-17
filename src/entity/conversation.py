@@ -44,12 +44,21 @@ def _humanize_elapsed(seconds):
 
 
 def _default_reassurance(seconds):
-    return f"Still working on it - {_humanize_elapsed(seconds)} so far."
+    # "processing your request", not "working on it" - the Entity triages and relays, it isn't doing
+    # the agent's actual work, and he found "working on it" misleading.
+    return f"Still processing your request - {_humanize_elapsed(seconds)} so far."
 
 
 def _canonical(text):
     """Lowercase, strip punctuation, collapse whitespace — so 'Goodbye, Entity.' matches 'goodbye entity'."""
     return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _ends_with_command(canonical, commands):
+    """A command counts if the utterance IS it or ENDS with it - so "okay, stop listening" trips
+    "stop listening", not just the bare phrase. (He rarely says these distinctive phrases by
+    accident, and transcription usually tacks a stray word on, which exact-match then missed.)"""
+    return any(canonical == cmd or canonical.endswith(" " + cmd) for cmd in commands)
 
 
 @dataclass(frozen=True)
@@ -102,7 +111,7 @@ class Conversation:
         self._paused = False
 
     def _is_farewell(self, heard):
-        return _canonical(heard) in self._farewells
+        return _ends_with_command(_canonical(heard), self._farewells)
 
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
@@ -198,12 +207,12 @@ class Conversation:
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
         canonical = _canonical(heard)
         if self._paused:
-            if canonical in self._resumes:  # "hey entity" wakes it back up
+            if _ends_with_command(canonical, self._resumes):  # "hey entity" wakes it back up
                 self._paused = False
                 self._say(self.resume_reply)
                 return Turn(heard=heard, said=self.resume_reply)
             return None  # while asleep, ignore everything except a wake word (and farewell above)
-        if canonical in self._suspends:  # "stop listening" puts it to sleep, doesn't quit
+        if _ends_with_command(canonical, self._suspends):  # "stop listening" puts it to sleep, doesn't quit
             self._paused = True
             self._say(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)

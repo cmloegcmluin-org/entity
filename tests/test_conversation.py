@@ -110,6 +110,28 @@ def test_stop_listening_does_not_quit():
     assert turn.farewell is False  # it sleeps, it doesn't end the conversation
 
 
+def test_a_command_with_a_stray_word_in_front_still_fires():
+    # transcription tacks words on ("okay, stop listening"); exact-match used to miss that
+    convo = Conversation(FakeSTT(["okay stop listening"]), FakeBrain(), FakeTTS())
+    assert convo.turn().said == convo.suspend_reply
+
+
+def test_a_trailing_farewell_still_ends_the_conversation():
+    convo = Conversation(FakeSTT(["alright well goodbye entity"]), FakeBrain(), FakeTTS())
+    assert convo.turn().farewell is True
+
+
+def test_a_plain_sentence_is_not_mistaken_for_a_command():
+    convo = Conversation(FakeSTT(["tell me about the weather"]), FakeBrain(), FakeTTS(), acknowledgement="ACK")
+    turn = convo.turn()
+    assert turn.farewell is False and turn.said == "reply to tell me about the weather"
+
+
+def test_the_check_in_says_processing_your_request_not_working_on_it():
+    assert "processing your request" in _default_reassurance(30)
+    assert "working on it" not in _default_reassurance(30)
+
+
 def test_turn_transcribes_thinks_and_speaks():
     stt = FakeSTT(["hello"])
     brain = FakeBrain()

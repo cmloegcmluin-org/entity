@@ -56,6 +56,14 @@ def test_is_backchannel_spots_filler_but_keeps_real_words_and_the_terminator():
     assert _is_backchannel("", "over") is False
 
 
+def test_okay_hallucinations_are_treated_as_backchannel():
+    # Parakeet fills his pauses with "Okay." too; those must not pile up in front of his real turn.
+    assert _is_backchannel("Okay.", "over") is True
+    assert _is_backchannel("Okay okay okay", "over") is True
+    assert _is_backchannel("Alright.", "over") is True
+    assert _is_backchannel("okay do the thing", "over") is False  # real words survive
+
+
 def test_pure_backchannel_noise_is_dropped_from_the_turn():
     # a silent stretch that Parakeet hallucinates as "Mm-hmm." must not pollute the real turn.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)

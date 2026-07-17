@@ -58,10 +58,25 @@ DEFAULT_INTERRUPT_POLL = 0.05
 # moving on - so the loop never starts a second brain call overlapping a half-cancelled one.
 DEFAULT_CANCEL_WAIT = 10.0
 
+# Once a think has run this long it stops blocking the conversation: the Entity says it'll keep at
+# it, the call runs on in the background, and the finished answer is offered later. None disables
+# detaching (a slow think just blocks with check-ins, as before). Well past the check-in cadence so
+# only a genuinely long call detaches.
+DEFAULT_DETACH_AFTER = 45.0
+DEFAULT_DETACH_REPLY = "This one'll take me a while - I'll keep at it and let you know when it's ready."
+# One brain, one session: while a detached call is still running, a new request can't start a second
+# one, so it's deflected with this until the first lands.
+DEFAULT_BUSY_REPLY = "Still finishing your last one - give me a moment."
+
 
 class _ThinkInterrupted(Exception):
     """Internal signal that a barge-in cancelled the brain call - the turn is abandoned and the
     loop goes straight back to listening, with no reply and no error spoken."""
+
+
+class _ThinkDetached(Exception):
+    """Internal signal that a slow think was handed to the background - the turn ends and the loop
+    listens again; the finished answer is offered on a later turn."""
 
 
 def _humanize_elapsed(seconds):
@@ -128,15 +143,19 @@ class Conversation:
         resume_reply=DEFAULT_RESUME_REPLY,
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
         ready_question=DEFAULT_READY_QUESTION,
+        detach_reply=DEFAULT_DETACH_REPLY,
+        busy_reply=DEFAULT_BUSY_REPLY,
         acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
         check_in=DEFAULT_CHECK_IN,
         interrupt_poll=DEFAULT_INTERRUPT_POLL,
         cancel_wait=DEFAULT_CANCEL_WAIT,
+        detach_after=DEFAULT_DETACH_AFTER,
         long_answer_chars=DEFAULT_LONG_ANSWER_CHARS,
         outbox=None,
         interrupt=None,
+        wake=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -150,8 +169,13 @@ class Conversation:
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
         self.ready_question = ready_question
+        self.detach_reply = detach_reply
+        self.busy_reply = busy_reply
         self._long_answer_chars = long_answer_chars
+        self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
+        self._background = None  # a slow think handed off, still running: {"done", "outcome"}
+        self._wake = wake  # event the mic waits on; set to break a lull when news is ready to speak
         self._acknowledgement = acknowledgement
         self._reassure = reassurer or _default_reassurance
         self._patience = patience
@@ -229,9 +253,10 @@ class Conversation:
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
         check-in comes after `patience`, then it keeps checking in every `check_in` seconds - each
         time saying how long it's been - until the reply lands. If he barges in while it's thinking,
-        the call is cancelled and `_ThinkInterrupted` is raised so the loop drops the turn and goes
-        back to listening. Re-raises whatever the brain raised, so the caller's error handling is
-        unchanged."""
+        the call is cancelled and `_ThinkInterrupted` is raised so the loop drops the turn. If it
+        runs past `detach_after`, it's handed to the background and `_ThinkDetached` is raised so the
+        loop is freed and the answer is offered later. Re-raises whatever the brain raised, so the
+        caller's error handling is unchanged."""
         outcome = {}
         done = threading.Event()
 
@@ -251,11 +276,17 @@ class Conversation:
         self._floor_watched = stop_watching is not None
         try:
             next_check_in = start + self._patience
+            detach_at = start + self._detach_after if self._detach_after is not None else None
             while not done.is_set():
                 if self._interrupted():  # he cut in - cancel the call and abandon the turn
                     self._cancel_think(done)
                     raise _ThinkInterrupted
-                timeout = min(self._interrupt_poll, max(0.0, next_check_in - time.monotonic()))
+                if detach_at is not None and time.monotonic() >= detach_at:  # too slow - background it
+                    self._say(self.detach_reply)
+                    self._detach(done, outcome)
+                    raise _ThinkDetached
+                deadline = next_check_in if detach_at is None else min(next_check_in, detach_at)
+                timeout = min(self._interrupt_poll, max(0.0, deadline - time.monotonic()))
                 if done.wait(timeout):
                     break
                 now = time.monotonic()
@@ -282,10 +313,35 @@ class Conversation:
                 print(f"[interrupt error] {exc!r}", file=sys.stderr)
         done.wait(self._cancel_wait)
 
+    def _detach(self, done, outcome):
+        """Leave the slow call running on its worker and remember it; a reaper breaks the next lull
+        the moment it lands, so the finished answer gets offered promptly rather than waiting for him
+        to speak first."""
+        self._background = {"done": done, "outcome": outcome}
+        if self._wake is not None:
+            threading.Thread(target=self._reap, args=(done,), daemon=True).start()
+
+    def _reap(self, done):
+        done.wait()
+        self._wake.set()  # break the mic's lull so the loop cycles round and offers the answer
+
+    def _collect_background(self):
+        """If a detached call has finished, take its answer and offer it (a failure is dropped - a
+        background best-effort, not worth surfacing as a glitch). Runs at the top of a turn."""
+        background = self._background
+        if background is None or not background["done"].is_set():
+            return
+        self._background = None
+        reply = background["outcome"].get("reply")
+        if reply is not None and self._offered is None:
+            self._offered = reply
+            self._say(self.ready_question)
+
     def turn(self):
         if self._interrupt is not None:
             self._interrupt.clear()  # a fresh turn; forget any leftover "stop" from the last one
         self._deliver_outbox()  # say any queued agent news before we start listening again
+        self._collect_background()  # a slow answer that has since landed is offered here
         heard = self._stt.listen()
         if not heard.strip():
             # An empty turn that still ended on "over" means he said only the terminator - let him
@@ -309,6 +365,9 @@ class Conversation:
             return Turn(heard=heard, said=self.suspend_reply)
         if self._offered is not None:  # he's answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
+        if self._background is not None:  # a detached call is still running - one session, so wait it out
+            self._say(self.busy_reply)
+            return Turn(heard=heard, said=self.busy_reply)
         return self._answer(heard)
 
     def _answer(self, heard):
@@ -318,6 +377,8 @@ class Conversation:
         try:
             said = self._think(heard)
         except _ThinkInterrupted:  # he cut the thinking off - no reply, straight back to listening
+            return None
+        except _ThinkDetached:  # too slow - it's running in the background; offered when it lands
             return None
         except Exception as exc:  # surface the real cause instead of a silent "glitch"
             print(f"[brain error] {exc!r}", file=sys.stderr)

@@ -128,6 +128,105 @@ def test_gating_off_speaks_even_a_long_answer_straight_away():
     assert VariableBrain.WALL in tts.spoken
 
 
+def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
+    release = threading.Event()
+
+    class SlowBrain:
+        def respond(self, utterance):
+            release.wait(2.0)  # never lands before the detach window
+            return "the finished long-running answer"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["do the slow thing", "yes"]), SlowBrain(), tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30,
+    )
+
+    first = convo.turn()
+
+    assert first is None  # it didn't block - the loop is free to listen again
+    assert convo.detach_reply in tts.spoken  # he was told it's running in the background
+
+    bg_done = convo._background["done"]
+    release.set()
+    assert bg_done.wait(2.0)  # the background call finishes on its own thread
+
+    convo.turn()  # he comes back; the answer is offered, and his "yes" releases it
+
+    assert convo.ready_question in tts.spoken
+    assert "the finished long-running answer" in tts.spoken
+
+
+def test_a_new_request_while_a_think_is_detached_is_deflected_not_run_concurrently():
+    # One brain, one session: a second brain call must NOT overlap the detached one.
+    release = threading.Event()
+    calls = []
+
+    class SlowBrain:
+        def respond(self, utterance):
+            calls.append(utterance)
+            release.wait(2.0)
+            return "done"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["slow one", "what about this"]), SlowBrain(), tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30, busy_reply="BUSY",
+    )
+
+    convo.turn()  # detaches
+    second = convo.turn()  # a new ask while the first is still running
+
+    assert second.said == "BUSY"  # deflected
+    assert calls == ["slow one"]  # the second request did not start a concurrent brain call
+    release.set()
+
+
+def test_a_finished_background_answer_wakes_a_lull():
+    wake = threading.Event()
+    release = threading.Event()
+
+    class SlowBrain:
+        def respond(self, utterance):
+            release.wait(2.0)
+            return "bg answer"
+
+    convo = Conversation(
+        FakeSTT(["slow"]), SlowBrain(), FakeTTS(),
+        detach_after=0.05, patience=30, wake=wake,
+    )
+
+    convo.turn()  # detaches, arms the reaper
+
+    assert not wake.is_set()
+    release.set()
+    assert wake.wait(2.0)  # when the answer lands, the lull is broken so it can be offered promptly
+
+
+def test_a_background_error_is_dropped_not_offered():
+    release = threading.Event()
+
+    class BoomBrain:
+        def respond(self, utterance):
+            release.wait(2.0)
+            raise RuntimeError("background boom")
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["slow", "hi"]), BoomBrain(), tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30,
+    )
+
+    convo.turn()  # detaches
+    bg_done = convo._background["done"]
+    release.set()
+    assert bg_done.wait(2.0)
+    convo.turn()  # collects the failed background call
+
+    assert convo.ready_question not in tts.spoken  # a failed background call is dropped, never offered
+    assert convo._offered is None
+
+
 def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
     interrupt = threading.Event()
     thinking = threading.Event()

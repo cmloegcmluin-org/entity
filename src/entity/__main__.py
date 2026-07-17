@@ -236,7 +236,7 @@ def main(argv=None):
         print(f"entity> {turn.said}\n")
 
     try:
-        Conversation(stt, brain, tts, outbox=outbox, interrupt=barge_in).run(
+        Conversation(stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived).run(
             should_continue=lambda: not stop.is_set(), on_turn=show
         )
     except KeyboardInterrupt:

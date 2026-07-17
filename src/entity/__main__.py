@@ -57,10 +57,10 @@ def _agent_inbox_note(inbox):
 
 
 def _timed(call, label):
-    def wrapped(arg):
+    def wrapped(*args, **kwargs):  # pass through, e.g. tts.speak(text, interrupt=...)
         start = time.perf_counter()
         try:
-            return call(arg)
+            return call(*args, **kwargs)
         finally:
             print(f"  [{label} {time.perf_counter() - start:.1f}s]", file=sys.stderr)
 
@@ -109,10 +109,11 @@ def main(argv=None):
     muted = "--mute" in argv
     timings = "--timings" in argv
 
-    # Shutdown is driven by one stop flag. The reliable trigger is a spoken/typed farewell
-    # ("goodbye entity", "quit") which the transcriber always catches; Enter (stdin watcher)
-    # and Ctrl-C (SIGINT handler) also set it, but both are flaky under Git Bash's terminal.
+    # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
+    # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
+    # ramble he couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
     stop = threading.Event()
+    barge_in = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
@@ -148,14 +149,18 @@ def main(argv=None):
         brain.respond = _timed(brain.respond, "think")
         tts.speak = _timed(tts.speak, "speak")
 
+    def watch_keys():
+        for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up
+            barge_in.set()
+
     if not text_mode:
-        threading.Thread(target=lambda: (sys.stdin.readline(), stop.set()), daemon=True).start()
+        threading.Thread(target=watch_keys, daemon=True).start()
 
     if text_mode:
         print("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
     else:
         print("Entity is here. Speak, and say 'over' when you finish each turn.")
-        print("To end, say 'goodbye entity over' (or press Enter).")
+        print("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
     if muted:
         print("(muted: replies are shown, not spoken)")
     print()
@@ -172,7 +177,7 @@ def main(argv=None):
         print(f"entity> {turn.said}\n")
 
     try:
-        Conversation(stt, brain, tts, outbox=outbox).run(
+        Conversation(stt, brain, tts, outbox=outbox, interrupt=barge_in).run(
             should_continue=lambda: not stop.is_set(), on_turn=show
         )
     except KeyboardInterrupt:

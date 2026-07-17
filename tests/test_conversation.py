@@ -1,3 +1,4 @@
+import threading
 import time
 
 from entity.conversation import Conversation, Turn, _default_reassurance, _humanize_elapsed
@@ -29,8 +30,48 @@ class FakeTTS:
     def __init__(self):
         self.spoken = []
 
-    def speak(self, text):
+    def speak(self, text, *, interrupt=None):
         self.spoken.append(text)
+
+
+def test_a_barge_in_before_the_reply_leaves_it_unspoken():
+    interrupt = threading.Event()
+
+    class InterruptingBrain:  # he hits Enter while it's thinking
+        def respond(self, utterance):
+            interrupt.set()
+            return "a fifteen-minute novella he never wanted"
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), InterruptingBrain(), tts, acknowledgement="ACK", interrupt=interrupt)
+    convo.turn()
+
+    assert tts.spoken == ["ACK"]  # the ack got out before the cut; the reply is silenced
+
+
+def test_a_stale_interrupt_is_cleared_at_the_start_of_a_turn():
+    interrupt = threading.Event()
+    interrupt.set()  # left over from cutting off the previous turn
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK", interrupt=interrupt)
+
+    convo.turn()
+
+    assert tts.spoken == ["ACK", "reply to hi"]  # the stale flag didn't gag this fresh turn
+
+
+def test_the_interrupt_is_forwarded_to_the_tts_so_a_reply_in_progress_can_be_killed():
+    interrupt = threading.Event()
+    passed = []
+
+    class CapturingTTS:
+        def speak(self, text, *, interrupt=None):
+            passed.append(interrupt)
+
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), CapturingTTS(), interrupt=interrupt)
+    convo.turn()
+
+    assert interrupt in passed  # the reply's speak got the interrupt, so a keypress can cut it mid-word
 
 
 def test_turn_transcribes_thinks_and_speaks():
@@ -55,7 +96,7 @@ def test_a_real_turn_acknowledges_the_instant_it_hears_you_before_thinking():
             return "reply"
 
     class WatchfulTTS:
-        def speak(self, text):
+        def speak(self, text, *, interrupt=None):
             events.append(f"say:{text}")
 
     convo = Conversation(FakeSTT(["hi"]), WatchfulBrain(), WatchfulTTS(), acknowledgement="mm-hm")

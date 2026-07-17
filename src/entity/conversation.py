@@ -76,6 +76,7 @@ class Conversation:
         patience=DEFAULT_PATIENCE,
         check_in=DEFAULT_CHECK_IN,
         outbox=None,
+        interrupt=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -90,10 +91,25 @@ class Conversation:
         self._patience = patience
         self._check_in = check_in
         self._outbox = outbox
+        self._interrupt = interrupt  # set (e.g. by a keypress) to cut off whatever it's saying
         self._paused = False
 
     def _is_farewell(self, heard):
         return _canonical(heard) in self._farewells
+
+    def _interrupted(self):
+        return self._interrupt is not None and self._interrupt.is_set()
+
+    def _say(self, text):
+        """Speak, unless he's cut in. Once the interrupt is set, every later line this turn stays
+        unsaid, and a line already in progress is killed by the TTS. A voice hiccup is logged, not
+        fatal - a failed utterance must never crash the loop (it did, and he lost the whole run)."""
+        if self._interrupted():
+            return
+        try:
+            self._tts.speak(text, interrupt=self._interrupt)
+        except Exception as exc:
+            print(f"[tts error] {exc!r}", file=sys.stderr)
 
     def _deliver_outbox(self):
         """Speak anything the Entity has queued to say on its own (word from an agent). Called when
@@ -103,7 +119,7 @@ class Conversation:
         if self._outbox is None:
             return
         for message in self._outbox.drain():
-            self._tts.speak(message)
+            self._say(message)
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
@@ -125,39 +141,41 @@ class Conversation:
         threading.Thread(target=work, daemon=True).start()
         wait_for = self._patience
         while not done.wait(wait_for):  # still thinking - tell him how long, then keep waiting
-            self._tts.speak(self._reassure(time.monotonic() - start))
+            self._say(self._reassure(time.monotonic() - start))
             wait_for = self._check_in
         if "error" in outcome:
             raise outcome["error"]
         return outcome["reply"]
 
     def turn(self):
+        if self._interrupt is not None:
+            self._interrupt.clear()  # a fresh turn; forget any leftover "stop" from the last one
         self._deliver_outbox()  # say any queued agent news before we start listening again
         heard = self._stt.listen()
         if not heard.strip():
             return None
         if self._is_farewell(heard):
-            self._tts.speak(self.farewell_reply)
+            self._say(self.farewell_reply)
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
         canonical = _canonical(heard)
         if self._paused:
             if canonical == "resume":
                 self._paused = False
-                self._tts.speak(self.resume_reply)
+                self._say(self.resume_reply)
                 return Turn(heard=heard, said=self.resume_reply)
             return None  # while paused, ignore everything except "resume" (and farewell above)
         if canonical == "suspend":
             self._paused = True
-            self._tts.speak(self.suspend_reply)
+            self._say(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
-        self._tts.speak(self._acknowledgement)  # let him know he was heard before the thinking pause
+        self._say(self._acknowledgement)  # let him know he was heard before the thinking pause
         try:
             said = self._think(heard)
         except Exception as exc:  # surface the real cause instead of a silent "glitch"
             print(f"[brain error] {exc!r}", file=sys.stderr)
-            self._tts.speak(self.error_reply)
+            self._say(self.error_reply)
             return Turn(heard=heard, said=self.error_reply, error=True)
-        self._tts.speak(said)
+        self._say(said)  # if he hit Enter while it was thinking or talking, this is cut off
         return Turn(heard=heard, said=said)
 
     def run(self, should_continue=lambda: True, on_turn=None):

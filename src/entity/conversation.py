@@ -91,6 +91,7 @@ class Conversation:
         acknowledger=None,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
+        outbox=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -103,10 +104,21 @@ class Conversation:
         self._acknowledge = acknowledger or _make_picker(DEFAULT_ACKS)
         self._reassure = reassurer or _make_picker(DEFAULT_REASSURANCES)
         self._patience = patience
+        self._outbox = outbox
         self._paused = False
 
     def _is_farewell(self, heard):
         return _canonical(heard) in self._farewells
+
+    def _deliver_outbox(self):
+        """Speak anything the Entity has queued to say on its own (word from an agent). Called when
+        it's the Entity's turn to talk - at a lull, or right after he finishes - never mid-sentence,
+        because a `listen()` in progress only breaks off for this once he's paused, not while he's
+        speaking."""
+        if self._outbox is None:
+            return
+        for message in self._outbox.drain():
+            self._tts.speak(message)
 
     def _think(self, heard):
         """Ask the brain off the main thread so, if the answer is slow to come, we can speak a
@@ -132,6 +144,7 @@ class Conversation:
         return outcome["reply"]
 
     def turn(self):
+        self._deliver_outbox()  # say any queued agent news before we start listening again
         heard = self._stt.listen()
         if not heard.strip():
             return None

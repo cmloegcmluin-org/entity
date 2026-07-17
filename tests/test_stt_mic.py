@@ -1,3 +1,5 @@
+import threading
+
 import numpy as np
 
 from entity.stt_mic import FRAME, MicSTT, _strip_terminator
@@ -109,6 +111,37 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
     stt = MicSTT(transcriber, FakeMic([_sp()] * 5), prompt="", stop=Flag())
 
     assert stt.listen() == ""
+
+
+def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
+    interrupt = threading.Event()
+    interrupt.set()  # the Entity has word from an agent to pass on, and he isn't talking
+    transcriber = FakeTranscriber("should never run")
+    stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, prompt="", interrupt=interrupt)
+
+    assert stt.listen() == ""  # yields so the loop can speak the queued message
+    assert transcriber.got is None  # nothing was captured or transcribed
+
+
+def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
+    interrupt = threading.Event()
+
+    class InterruptingMic:
+        def frames(self):
+            for _ in range(4):
+                yield _sp()
+            interrupt.set()  # word from an agent arrives, but he's already mid-sentence
+            for _ in range(4):
+                yield _sp()
+            for _ in range(3):
+                yield _sil()
+
+    stt = MicSTT(
+        FakeTranscriber("finishing my thought over"), InterruptingMic(),
+        pause_frames=3, prompt="", interrupt=interrupt,
+    )
+
+    assert stt.listen() == "finishing my thought"  # he finished; the message waits its turn
 
 
 def test_every_captured_frame_is_recorded_to_disk():

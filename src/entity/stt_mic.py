@@ -46,6 +46,7 @@ class MicSTT:
         stop=None,
         cue=None,
         recorder=None,
+        interrupt=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -56,6 +57,7 @@ class MicSTT:
         self._stop = stop
         self._cue = cue
         self._recorder = recorder
+        self._interrupt = interrupt
 
     def listen(self):
         if self._prompt:
@@ -71,6 +73,8 @@ class MicSTT:
                 return ""  # a quit was requested while we were waiting for speech
             speech = rms(frame) >= self._threshold
             if not started:
+                if self._interrupt is not None and self._interrupt.is_set():
+                    return ""  # a lull, and the Entity has something to say - yield so it can
                 if speech:
                     started = True
                 else:

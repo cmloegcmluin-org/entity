@@ -1,6 +1,7 @@
 import time
 
 from entity.conversation import DEFAULT_ACKS, Conversation, Turn, _make_picker
+from entity.outbox import Outbox
 
 
 class FakeSTT:
@@ -76,6 +77,61 @@ def test_no_acknowledgement_for_blank_farewell_or_suspend():
         convo.turn()
 
     assert acks == []  # nothing to think about, so nothing to acknowledge
+
+
+def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
+    outbox = Outbox()
+    outbox.push("Heads up - the auth agent is ready for your review.")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert tts.spoken[0] == "Heads up - the auth agent is ready for your review."  # before we listened
+
+
+def test_several_queued_messages_are_all_delivered_in_order():
+    outbox = Outbox()
+    outbox.push("first")
+    outbox.push("second")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert tts.spoken[:2] == ["first", "second"]
+
+
+def test_without_an_outbox_the_loop_is_unchanged():
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledger=lambda: "ACK")
+
+    convo.turn()
+
+    assert tts.spoken == ["ACK", "reply to hi"]  # outbox=None interposes nothing
+
+
+def test_a_message_arriving_during_a_lull_is_spoken_on_the_next_pass():
+    outbox = Outbox()
+
+    class LullSTT:
+        # the real MicSTT yields "" when its interrupt fires during a lull; mimic that here by
+        # having a message land mid-lull and the listen break off empty.
+        def __init__(self):
+            self.n = 0
+
+        def listen(self):
+            self.n += 1
+            if self.n == 1:
+                outbox.push("the deploy agent hit an error")
+                return ""
+            return "goodbye entity"
+
+    tts = FakeTTS()
+    convo = Conversation(LullSTT(), FakeBrain(), tts, outbox=outbox)
+    convo.run()
+
+    assert tts.spoken == ["the deploy agent hit an error", convo.farewell_reply]
 
 
 def test_default_picker_varies_and_never_repeats_back_to_back():

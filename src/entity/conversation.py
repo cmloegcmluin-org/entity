@@ -23,6 +23,23 @@ DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
 DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Entity' when you want me back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
+# A long or slow answer isn't dumped on him - it's offered first, and only spoken once he says yes,
+# so a wall of text (or a reply he's stopped caring about) never just barges out of the speaker.
+DEFAULT_READY_QUESTION = "I've got a longer answer for you - ready for it?"
+# Replies over this many characters are gated behind DEFAULT_READY_QUESTION. Set to None to never
+# gate. Kept a few sentences long, since the persona already pushes hard for brevity - only a
+# genuinely big reply should have to wait for a yes.
+DEFAULT_LONG_ANSWER_CHARS = 320
+
+# Whether he said yes to "ready for it?". A negative word anywhere vetoes it (so "okay, no" is a no);
+# otherwise any of the yes words counts. Deliberately generous on yes and strict on no - a false yes
+# just speaks something he half-wanted, a false no makes him repeat himself.
+_AFFIRMATIVES = (
+    "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "ready", "please", "now",
+    "go ahead", "go for it", "do it", "hit me", "hear it", "let's hear", "sounds good", "please do",
+)
+_NEGATIVES = ("no", "nope", "nah", "not", "dont", "later", "wait", "hold", "stop", "skip")
+
 # Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
 # dead air waiting to find out he was heard. One plain line he asked for by name (the varied ones
 # came out as awkward TTS - "Mm-hm." read aloud as "m m").
@@ -76,6 +93,15 @@ def _ends_with_command(canonical, commands):
     return any(canonical == cmd or canonical.endswith(" " + cmd) for cmd in commands)
 
 
+def _is_affirmative(heard):
+    """Did he say yes to an offer? Any negative word veto-es it; otherwise any yes word counts."""
+    canonical = _canonical(heard)
+    words = canonical.split()
+    if any(neg in words for neg in _NEGATIVES):
+        return False
+    return any(yes in words if " " not in yes else yes in canonical for yes in _AFFIRMATIVES)
+
+
 @dataclass(frozen=True)
 class Turn:
     heard: str
@@ -101,12 +127,14 @@ class Conversation:
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
+        ready_question=DEFAULT_READY_QUESTION,
         acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
         check_in=DEFAULT_CHECK_IN,
         interrupt_poll=DEFAULT_INTERRUPT_POLL,
         cancel_wait=DEFAULT_CANCEL_WAIT,
+        long_answer_chars=DEFAULT_LONG_ANSWER_CHARS,
         outbox=None,
         interrupt=None,
     ):
@@ -121,6 +149,9 @@ class Conversation:
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
+        self.ready_question = ready_question
+        self._long_answer_chars = long_answer_chars
+        self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
         self._acknowledgement = acknowledgement
         self._reassure = reassurer or _default_reassurance
         self._patience = patience
@@ -276,6 +307,13 @@ class Conversation:
             self._paused = True
             self._say(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
+        if self._offered is not None:  # he's answering "ready for it?" from a held long/slow reply
+            return self._resolve_offer(heard)
+        return self._answer(heard)
+
+    def _answer(self, heard):
+        """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case
+        it's held and offered first (see _offer)."""
         self._say(self._acknowledgement)  # let him know he was heard before the thinking pause
         try:
             said = self._think(heard)
@@ -285,8 +323,29 @@ class Conversation:
             print(f"[brain error] {exc!r}", file=sys.stderr)
             self._say(self.error_reply)
             return Turn(heard=heard, said=self.error_reply, error=True)
+        if self._should_gate(said):
+            return self._offer(heard, said)
         self._say(said)  # if he hit Enter while it was talking, this is cut off
         return Turn(heard=heard, said=said)
+
+    def _should_gate(self, reply):
+        return self._long_answer_chars is not None and len(reply) > self._long_answer_chars
+
+    def _offer(self, heard, answer):
+        """Hold a long answer and ask if he wants it, rather than dumping it. His next turn's yes
+        releases it (see _resolve_offer)."""
+        self._offered = answer
+        self._say(self.ready_question)
+        return Turn(heard=heard, said=self.ready_question)
+
+    def _resolve_offer(self, heard):
+        """His reply to "ready for it?": a yes speaks the held answer; anything else drops it and the
+        utterance is handled as an ordinary new turn, so he's never stuck on the offer."""
+        answer, self._offered = self._offered, None
+        if _is_affirmative(heard):
+            self._say(answer)
+            return Turn(heard=heard, said=answer)
+        return self._answer(heard)
 
     def run(self, should_continue=lambda: True, on_turn=None):
         while should_continue():

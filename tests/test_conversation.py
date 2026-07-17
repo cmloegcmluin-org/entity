@@ -1,8 +1,28 @@
 import threading
 import time
 
-from entity.conversation import Conversation, Turn, _default_reassurance, _humanize_elapsed
+from entity.conversation import (
+    Conversation,
+    Turn,
+    _default_reassurance,
+    _humanize_elapsed,
+    _is_affirmative,
+)
 from entity.outbox import Outbox
+
+
+class VariableBrain:
+    """Replies long to a big ask, short to anything else - so the long-answer gate can be exercised
+    without a real (slow, wordy) model."""
+
+    WALL = "This is a very long answer. " * 40  # comfortably past the gate threshold
+
+    def __init__(self):
+        self.heard = []
+
+    def respond(self, utterance):
+        self.heard.append(utterance)
+        return self.WALL if "everything" in utterance else "a short reply"
 
 
 class FakeSTT:
@@ -47,6 +67,65 @@ def test_a_barge_in_before_the_reply_leaves_it_unspoken():
     convo.turn()
 
     assert tts.spoken == ["ACK"]  # the ack got out before the cut; the reply is silenced
+
+
+def test_is_affirmative_reads_a_yes_but_not_a_no():
+    assert _is_affirmative("yes") and _is_affirmative("yeah go ahead") and _is_affirmative("sure, hit me")
+    assert _is_affirmative("okay") and _is_affirmative("let's hear it")
+    assert not _is_affirmative("no thanks") and not _is_affirmative("not now") and not _is_affirmative("nope")
+    assert not _is_affirmative("maybe later")  # "later" is a decline, not a yes
+
+
+def test_a_short_answer_is_spoken_immediately_not_gated():
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK", long_answer_chars=100)
+
+    turn = convo.turn()
+
+    assert tts.spoken == ["ACK", "reply to hi"]  # short reply: no "ready?" gate
+    assert turn.said == "reply to hi"
+
+
+def test_a_long_answer_is_offered_first_then_delivered_on_a_yes():
+    brain = VariableBrain()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["tell me everything", "yes"]), brain, tts,
+                         acknowledgement="ACK", long_answer_chars=100)
+
+    first = convo.turn()
+
+    assert first.said == convo.ready_question  # it asked instead of dumping the wall of text
+    assert VariableBrain.WALL not in tts.spoken  # nothing dumped yet
+
+    convo.turn()  # he says "yes"
+
+    assert VariableBrain.WALL in tts.spoken  # the yes released the full answer
+
+
+def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
+    brain = VariableBrain()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["tell me everything", "no thanks"]), brain, tts,
+                         acknowledgement="ACK", long_answer_chars=100)
+
+    convo.turn()  # offers "ready?"
+    convo.turn()  # "no thanks"
+
+    assert VariableBrain.WALL not in tts.spoken  # he declined, so it was never delivered
+    assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
+    assert brain.heard == ["tell me everything", "no thanks"]
+
+
+def test_gating_off_speaks_even_a_long_answer_straight_away():
+    brain = VariableBrain()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["tell me everything"]), brain, tts,
+                         acknowledgement="ACK", long_answer_chars=None)
+
+    turn = convo.turn()
+
+    assert turn.said == VariableBrain.WALL  # gate disabled -> spoken as before
+    assert VariableBrain.WALL in tts.spoken
 
 
 def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():

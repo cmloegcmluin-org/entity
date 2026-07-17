@@ -120,10 +120,18 @@ class MicSTT:
         # caller acknowledge an otherwise-empty turn instead of silently ignoring it (he'd repeat "over").
         self.caught_terminator = False
 
+    def _flush_mic(self):
+        """Drop whatever the background mic buffered between turns (the Entity's own reply, room
+        noise), so listening starts from now. Mics without a flush() - tests, console - just skip it."""
+        flush = getattr(self._mic, "flush", None)
+        if flush is not None:
+            flush()
+
     def listen(self):
         if self._prompt:
             print(self._prompt, flush=True)
         self.caught_terminator = False  # about this turn only; forget the last one
+        self._flush_mic()
         segments = []  # transcribed text so far, one entry per pause-delimited chunk
         segment = []  # frames captured since the last pause - only this chunk gets transcribed
         silence_run = 0
@@ -177,6 +185,7 @@ class MicSTT:
         Entity's own voice bleeding into the mic rarely trips it - the reply would have to contain
         one of these words."""
         floor = NoiseFloor()  # its own room-level, independent of a listen() in progress
+        self._flush_mic()  # watch only what he says over the reply, not audio buffered before it
         chunk = []
         silence = 0
         started = False

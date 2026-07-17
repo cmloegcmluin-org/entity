@@ -119,7 +119,7 @@ def _build_ears(text_mode, stop, interrupt):
 
     import sounddevice as sd
 
-    from entity.mic import Microphone, choose_input_device, probe_input_device
+    from entity.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
     from entity.recorder import AudioRecorder
     from entity.stt_mic import MicSTT
     from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
@@ -142,7 +142,9 @@ def _build_ears(text_mode, stop, interrupt):
     )
     gain = _mic_gain()
     print(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
-    mic = Microphone(device=device, gain=gain)
+    # Capture on a background thread: keep draining the mic even while Parakeet is transcribing, so
+    # nothing he says mid-transcription is lost to a PortAudio overflow.
+    mic = BackgroundMicrophone(Microphone(device=device, gain=gain))
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"

@@ -2,6 +2,7 @@ import threading
 
 import numpy as np
 
+from entity.mic import BackgroundMicrophone
 from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _is_backchannel, _strip_terminator
 
 
@@ -99,6 +100,48 @@ def test_a_normal_terminated_turn_is_flagged():
 
     assert stt.listen() == "hello"
     assert stt.caught_terminator is True
+
+
+class FlushableMic:
+    """A mic that records the order of flush() and frame delivery, to prove listening starts fresh."""
+
+    def __init__(self, frames):
+        self._frames = list(frames)
+        self.events = []
+
+    def flush(self):
+        self.events.append("flush")
+
+    def frames(self):
+        self.events.append("frames")
+        while self._frames:
+            yield self._frames.pop(0)
+
+
+def test_listen_flushes_stale_audio_before_reading_this_turn():
+    # between turns the background mic buffers the Entity's own reply and room noise; drop it before
+    # a new listen so it isn't transcribed as his next turn.
+    mic = FlushableMic([_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", threshold=0.01)
+
+    assert stt.listen() == "hi"
+    assert mic.events[0] == "flush"  # flushed before the first frame was read
+
+
+def test_catch_stop_flushes_stale_audio_before_watching():
+    mic = FlushableMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("keep going"), mic, pause_frames=3, prompt="")
+
+    stt.catch_stop(lambda: True)
+
+    assert mic.events[0] == "flush"  # the stop-watcher, too, starts from now - not stale backlog
+
+
+def test_listen_and_catch_stop_work_on_a_mic_without_flush():
+    # ConsoleSTT-style / test mics have no flush(); listening must still work, unguarded getattr aside.
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    assert stt.listen() == "hello"
 
 
 def test_catch_stop_fires_on_a_spoken_stop_word():
@@ -269,6 +312,64 @@ def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
     )
 
     assert stt.listen() == "finishing my thought"  # he finished; the message waits its turn
+
+
+class GatedSource:
+    """A frame source that yields nothing until release() - so a test can hold every frame back
+    until listen() has already flushed, making the background-capture composition race-free."""
+
+    def __init__(self, frames):
+        self._frames = list(frames)
+        self._go = threading.Event()
+
+    def read(self):
+        self._go.wait()
+        if not self._frames:
+            raise EOFError
+        return self._frames.pop(0)
+
+    def release(self):
+        self._go.set()
+
+    def close(self):
+        self._go.set()
+
+
+class FlushSignallingMic:
+    """Delegates to a real BackgroundMicrophone but announces when flush() lands, so the test knows
+    listening has started before it releases any audio."""
+
+    def __init__(self, inner, flushed):
+        self._inner = inner
+        self._flushed = flushed
+
+    def flush(self):
+        self._inner.flush()
+        self._flushed.set()
+
+    def frames(self):
+        return self._inner.frames()
+
+
+def test_micstt_drives_a_real_background_microphone_end_to_end():
+    # the production path: MicSTT reading through a background-capture mic. Frames are gated until
+    # after listen() flushes, so what it transcribes is exactly the audio captured during the turn.
+    flushed = threading.Event()
+    source = GatedSource([_sp()] * 4 + [_sil()] * 3)
+    background = BackgroundMicrophone(source)
+    stt = MicSTT(FakeTranscriber("hello there over"), FlushSignallingMic(background, flushed),
+                 pause_frames=3, prompt="", threshold=0.01)
+
+    heard = {}
+    turn = threading.Thread(target=lambda: heard.__setitem__("text", stt.listen()))
+    turn.start()
+    assert flushed.wait(timeout=2)  # listen() has flushed; only now do frames start flowing
+    source.release()
+    turn.join(timeout=3)
+
+    assert heard["text"] == "hello there"
+    assert stt.caught_terminator is True
+    background.close()
 
 
 def test_every_captured_frame_is_recorded_to_disk():

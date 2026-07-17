@@ -5,15 +5,22 @@ headset's silent input, "Sound Mapper", etc.), which hands back pure silence - s
 nothing and just sits there. `choose_input_device` avoids that by taking the liveliest real input,
 or an explicit override. Hardware I/O only; the segmentation/transcription it feeds is tested
 without a mic.
+
+`BackgroundMicrophone` wraps a mic to drain it on its own thread, so the stream keeps being read
+even while the main thread is stuck transcribing - the gap where PortAudio used to overflow and
+silently drop whatever he said mid-transcription.
 """
 
 import math
+import queue
+import threading
 
 import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 16000
 FRAME = 480  # 30 ms at 16 kHz
+MAX_BUFFERED_FRAMES = 2000  # ~60 s; a cap on backlog that piles up between turns (drop the oldest)
 
 
 class Microphone:
@@ -39,6 +46,64 @@ class Microphone:
     def close(self):
         self._stream.stop()
         self._stream.close()
+
+
+class BackgroundMicrophone:
+    """Reads a frame source continuously on a background thread into a queue.
+
+    The main loop reads the mic only between transcriptions; while Parakeet chews on a chunk (a
+    second or more) nothing was draining PortAudio, so it overflowed and dropped whatever he said in
+    that window. Here a dedicated thread keeps reading no matter what the main thread is doing, and
+    `frames()` hands over the buffered audio. `flush()` throws away audio captured between turns (the
+    Entity's own spoken reply, room noise) so it isn't replayed as his next turn.
+    """
+
+    def __init__(self, source, *, max_frames=MAX_BUFFERED_FRAMES):
+        self._source = source
+        self._queue = queue.Queue()
+        self._max_frames = max_frames
+        self._running = True
+        self._exhausted = False  # the source ran out (only a finite/test source does; a real mic never)
+        self._thread = threading.Thread(target=self._capture, daemon=True)
+        self._thread.start()
+
+    def _capture(self):
+        while self._running:
+            try:
+                frame = self._source.read()
+            except Exception:
+                self._exhausted = True  # source closed or ran dry - stop feeding the queue
+                return
+            self._queue.put(frame)
+            while self._queue.qsize() > self._max_frames:
+                try:
+                    self._queue.get_nowait()  # drop the oldest; stale between-turn audio isn't worth keeping
+                except queue.Empty:
+                    break
+
+    def flush(self):
+        """Discard everything buffered so far, so the next frames() starts from now."""
+        try:
+            while True:
+                self._queue.get_nowait()
+        except queue.Empty:
+            pass
+
+    def frames(self):
+        while self._running:
+            try:
+                yield self._queue.get(timeout=0.1)
+            except queue.Empty:
+                if self._exhausted:
+                    return  # a finite source ran dry; a real mic just keeps the loop waiting
+
+    def close(self):
+        self._running = False
+        try:
+            self._source.close()  # unblock a blocking read() so the thread notices we've stopped
+        except Exception:
+            pass
+        self._thread.join(timeout=1.0)
 
 
 def choose_input_device(devices, probe, *, override=None, hostapi=None):

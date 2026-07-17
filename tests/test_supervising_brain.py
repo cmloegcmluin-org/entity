@@ -44,7 +44,7 @@ def test_a_supervise_directive_runs_the_fleet_and_reports_back():
     inner = FakeInner("[SUPERVISE] /work/trees")
     called = {}
 
-    def fake_supervise(paths, io, model):
+    def fake_supervise(paths, io, model, log):
         called["paths"] = paths
         called["io"] = io
         return {"a": "report", "b": "report"}
@@ -58,3 +58,24 @@ def test_a_supervise_directive_runs_the_fleet_and_reports_back():
     assert called["paths"] == ["/work/trees/a", "/work/trees/b"]
     assert called["io"] == "THE_IO"
     assert "2" in said  # tells the user it supervised two
+
+
+def test_a_fresh_transcript_log_is_opened_for_the_session_and_handed_to_the_fleet():
+    inner = FakeInner("[SUPERVISE] /work/trees")
+    called = {}
+
+    def fake_supervise(paths, io, model, log):
+        called["log"] = log
+        return {"a": "report"}
+
+    brain = SupervisingBrain(
+        inner,
+        io="THE_IO",
+        supervise_fn=fake_supervise,
+        resolve=lambda t: ["/work/trees/a"],
+        make_log=lambda target: f"LOG_FOR:{target}",
+    )
+
+    brain.respond("resume my sessions")
+
+    assert called["log"] == "LOG_FOR:/work/trees"  # the session's log, keyed to what he named

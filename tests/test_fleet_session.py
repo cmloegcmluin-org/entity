@@ -1,5 +1,8 @@
-from entity.fleet import Need
-from entity.fleet_session import drive_fleet
+from pathlib import Path
+
+from entity.fleet import FleetSupervisor, Need
+from entity.fleet_runner import Fleet
+from entity.fleet_session import drive_fleet, prepare_worktree, run_fleet, supervise
 
 
 class FakeFleet:
@@ -27,6 +30,7 @@ class FakeIO:
         self._picks = list(picks)
         self._approvals = list(approvals)
         self.announced = []
+        self.reported = []
 
     def pick(self, names):
         return self._picks.pop(0)
@@ -36,6 +40,34 @@ class FakeIO:
 
     def announce(self, text):
         self.announced.append(text)
+
+    def report(self, agent, text):
+        self.reported.append((agent, text))
+
+
+class FakeLog:
+    """Records the timestamped-transcript calls without touching a file."""
+
+    def __init__(self):
+        self.entries = []
+
+    def entity(self, text):
+        self.entries.append(("ENTITY", text))
+
+    def agent(self, name, text):
+        self.entries.append((f"AGENT {name}", text))
+
+
+class FakeAgent:
+    def __init__(self, name, report):
+        self.name = name
+        self._report = report
+
+    def work(self, task):
+        return self._report
+
+    def close(self):
+        pass
 
 
 def test_drive_fleet_only_asks_you_to_pick_when_several_are_ready():
@@ -52,3 +84,85 @@ def test_drive_fleet_only_asks_you_to_pick_when_several_are_ready():
     assert fleet._i == 2  # worked through both
     # you were asked to choose only when more than one was waiting
     assert io._picks == []
+
+
+def test_drive_fleet_logs_each_request_and_the_decision():
+    states = [[Need("a", "run npm test")], []]
+    fleet = FakeFleet(states)
+    io = FakeIO(picks=[], approvals=[True])
+    log = FakeLog()
+
+    drive_fleet(fleet, io, still_working=fleet.still_working, poll=0, log=log)
+
+    assert ("AGENT a", "run npm test") in log.entries
+    assert ("ENTITY", "a: approved") in log.entries
+
+
+def test_drive_fleet_records_a_declined_request_as_denied():
+    states = [[Need("a", "delete the database")], []]
+    fleet = FakeFleet(states)
+    io = FakeIO(picks=[], approvals=[False])
+    log = FakeLog()
+
+    drive_fleet(fleet, io, still_working=fleet.still_working, poll=0, log=log)
+
+    assert ("ENTITY", "a: denied") in log.entries
+
+
+def test_run_fleet_logs_the_opener_and_each_agents_report():
+    agents = {"a": FakeAgent("a", "a is done"), "b": FakeAgent("b", "b is done")}
+    tasks = {"a": "task", "b": "task"}
+    fleet = Fleet(FleetSupervisor())  # no hands raised, so the drive loop just waits out the workers
+    io = FakeIO(picks=[], approvals=[])
+    log = FakeLog()
+
+    run_fleet(agents, tasks, fleet, io, log=log)
+
+    assert ("ENTITY", "Started 2 agents. I'll speak up when one needs you.") in log.entries
+    assert ("AGENT a", "a is done") in log.entries
+    assert ("AGENT b", "b is done") in log.entries
+
+
+def test_prepare_worktree_fetches_before_branching_from_current_origin_main():
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+
+    returned = prepare_worktree(
+        "/repo", "/repo/.claude/worktrees/new-agent", "claude/new-agent", run=fake_run
+    )
+
+    assert calls[0][0] == ["git", "-C", "/repo", "fetch", "origin", "main"]
+    assert calls[1][0] == [
+        "git", "-C", "/repo", "worktree", "add", "-b",
+        "claude/new-agent", "/repo/.claude/worktrees/new-agent", "origin/main",
+    ]
+    assert all(kwargs.get("check") for _, kwargs in calls)  # a git failure must raise, not slip by
+    assert returned == "/repo/.claude/worktrees/new-agent"
+
+
+def test_supervise_creates_only_the_missing_worktree_then_launches_every_agent(tmp_path):
+    here = tmp_path / "here"
+    here.mkdir()
+    fresh = tmp_path / "fresh"  # doesn't exist yet
+    prepared = []
+    made = []
+
+    def fake_prepare(path):
+        prepared.append(str(path))
+        Path(path).mkdir()  # the fresh worktree now exists on disk
+
+    def fake_agent_factory(name, cwd, decide):
+        made.append(name)
+        return FakeAgent(name, f"{name} done")
+
+    supervise(
+        [str(here), str(fresh)],
+        FakeIO(picks=[], approvals=[]),
+        agent_factory=fake_agent_factory,
+        prepare=fake_prepare,
+    )
+
+    assert prepared == [str(fresh)]  # the existing worktree was left alone
+    assert sorted(made) == ["fresh", "here"]  # both agents were launched

@@ -32,12 +32,13 @@ def _resolve(target):
 
 
 class SupervisingBrain:
-    def __init__(self, inner, io, *, model="sonnet", supervise_fn=supervise, resolve=_resolve):
+    def __init__(self, inner, io, *, model="sonnet", supervise_fn=supervise, resolve=_resolve, make_log=None):
         self._inner = inner
         self._io = io
         self._model = model
         self._supervise = supervise_fn
         self._resolve = resolve
+        self._make_log = make_log  # target -> a FleetLog for this session's transcript (or None)
 
     def respond(self, utterance):
         reply = self._inner.respond(utterance)
@@ -47,7 +48,8 @@ class SupervisingBrain:
         paths = self._resolve(target)
         if not paths:
             return "I couldn't find any sessions to drive there."
-        reports = self._supervise(paths, self._io, model=self._model)
+        log = self._make_log(target) if self._make_log else None
+        reports = self._supervise(paths, self._io, model=self._model, log=log)
         return f"Done. I supervised {len(reports)} agents."
 
     def warmup(self):

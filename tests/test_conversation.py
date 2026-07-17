@@ -1,4 +1,6 @@
-from entity.conversation import DEFAULT_ACKS, Conversation, Turn, _make_acknowledger
+import time
+
+from entity.conversation import DEFAULT_ACKS, Conversation, Turn, _make_picker
 
 
 class FakeSTT:
@@ -76,15 +78,59 @@ def test_no_acknowledgement_for_blank_farewell_or_suspend():
     assert acks == []  # nothing to think about, so nothing to acknowledge
 
 
-def test_default_acknowledger_varies_and_never_repeats_back_to_back():
+def test_default_picker_varies_and_never_repeats_back_to_back():
     import random
 
-    pick = _make_acknowledger(DEFAULT_ACKS, rng=random.Random(0))
+    pick = _make_picker(DEFAULT_ACKS, rng=random.Random(0))
     picks = [pick() for _ in range(40)]
 
     assert all(a in DEFAULT_ACKS for a in picks)
     assert all(picks[i] != picks[i - 1] for i in range(1, len(picks)))  # no immediate repeats
     assert len(set(picks)) > 1  # it actually varies
+
+
+def test_a_slow_reply_speaks_a_reassurance_so_it_does_not_read_as_a_crash():
+    class SlowBrain:
+        def respond(self, utterance):
+            time.sleep(0.15)  # comfortably longer than the tiny patience below
+            return f"reply to {utterance}"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["hello"]), SlowBrain(), tts,
+        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=0.02,
+    )
+    convo.turn()
+
+    assert tts.spoken == ["ACK", "WAIT", "reply to hello"]  # heard-you, then still-here, then reply
+
+
+def test_a_quick_reply_gets_no_reassurance():
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["hello"]), FakeBrain(), tts,
+        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=30,
+    )
+    convo.turn()
+
+    assert tts.spoken == ["ACK", "reply to hello"]  # fast enough that "WAIT" never fires
+
+
+def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
+    class SlowBoom:
+        def respond(self, utterance):
+            time.sleep(0.05)
+            raise RuntimeError("hiccup after a pause")
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["hello"]), SlowBoom(), tts,
+        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=0.01,
+    )
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert tts.spoken == ["ACK", "WAIT", convo.error_reply]  # the off-thread error is re-raised in context
 
 
 def test_blank_utterance_is_skipped():

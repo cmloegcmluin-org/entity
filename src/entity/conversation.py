@@ -1,6 +1,7 @@
 import random
 import re
 import sys
+import threading
 from dataclasses import dataclass
 
 DEFAULT_FAREWELLS = (
@@ -33,15 +34,27 @@ DEFAULT_ACKS = (
     "Hmm, okay.",
 )
 
+# When a reply is taking a while, say something so a long think doesn't read as a crash - the exact
+# fear he's had ("feels crashed then finally responds"). Only fires past DEFAULT_PATIENCE seconds,
+# so a normal quick turn never hears it; varied for the same reason the acks are.
+DEFAULT_PATIENCE = 6.0
+DEFAULT_REASSURANCES = (
+    "Still with you.",
+    "Almost there.",
+    "One more moment.",
+    "Still on it.",
+    "Bear with me.",
+)
 
-def _make_acknowledger(pool, rng=None):
-    """A zero-arg picker that returns a short acknowledgement, never the same one twice running."""
+
+def _make_picker(pool, rng=None):
+    """A zero-arg picker that returns a line from the pool, never the same one twice running."""
     rng = rng or random.Random()
     last = None
 
     def pick():
         nonlocal last
-        choices = [ack for ack in pool if ack != last] or list(pool)
+        choices = [line for line in pool if line != last] or list(pool)
         last = rng.choice(choices)
         return last
 
@@ -76,6 +89,8 @@ class Conversation:
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
         acknowledger=None,
+        reassurer=None,
+        patience=DEFAULT_PATIENCE,
     ):
         self._stt = stt
         self._brain = brain
@@ -85,11 +100,36 @@ class Conversation:
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
-        self._acknowledge = acknowledger or _make_acknowledger(DEFAULT_ACKS)
+        self._acknowledge = acknowledger or _make_picker(DEFAULT_ACKS)
+        self._reassure = reassurer or _make_picker(DEFAULT_REASSURANCES)
+        self._patience = patience
         self._paused = False
 
     def _is_farewell(self, heard):
         return _canonical(heard) in self._farewells
+
+    def _think(self, heard):
+        """Ask the brain off the main thread so, if the answer is slow to come, we can speak a
+        reassurance instead of leaving him in silence wondering if it crashed. Re-raises whatever
+        the brain raised, so the caller's error handling is unchanged."""
+        outcome = {}
+        done = threading.Event()
+
+        def work():
+            try:
+                outcome["reply"] = self._brain.respond(heard)
+            except BaseException as exc:  # carry it back to the main thread to re-raise in context
+                outcome["error"] = exc
+            finally:
+                done.set()
+
+        threading.Thread(target=work, daemon=True).start()
+        if not done.wait(self._patience):  # still thinking after a while - say so, then keep waiting
+            self._tts.speak(self._reassure())
+            done.wait()
+        if "error" in outcome:
+            raise outcome["error"]
+        return outcome["reply"]
 
     def turn(self):
         heard = self._stt.listen()
@@ -111,7 +151,7 @@ class Conversation:
             return Turn(heard=heard, said=self.suspend_reply)
         self._tts.speak(self._acknowledge())  # let him know he was heard before the thinking pause
         try:
-            said = self._brain.respond(heard)
+            said = self._think(heard)
         except Exception as exc:  # surface the real cause instead of a silent "glitch"
             print(f"[brain error] {exc!r}", file=sys.stderr)
             self._tts.speak(self.error_reply)

@@ -31,3 +31,11 @@ class ScriptedFirstTurn:
             first, self._first = self._first, None
             return first
         return self._inner.listen()
+
+    def __getattr__(self, name):
+        # Transparent beyond listen(): forward caught_terminator, catch_stop and any other STT
+        # capability the caller reads, so wrapping the STT doesn't quietly disable them. (Guard the
+        # private names so a lookup before _inner is set can't recurse.)
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._inner, name)

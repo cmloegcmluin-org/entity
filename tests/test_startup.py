@@ -39,3 +39,22 @@ def test_scripted_first_turn_is_transparent_when_there_is_nothing_to_play():
     stt = ScriptedFirstTurn(FakeSTT(["real one"]), None)
 
     assert stt.listen() == "real one"  # no file, so it never interposes
+
+
+def test_scripted_first_turn_forwards_stt_capabilities_to_the_inner():
+    # It wraps the STT the Conversation sees, so it must be transparent beyond listen(): the loop
+    # reads caught_terminator off the STT (to ack a bare "over") and the voice-stop watcher looks up
+    # catch_stop. If the wrapper shadowed them, both features would silently die in production.
+    class Inner:
+        caught_terminator = True
+
+        def listen(self):
+            return "x"
+
+        def catch_stop(self, active):
+            return "stopped"
+
+    stt = ScriptedFirstTurn(Inner(), None)
+
+    assert stt.caught_terminator is True
+    assert stt.catch_stop(lambda: True) == "stopped"

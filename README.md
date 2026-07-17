@@ -55,8 +55,12 @@ Swapping any layer touches one adapter and nothing else. Speech-in is split two 
 ```
 
 Speak, then say **"over"** to hand the turn back (silence-detection was too flaky). To end,
-say (or type) **"goodbye entity"** or **"quit"** — in voice mode that's "goodbye entity over".
-Enter and Ctrl-C also try to quit but are unreliable under Git Bash's terminal.
+say (or type) **"goodbye entity"** or **"quit"** — in voice mode that's "goodbye entity over" (or Ctrl-C).
+
+**Cut it off** — while it's *speaking* or *thinking* — by pressing **Enter** or saying **"stop"**
+("shut up" / "quiet" / "enough" / "wait" also work); it drops the reply and goes back to listening.
+A slow request keeps working in the background instead of blocking, and a long or slow answer is
+offered ("ready for it?") before it's spoken rather than dumped on you.
 
 ## Develop
 

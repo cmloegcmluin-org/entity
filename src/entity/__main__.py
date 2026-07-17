@@ -22,14 +22,13 @@ from entity.fleet_log import FleetLog
 from entity.fleet_session import prepare_worktree, supervise
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
-    CONSOLIDATION_PROMPT,
     append_learned,
     compose_persona,
     load_learned,
     load_profile,
-    parse_facts,
 )
 from entity.outbox import Outbox
+from entity.shutdown import consolidate
 from entity.startup import ScriptedFirstTurn, load_startup_instructions
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
@@ -228,12 +227,15 @@ def main(argv=None):
         tts.speak("I'm ready. What's on your mind?")  # say out loud that startup finished
 
     had_conversation = []
+    farewelled = []
 
     def show(turn):
         had_conversation.append(True)
         if not text_mode:
             print(f"you said: {turn.heard}")
         print(f"entity> {turn.said}\n")
+        if turn.farewell:
+            farewelled.append(True)  # the goodbye was already said this turn; don't repeat it below
 
     try:
         Conversation(stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived).run(
@@ -243,15 +245,16 @@ def main(argv=None):
         stop.set()
     finally:
         inbox_watcher.stop()
-        if stop.is_set():
+        if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
+            if not text_mode and not muted:
+                try:
+                    tts.speak("Talk soon.")
+                except Exception:
+                    pass
+            print("Talk soon.")
+        if had_conversation:  # remember what it learned - bounded so a slow model can't hang the exit
             try:
-                tts.speak("Talk soon.")  # farewell words already speak their own goodbye
-            except Exception:
-                pass
-        print("Talk soon.")
-        if had_conversation:  # ask the brain what it learned and remember it for next time
-            try:
-                append_learned(parse_facts(brain.respond(CONSOLIDATION_PROMPT)))
+                append_learned(consolidate(brain))
             except Exception:
                 pass
         for closer in (

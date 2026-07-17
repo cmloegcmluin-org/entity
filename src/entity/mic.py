@@ -9,6 +9,7 @@ without a mic.
 
 import math
 
+import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 16000
@@ -16,8 +17,9 @@ FRAME = 480  # 30 ms at 16 kHz
 
 
 class Microphone:
-    def __init__(self, *, device=None, samplerate=SAMPLE_RATE, blocksize=FRAME):
+    def __init__(self, *, device=None, gain=1.0, samplerate=SAMPLE_RATE, blocksize=FRAME):
         self._blocksize = blocksize
+        self._gain = gain  # boost a quiet mic so speech clears the speech threshold and transcribes cleanly
         self._stream = sd.InputStream(
             device=device, samplerate=samplerate, channels=1, dtype="float32", blocksize=blocksize
         )
@@ -25,7 +27,10 @@ class Microphone:
 
     def read(self):
         data, _ = self._stream.read(self._blocksize)
-        return data[:, 0].copy()
+        frame = data[:, 0].copy()
+        if self._gain != 1.0:
+            frame = np.clip(frame * self._gain, -1.0, 1.0).astype("float32")
+        return frame
 
     def frames(self):
         while True:
@@ -80,8 +85,6 @@ def probe_input_device(index, *, seconds=0.4):
     logic in `choose_input_device` takes this as an injected callable). Values are clipped to the
     valid audio range first, so a glitchy device returning garbage can't overflow or masquerade as
     the loudest mic."""
-    import numpy as np
-
     info = sd.query_devices(index)
     samplerate = int(info["default_samplerate"])
     recording = sd.rec(

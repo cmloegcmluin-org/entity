@@ -33,6 +33,16 @@ RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
+MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
+
+
+def _mic_gain():
+    """How much to amplify the mic. A quiet input (his onboard mic peaks ~0.009, under the 0.01
+    speech threshold) needs a boost or nothing registers as speech; loud mics leave this at 1."""
+    try:
+        return float(MIC_GAIN.read_text(encoding="utf-8").strip()) if MIC_GAIN.exists() else 1.0
+    except ValueError:
+        return 1.0
 
 
 def _agent_inbox_note(inbox):
@@ -83,8 +93,9 @@ def _build_ears(text_mode, stop, interrupt):
     device, device_name = choose_input_device(
         sd.query_devices(), probe_input_device, override=override, hostapi=hostapi
     )
-    print(f"(listening on mic: {device_name or 'system default'})")
-    mic = Microphone(device=device)
+    gain = _mic_gain()
+    print(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
+    mic = Microphone(device=device, gain=gain)
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"

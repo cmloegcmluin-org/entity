@@ -9,13 +9,21 @@ it keeps listening, however long you take. Because each pause only transcribes t
 never the whole turn again - the cost of a pause stays flat no matter how long you've been
 talking, so a long turn can't slow to a crawl or run the machine out of memory. Saying "over" in
 the middle of a sentence doesn't cut you off - there's no pause after it.
+
+What counts as "speech" is judged against the ROOM, not a fixed number. A fixed loudness bar
+failed both ways in practice: a quiet mic put the user's voice just under it (deaf), and boosting
+the mic put the room's noise just over it (never a pause, also deaf). NoiseFloor keeps a running
+measure of the room's quiet level; anything a few times louder is speech. That stays right
+whatever the mic's level is.
 """
 
 import numpy as np
 
 FRAME = 480  # 30 ms at 16 kHz
 PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
-THRESHOLD = 0.01  # RMS above this counts as speech
+SPEECH_RATIO = 2.5  # this many times the room's quiet level counts as speech
+FLOOR_MIN = 0.0008  # the floor never drops below this, so digital silence can't set an absurd bar
+FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
 
 
 def rms(frame):
@@ -23,6 +31,31 @@ def rms(frame):
     if frame.size == 0:
         return 0.0
     return float(np.sqrt(np.mean(frame * frame)))
+
+
+class NoiseFloor:
+    """The room's running quiet level, learned from the frames that aren't speech.
+
+    The first frame calibrates it (never counted as speech - at that instant there's nothing to
+    compare against). After that, a frame is speech if it's SPEECH_RATIO times the floor; every
+    non-speech frame nudges the floor toward its level, so the bar follows the room - up when a fan
+    kicks in, down when things settle - and never assumes anything about the mic's absolute level.
+    """
+
+    def __init__(self, ratio=SPEECH_RATIO, adapt=FLOOR_ADAPT, floor_min=FLOOR_MIN):
+        self._ratio = ratio
+        self._adapt = adapt
+        self._floor_min = floor_min
+        self._level = None
+
+    def is_speech(self, level):
+        if self._level is None:
+            self._level = max(level, self._floor_min)
+            return False
+        if level >= self._level * self._ratio:
+            return True
+        self._level = max(self._level + (level - self._level) * self._adapt, self._floor_min)
+        return False
 
 
 def _strip_terminator(text, terminator):
@@ -40,7 +73,7 @@ class MicSTT:
         mic,
         *,
         terminator="over",
-        threshold=THRESHOLD,
+        threshold=None,
         pause_frames=PAUSE_FRAMES,
         prompt="(listening... say 'over' when you're done)",
         stop=None,
@@ -51,7 +84,8 @@ class MicSTT:
         self._transcriber = transcriber
         self._mic = mic
         self._terminator = terminator
-        self._threshold = threshold
+        # A fixed threshold is for tests and odd setups; live use adapts to the room instead.
+        self._is_speech = (lambda level: level >= threshold) if threshold is not None else NoiseFloor().is_speech
         self._pause_frames = pause_frames
         self._prompt = prompt
         self._stop = stop
@@ -71,7 +105,7 @@ class MicSTT:
                 self._recorder.write(frame)  # to disk first, so a crash can't lose what he said
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
-            speech = rms(frame) >= self._threshold
+            speech = self._is_speech(rms(frame))
             if not started:
                 if self._interrupt is not None and self._interrupt.is_set():
                     return ""  # a lull, and the Entity has something to say - yield so it can

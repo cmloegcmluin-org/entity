@@ -2,7 +2,7 @@ import threading
 
 import numpy as np
 
-from entity.stt_mic import FRAME, MicSTT, _strip_terminator
+from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _strip_terminator
 
 
 class FakeMic:
@@ -48,10 +48,56 @@ def test_strip_terminator_handles_case_and_punctuation():
     assert _strip_terminator("Over", "over") == ""
 
 
+def test_a_quiet_voice_on_a_quiet_mic_is_speech():
+    # the deaf-mic bug: his voice peaked at 0.009 rms, under the old fixed 0.01 bar, so nothing
+    # ever registered. Relative to his room's ~0.002 quiet, 0.009 is clearly speech.
+    floor = NoiseFloor()
+    assert floor.is_speech(0.002) is False  # first frame calibrates the room
+    for _ in range(5):
+        assert floor.is_speech(0.0025) is False  # ambient hovers near the floor
+    assert floor.is_speech(0.009) is True  # his quiet voice clears the relative bar
+
+
+def test_a_noisy_room_is_not_speech():
+    # the opposite bug my gain patch caused: the room's noise (boosted to ~0.012) sat over the old
+    # fixed bar, so it never saw a pause. Relative to a ~0.012 floor, 0.013 is just the room.
+    floor = NoiseFloor()
+    floor.is_speech(0.012)
+    for _ in range(5):
+        assert floor.is_speech(0.013) is False  # loud room, but not speech
+    assert floor.is_speech(0.04) is True  # actual talking still cuts through
+
+
+def test_the_floor_follows_the_room_back_down():
+    floor = NoiseFloor()
+    floor.is_speech(0.012)  # calibrated in a noisy moment
+    for _ in range(60):
+        floor.is_speech(0.002)  # the room settles
+    assert floor.is_speech(0.009) is True  # the bar came down with it
+
+
+def test_digital_silence_cannot_set_an_absurdly_low_bar():
+    floor = NoiseFloor()
+    floor.is_speech(0.0)
+    for _ in range(20):
+        floor.is_speech(0.0)  # a dead-quiet stream must not make any whisper of noise "speech"
+    assert floor.is_speech(0.001) is False  # still below the clamped minimum bar
+
+
+def test_listen_hears_a_quiet_voice_over_a_quiet_room_by_default():
+    # end-to-end with the adaptive default (no fixed threshold): his real levels in miniature.
+    ambient = [_sp(0.002)] * 6
+    voice = [_sp(0.009)] * 4
+    trailing = [_sp(0.002)] * 3
+    stt = MicSTT(FakeTranscriber("hello over"), FakeMic(ambient + voice + trailing), pause_frames=3, prompt="")
+
+    assert stt.listen() == "hello"
+
+
 def test_pausing_after_over_ends_the_turn_and_fires_the_cue():
     fired = []
     mic = FakeMic([_sp()] * 5 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hello there over"), mic, pause_frames=3, prompt="", cue=lambda: fired.append(True))
+    stt = MicSTT(FakeTranscriber("hello there over"), mic, pause_frames=3, prompt="", threshold=0.01, cue=lambda: fired.append(True))
 
     assert stt.listen() == "hello there"
     assert fired == [True]  # the "registered" cue fired the moment it caught the terminator
@@ -62,7 +108,7 @@ def test_a_thinking_pause_without_over_keeps_listening():
     # pieces join, so the turn only ends when the LATEST piece carries the terminator.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
     transcriber = SeqTranscriber(["still thinking", "it over"])
-    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="")
+    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="", threshold=0.01)
 
     assert stt.listen() == "still thinking it"  # the first pause did NOT end the turn
     assert transcriber.calls == 2
@@ -80,7 +126,7 @@ def test_each_pause_transcribes_only_new_audio_not_the_whole_buffer():
             return "chunk"
 
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 5 + [_sil()] * 3)
-    stt = MicSTT(MeasuringTranscriber(), mic, pause_frames=3, prompt="")
+    stt = MicSTT(MeasuringTranscriber(), mic, pause_frames=3, prompt="", threshold=0.01)
     stt.listen()
 
     assert sizes == [7 * FRAME, 8 * FRAME]  # NOT [7*FRAME, 15*FRAME] - the old buffer wasn't re-sent
@@ -88,7 +134,7 @@ def test_each_pause_transcribes_only_new_audio_not_the_whole_buffer():
 
 def test_leading_silence_is_skipped():
     mic = FakeMic([_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("finally over"), mic, pause_frames=3, prompt="")
+    stt = MicSTT(FakeTranscriber("finally over"), mic, pause_frames=3, prompt="", threshold=0.01)
 
     assert stt.listen() == "finally"
 
@@ -97,7 +143,7 @@ def test_stream_end_returns_what_it_captured():
     # a real mic never ends, so nothing but "over" (or quitting) stops a turn; this only guards
     # the fallback for a finite source that runs out without a terminator.
     mic = FakeMic([_sp()] * 5)
-    stt = MicSTT(FakeTranscriber("just some words"), mic, pause_frames=100, prompt="")
+    stt = MicSTT(FakeTranscriber("just some words"), mic, pause_frames=100, prompt="", threshold=0.01)
 
     assert stt.listen() == "just some words"
 
@@ -117,7 +163,7 @@ def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
     interrupt = threading.Event()
     interrupt.set()  # the Entity has word from an agent to pass on, and he isn't talking
     transcriber = FakeTranscriber("should never run")
-    stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, prompt="", interrupt=interrupt)
+    stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt)
 
     assert stt.listen() == ""  # yields so the loop can speak the queued message
     assert transcriber.got is None  # nothing was captured or transcribed
@@ -138,7 +184,7 @@ def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
 
     stt = MicSTT(
         FakeTranscriber("finishing my thought over"), InterruptingMic(),
-        pause_frames=3, prompt="", interrupt=interrupt,
+        pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt,
     )
 
     assert stt.listen() == "finishing my thought"  # he finished; the message waits its turn
@@ -152,7 +198,7 @@ def test_every_captured_frame_is_recorded_to_disk():
             written.append(frame)
 
     mic = FakeMic([_sp()] * 3 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", recorder=Rec())
+    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", threshold=0.01, recorder=Rec())
 
     assert stt.listen() == "hi"
     assert len(written) == 6  # every frame read went to the recorder, before anything else

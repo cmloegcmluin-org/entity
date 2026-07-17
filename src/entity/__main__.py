@@ -11,11 +11,11 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
 
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
+from entity.console import Console
 from entity.conversation import Conversation
 from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
 from entity.fleet_log import FleetLog
@@ -96,17 +96,6 @@ def _agent_inbox_note(inbox):
         f"line to {inbox}\\<a-short-agent-name>.txt. the user can't watch the agents' screens, so that "
         "inbox is the only way he hears from them - always set it up when you delegate."
     )
-
-
-def _timed(call, label):
-    def wrapped(*args, **kwargs):  # pass through, e.g. tts.speak(text, interrupt=...)
-        start = time.perf_counter()
-        try:
-            return call(*args, **kwargs)
-        finally:
-            print(f"  [{label} {time.perf_counter() - start:.1f}s]", file=sys.stderr)
-
-    return wrapped
 
 
 def _build_ears(text_mode, stop, interrupt):
@@ -203,10 +192,6 @@ def main(argv=None):
         make_log=_make_fleet_log,
     )
 
-    if timings:
-        brain.respond = _timed(brain.respond, "think")
-        tts.speak = _timed(tts.speak, "speak")
-
     def watch_keys():
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up
             barge_in.set()
@@ -229,18 +214,20 @@ def main(argv=None):
     had_conversation = []
     farewelled = []
 
-    def show(turn):
+    def show(turn):  # the terminal transcript itself is the Console's job now; this is just bookkeeping
         had_conversation.append(True)
-        if not text_mode:
-            print(f"you said: {turn.heard}")
-        print(f"entity> {turn.said}\n")
         if turn.farewell:
             farewelled.append(True)  # the goodbye was already said this turn; don't repeat it below
 
+    # A beat to read a reply before the mic reopens, but not in text mode (he sets his own pace there).
+    read_pause = 0.0 if text_mode else 1.2
+    console = Console(show_heard=not text_mode)
+
     try:
-        Conversation(stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived).run(
-            should_continue=lambda: not stop.is_set(), on_turn=show
-        )
+        Conversation(
+            stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
+            console=console, read_pause=read_pause, timings=timings,
+        ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
     except KeyboardInterrupt:
         stop.set()
     finally:

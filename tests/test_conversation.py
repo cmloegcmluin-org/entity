@@ -1,6 +1,7 @@
 import threading
 import time
 
+from entity.console import Console
 from entity.conversation import (
     Conversation,
     Turn,
@@ -67,6 +68,96 @@ def test_a_barge_in_before_the_reply_leaves_it_unspoken():
     convo.turn()
 
     assert tts.spoken == ["ACK"]  # the ack got out before the cut; the reply is silenced
+
+
+def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
+    events = []
+
+    class RecordingTTS:
+        def speak(self, text, *, interrupt=None):
+            events.append(f"say:{text}")
+
+    console = Console(echo=lambda line: events.append(f"print:{line}"))
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), RecordingTTS(), acknowledgement="ACK", console=console)
+
+    convo.turn()
+
+    printed = next(e for e in events if e.startswith("print:entity>") and "reply to hi" in e)
+    assert events.index(printed) < events.index("say:reply to hi")  # he can read it before/while it speaks
+
+
+def test_timings_prints_a_think_and_speak_readout_when_enabled():
+    lines = []
+    convo = Conversation(
+        FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
+        acknowledgement="ACK", timings=True, console=Console(echo=lines.append),
+    )
+
+    convo.turn()
+
+    assert any("· speak" in line for line in lines)  # the per-turn think/speak readout showed
+
+
+def test_no_timings_readout_when_disabled():
+    lines = []
+    convo = Conversation(
+        FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
+        acknowledgement="ACK", timings=False, console=Console(echo=lines.append),
+    )
+
+    convo.turn()
+
+    assert not any("· speak" in line for line in lines)
+
+
+def test_a_thinking_indicator_is_shown_while_it_thinks():
+    shown = []
+    console = Console(echo=shown.append)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), acknowledgement="ACK", console=console)
+
+    convo.turn()
+
+    assert any("thinking" in line.lower() for line in shown)
+
+
+def test_it_pauses_after_a_reply_to_give_him_a_beat_to_read():
+    slept = []
+    convo = Conversation(
+        FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
+        acknowledgement="ACK", read_pause=1.5, sleep=slept.append,
+    )
+
+    convo.turn()
+
+    assert slept == [1.5]  # a beat to read the reply before listening starts again
+
+
+def test_no_read_pause_after_a_control_phrase():
+    slept = []
+    convo = Conversation(FakeSTT(["suspend"]), FakeBrain(), FakeTTS(), read_pause=1.5, sleep=slept.append)
+
+    convo.turn()
+
+    assert slept == []  # nothing substantive to read, so no beat
+
+
+def test_read_pause_is_skipped_when_he_barges_in():
+    slept = []
+    interrupt = threading.Event()
+
+    class InterruptingBrain:
+        def respond(self, utterance):
+            interrupt.set()  # he cuts in as the reply lands
+            return "reply"
+
+    convo = Conversation(
+        FakeSTT(["hi"]), InterruptingBrain(), FakeTTS(),
+        acknowledgement="ACK", read_pause=1.5, sleep=slept.append, interrupt=interrupt,
+    )
+
+    convo.turn()
+
+    assert slept == []  # he's cutting in - don't make him wait out a read pause
 
 
 def test_is_affirmative_reads_a_yes_but_not_a_no():

@@ -4,6 +4,8 @@ import threading
 import time
 from dataclasses import dataclass
 
+from entity.console import Console
+
 DEFAULT_FAREWELLS = (
     "goodbye entity",
     "goodnight entity",
@@ -67,6 +69,10 @@ DEFAULT_DETACH_REPLY = "This one'll take me a while - I'll keep at it and let yo
 # One brain, one session: while a detached call is still running, a new request can't start a second
 # one, so it's deflected with this until the first lands.
 DEFAULT_BUSY_REPLY = "Still finishing your last one - give me a moment."
+
+# After a reply, wait this long before listening again, so he gets a beat to read it rather than the
+# mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
+DEFAULT_READ_PAUSE = 0.0
 
 
 class _ThinkInterrupted(Exception):
@@ -153,6 +159,10 @@ class Conversation:
         cancel_wait=DEFAULT_CANCEL_WAIT,
         detach_after=DEFAULT_DETACH_AFTER,
         long_answer_chars=DEFAULT_LONG_ANSWER_CHARS,
+        read_pause=DEFAULT_READ_PAUSE,
+        console=None,
+        sleep=time.sleep,
+        timings=False,
         outbox=None,
         interrupt=None,
         wake=None,
@@ -182,6 +192,10 @@ class Conversation:
         self._check_in = check_in
         self._interrupt_poll = interrupt_poll
         self._cancel_wait = cancel_wait
+        self._read_pause = read_pause  # a beat after a reply so he can read it before listening resumes
+        self._console = console or Console()
+        self._sleep = sleep
+        self._timings = timings  # --timings: show how long each turn spent thinking vs. speaking
         self._outbox = outbox
         self._interrupt = interrupt  # set (e.g. by a keypress) to cut off whatever it's saying
         self._paused = False
@@ -211,6 +225,19 @@ class Conversation:
         finally:
             if stop_watching is not None:
                 stop_watching()
+
+    def _speak_reply(self, text):
+        """Print the line to the terminal, then speak it - so he can read the reply as it's said,
+        not only hear it go by. Used for whatever a turn returns as its `said`; the ack and check-ins
+        stay terminal-silent."""
+        self._console.reply(text)
+        self._say(text)
+
+    def _pause_to_read(self):
+        """A short beat after a reply before the mic reopens, so he isn't rushed off it - skipped if
+        he's barged in (he's cutting in, not reading)."""
+        if self._read_pause > 0 and not self._interrupted():
+            self._sleep(self._read_pause)
 
     def _watch_for_spoken_stop(self):
         """If the mic can catch a spoken stop word, listen for one for as long as we're speaking and
@@ -246,7 +273,7 @@ class Conversation:
         if self._outbox is None:
             return
         for message in self._outbox.drain():
-            print(f"entity (heads-up)> {message}\n", flush=True)  # to the terminal too, not only spoken
+            self._console.heads_up(message)  # to the terminal too, not only spoken
             self._say(message)
 
     def _think(self, heard):
@@ -282,7 +309,7 @@ class Conversation:
                     self._cancel_think(done)
                     raise _ThinkInterrupted
                 if detach_at is not None and time.monotonic() >= detach_at:  # too slow - background it
-                    self._say(self.detach_reply)
+                    self._speak_reply(self.detach_reply)
                     self._detach(done, outcome)
                     raise _ThinkDetached
                 deadline = next_check_in if detach_at is None else min(next_check_in, detach_at)
@@ -335,7 +362,7 @@ class Conversation:
         reply = background["outcome"].get("reply")
         if reply is not None and self._offered is None:
             self._offered = reply
-            self._say(self.ready_question)
+            self._speak_reply(self.ready_question)
 
     def turn(self):
         if self._interrupt is not None:
@@ -349,24 +376,25 @@ class Conversation:
             if getattr(self._stt, "caught_terminator", False):
                 self._say(self.empty_turn_reply)
             return None
+        self._console.heard(heard)  # show what was transcribed before we act on it
         if self._is_farewell(heard):
-            self._say(self.farewell_reply)
+            self._speak_reply(self.farewell_reply)
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
         canonical = _canonical(heard)
         if self._paused:
             if _ends_with_command(canonical, self._resumes):  # "hey entity" wakes it back up
                 self._paused = False
-                self._say(self.resume_reply)
+                self._speak_reply(self.resume_reply)
                 return Turn(heard=heard, said=self.resume_reply)
             return None  # while asleep, ignore everything except a wake word (and farewell above)
         if _ends_with_command(canonical, self._suspends):  # "stop listening" puts it to sleep, doesn't quit
             self._paused = True
-            self._say(self.suspend_reply)
+            self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
         if self._offered is not None:  # he's answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
         if self._background is not None:  # a detached call is still running - one session, so wait it out
-            self._say(self.busy_reply)
+            self._speak_reply(self.busy_reply)
             return Turn(heard=heard, said=self.busy_reply)
         return self._answer(heard)
 
@@ -374,6 +402,8 @@ class Conversation:
         """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case
         it's held and offered first (see _offer)."""
         self._say(self._acknowledgement)  # let him know he was heard before the thinking pause
+        self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
+        think_start = time.monotonic()
         try:
             said = self._think(heard)
         except _ThinkInterrupted:  # he cut the thinking off - no reply, straight back to listening
@@ -382,11 +412,16 @@ class Conversation:
             return None
         except Exception as exc:  # surface the real cause instead of a silent "glitch"
             print(f"[brain error] {exc!r}", file=sys.stderr)
-            self._say(self.error_reply)
+            self._speak_reply(self.error_reply)
             return Turn(heard=heard, said=self.error_reply, error=True)
+        think_time = time.monotonic() - think_start
         if self._should_gate(said):
             return self._offer(heard, said)
-        self._say(said)  # if he hit Enter while it was talking, this is cut off
+        speak_start = time.monotonic()
+        self._speak_reply(said)  # if he hit Enter while it was talking, this is cut off
+        if self._timings:
+            self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
+        self._pause_to_read()
         return Turn(heard=heard, said=said)
 
     def _should_gate(self, reply):
@@ -396,7 +431,7 @@ class Conversation:
         """Hold a long answer and ask if he wants it, rather than dumping it. His next turn's yes
         releases it (see _resolve_offer)."""
         self._offered = answer
-        self._say(self.ready_question)
+        self._speak_reply(self.ready_question)
         return Turn(heard=heard, said=self.ready_question)
 
     def _resolve_offer(self, heard):
@@ -404,7 +439,8 @@ class Conversation:
         utterance is handled as an ordinary new turn, so he's never stuck on the offer."""
         answer, self._offered = self._offered, None
         if _is_affirmative(heard):
-            self._say(answer)
+            self._speak_reply(answer)
+            self._pause_to_read()
             return Turn(heard=heard, said=answer)
         return self._answer(heard)
 

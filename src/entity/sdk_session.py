@@ -12,14 +12,22 @@ from claude_agent_sdk import ClaudeSDKClient, ResultMessage
 
 
 def extract_text(messages):
-    """Concatenate the text of every TextBlock across the assistant's response messages."""
-    text = ""
+    """The spoken reply is the FINAL thing the Entity says, not its running narration.
+
+    A tool-using turn emits text between every step ("Now let me read that file...", "Found it,
+    let me check..."); only the last message is the actual answer. Reading all of it aloud dumps the
+    play-by-play the user is supposed to be insulated from, so we keep just the last message that has
+    text and drop the narration before it."""
+    latest = ""
     for message in messages:
+        text = ""
         for block in getattr(message, "content", ()) or ():
             value = getattr(block, "text", None)
             if isinstance(value, str):
                 text += value
-    return text.strip()
+        if text.strip():
+            latest = text
+    return latest.strip()
 
 
 def _context_tokens(usage):

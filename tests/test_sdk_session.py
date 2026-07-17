@@ -11,10 +11,21 @@ class FakeMsg:
         self.content = content
 
 
-def test_extract_text_concatenates_text_blocks():
+def test_extract_text_concatenates_text_blocks_within_a_message():
     msgs = [FakeMsg([FakeBlock("Hey "), FakeBlock("the user.")])]
 
     assert extract_text(msgs) == "Hey the user."
+
+
+def test_extract_text_keeps_only_the_final_message_not_the_running_narration():
+    # a tool-using turn narrates each step; only the last message is the answer the user should hear.
+    msgs = [
+        FakeMsg([FakeBlock("I'll read the worktree's CLAUDE.md first.")]),
+        FakeMsg([FakeBlock("Now let me find where the link is built.")]),
+        FakeMsg([FakeBlock("Found it. The agent is on it now, over.")]),
+    ]
+
+    assert extract_text(msgs) == "Found it. The agent is on it now, over."
 
 
 def test_extract_text_ignores_non_text_blocks():

@@ -1,3 +1,4 @@
+import random
 import re
 import sys
 from dataclasses import dataclass
@@ -14,6 +15,37 @@ DEFAULT_FAREWELL_REPLY = "Talk soon."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
 DEFAULT_SUSPEND_REPLY = "Paused. Say resume when you're back."
 DEFAULT_RESUME_REPLY = "Back with you."
+
+# Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
+# dead air waiting to find out he was heard. Kept short and varied; a single canned line said every
+# turn is exactly the "pre-packaged" tic he called out, so the default picker never repeats itself
+# back to back.
+DEFAULT_ACKS = (
+    "Got it.",
+    "Mm-hm.",
+    "Okay.",
+    "Right.",
+    "Gotcha.",
+    "Sure thing.",
+    "Let me think.",
+    "One sec.",
+    "On it.",
+    "Hmm, okay.",
+)
+
+
+def _make_acknowledger(pool, rng=None):
+    """A zero-arg picker that returns a short acknowledgement, never the same one twice running."""
+    rng = rng or random.Random()
+    last = None
+
+    def pick():
+        nonlocal last
+        choices = [ack for ack in pool if ack != last] or list(pool)
+        last = rng.choice(choices)
+        return last
+
+    return pick
 
 
 def _canonical(text):
@@ -43,6 +75,7 @@ class Conversation:
         error_reply=DEFAULT_ERROR_REPLY,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
+        acknowledger=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -52,6 +85,7 @@ class Conversation:
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
+        self._acknowledge = acknowledger or _make_acknowledger(DEFAULT_ACKS)
         self._paused = False
 
     def _is_farewell(self, heard):
@@ -75,6 +109,7 @@ class Conversation:
             self._paused = True
             self._tts.speak(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
+        self._tts.speak(self._acknowledge())  # let him know he was heard before the thinking pause
         try:
             said = self._brain.respond(heard)
         except Exception as exc:  # surface the real cause instead of a silent "glitch"

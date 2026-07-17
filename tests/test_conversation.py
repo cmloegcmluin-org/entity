@@ -1,4 +1,4 @@
-from entity.conversation import Conversation, Turn
+from entity.conversation import DEFAULT_ACKS, Conversation, Turn, _make_acknowledger
 
 
 class FakeSTT:
@@ -34,13 +34,57 @@ def test_turn_transcribes_thinks_and_speaks():
     stt = FakeSTT(["hello"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts)
+    convo = Conversation(stt, brain, tts, acknowledger=lambda: "ACK")
 
     turn = convo.turn()
 
     assert brain.heard == ["hello"]
-    assert tts.spoken == ["reply to hello"]
+    assert tts.spoken == ["ACK", "reply to hello"]  # heard-you beat first, then the real reply
     assert turn == Turn(heard="hello", said="reply to hello")
+
+
+def test_a_real_turn_acknowledges_the_instant_it_hears_you_before_thinking():
+    events = []
+
+    class WatchfulBrain:
+        def respond(self, utterance):
+            events.append("think")
+            return "reply"
+
+    class WatchfulTTS:
+        def speak(self, text):
+            events.append(f"say:{text}")
+
+    convo = Conversation(FakeSTT(["hi"]), WatchfulBrain(), WatchfulTTS(), acknowledger=lambda: "mm-hm")
+    convo.turn()
+
+    # the acknowledgement is spoken BEFORE the brain is even asked, so there's no dead air
+    assert events == ["say:mm-hm", "think", "say:reply"]
+
+
+def test_no_acknowledgement_for_blank_farewell_or_suspend():
+    acks = []
+
+    def spy_ack():
+        acks.append(True)
+        return "ACK"
+
+    for utterance in ["   ", "goodbye entity", "suspend"]:
+        convo = Conversation(FakeSTT([utterance]), FakeBrain(), FakeTTS(), acknowledger=spy_ack)
+        convo.turn()
+
+    assert acks == []  # nothing to think about, so nothing to acknowledge
+
+
+def test_default_acknowledger_varies_and_never_repeats_back_to_back():
+    import random
+
+    pick = _make_acknowledger(DEFAULT_ACKS, rng=random.Random(0))
+    picks = [pick() for _ in range(40)]
+
+    assert all(a in DEFAULT_ACKS for a in picks)
+    assert all(picks[i] != picks[i - 1] for i in range(1, len(picks)))  # no immediate repeats
+    assert len(set(picks)) > 1  # it actually varies
 
 
 def test_blank_utterance_is_skipped():
@@ -60,7 +104,7 @@ def test_run_loops_until_should_continue_is_false():
     stt = FakeSTT(["one", "two", "three"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts)
+    convo = Conversation(stt, brain, tts, acknowledger=lambda: "ACK")
 
     checks = {"n": 0}
 
@@ -71,7 +115,7 @@ def test_run_loops_until_should_continue_is_false():
     convo.run(should_continue=should_continue)
 
     assert brain.heard == ["one", "two"]
-    assert tts.spoken == ["reply to one", "reply to two"]
+    assert tts.spoken == ["ACK", "reply to one", "ACK", "reply to two"]
 
 
 def test_farewell_ends_the_conversation_without_asking_the_brain():

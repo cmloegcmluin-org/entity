@@ -32,6 +32,7 @@ from entity.tts_system import NullTTS, SystemTTS
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
+MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 
 
 def _agent_inbox_note(inbox):
@@ -63,14 +64,27 @@ def _build_ears(text_mode, stop, interrupt):
         return ConsoleSTT(), None, None
     from datetime import datetime
 
-    from entity.mic import Microphone
+    import sounddevice as sd
+
+    from entity.mic import Microphone, choose_input_device, probe_input_device
     from entity.recorder import AudioRecorder
     from entity.stt_mic import MicSTT
     from entity.transcribe import ParakeetTranscriber
 
     transcriber = ParakeetTranscriber()
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
-    mic = Microphone()
+
+    # Don't trust the OS default input - on this machine it's a dead VR-headset mic. Pick the input
+    # that's actually hearing the room (or an override the user drops in mic.txt), staying on the
+    # default's host API so the stream can actually be opened, and say which mic won.
+    override = MIC_OVERRIDE.read_text(encoding="utf-8").strip() if MIC_OVERRIDE.exists() else None
+    default_input = sd.default.device[0]
+    hostapi = sd.query_devices(default_input)["hostapi"] if default_input is not None else None
+    device, device_name = choose_input_device(
+        sd.query_devices(), probe_input_device, override=override, hostapi=hostapi
+    )
+    print(f"(listening on mic: {device_name or 'system default'})")
+    mic = Microphone(device=device)
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
     cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"

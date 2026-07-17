@@ -1,6 +1,6 @@
 import time
 
-from entity.conversation import DEFAULT_ACKS, Conversation, Turn, _make_picker
+from entity.conversation import Conversation, Turn, _default_reassurance, _humanize_elapsed
 from entity.outbox import Outbox
 
 
@@ -37,7 +37,7 @@ def test_turn_transcribes_thinks_and_speaks():
     stt = FakeSTT(["hello"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts, acknowledger=lambda: "ACK")
+    convo = Conversation(stt, brain, tts, acknowledgement="ACK")
 
     turn = convo.turn()
 
@@ -58,7 +58,7 @@ def test_a_real_turn_acknowledges_the_instant_it_hears_you_before_thinking():
         def speak(self, text):
             events.append(f"say:{text}")
 
-    convo = Conversation(FakeSTT(["hi"]), WatchfulBrain(), WatchfulTTS(), acknowledger=lambda: "mm-hm")
+    convo = Conversation(FakeSTT(["hi"]), WatchfulBrain(), WatchfulTTS(), acknowledgement="mm-hm")
     convo.turn()
 
     # the acknowledgement is spoken BEFORE the brain is even asked, so there's no dead air
@@ -66,17 +66,11 @@ def test_a_real_turn_acknowledges_the_instant_it_hears_you_before_thinking():
 
 
 def test_no_acknowledgement_for_blank_farewell_or_suspend():
-    acks = []
-
-    def spy_ack():
-        acks.append(True)
-        return "ACK"
-
     for utterance in ["   ", "goodbye entity", "suspend"]:
-        convo = Conversation(FakeSTT([utterance]), FakeBrain(), FakeTTS(), acknowledger=spy_ack)
+        tts = FakeTTS()
+        convo = Conversation(FakeSTT([utterance]), FakeBrain(), tts, acknowledgement="ACK")
         convo.turn()
-
-    assert acks == []  # nothing to think about, so nothing to acknowledge
+        assert "ACK" not in tts.spoken  # nothing to think about, so nothing to acknowledge
 
 
 def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
@@ -104,7 +98,7 @@ def test_several_queued_messages_are_all_delivered_in_order():
 
 def test_without_an_outbox_the_loop_is_unchanged():
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledger=lambda: "ACK")
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK")
 
     convo.turn()
 
@@ -134,38 +128,61 @@ def test_a_message_arriving_during_a_lull_is_spoken_on_the_next_pass():
     assert tts.spoken == ["the deploy agent hit an error", convo.farewell_reply]
 
 
-def test_default_picker_varies_and_never_repeats_back_to_back():
-    import random
+def test_the_default_acknowledgement_is_the_plain_line_he_asked_for():
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts)  # no override -> the default
 
-    pick = _make_picker(DEFAULT_ACKS, rng=random.Random(0))
-    picks = [pick() for _ in range(40)]
+    convo.turn()
 
-    assert all(a in DEFAULT_ACKS for a in picks)
-    assert all(picks[i] != picks[i - 1] for i in range(1, len(picks)))  # no immediate repeats
-    assert len(set(picks)) > 1  # it actually varies
+    assert tts.spoken[0] == "Message received."  # not "Mm-hm." et al, which read aloud as "m m"
 
 
-def test_a_slow_reply_speaks_a_reassurance_so_it_does_not_read_as_a_crash():
+def test_a_slow_reply_checks_in_so_it_does_not_read_as_a_crash():
     class SlowBrain:
         def respond(self, utterance):
-            time.sleep(0.15)  # comfortably longer than the tiny patience below
+            time.sleep(0.15)  # longer than patience, shorter than the 30s recheck default
             return f"reply to {utterance}"
 
     tts = FakeTTS()
     convo = Conversation(
         FakeSTT(["hello"]), SlowBrain(), tts,
-        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=0.02,
+        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.02,
     )
     convo.turn()
 
-    assert tts.spoken == ["ACK", "WAIT", "reply to hello"]  # heard-you, then still-here, then reply
+    assert tts.spoken == ["ACK", "WAIT", "reply to hello"]  # heard-you, one check-in, then the reply
 
 
-def test_a_quick_reply_gets_no_reassurance():
+def test_a_long_think_keeps_checking_in_again_and_again():
+    class VerySlowBrain:
+        def respond(self, utterance):
+            time.sleep(0.3)  # many recheck intervals long
+            return "done"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["hello"]), VerySlowBrain(), tts,
+        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.02, check_in=0.02,
+    )
+    convo.turn()
+
+    assert tts.spoken.count("WAIT") >= 2  # it keeps reassuring, not just once
+    assert tts.spoken[0] == "ACK" and tts.spoken[-1] == "done"
+
+
+def test_the_check_in_reports_how_long_it_has_been():
+    assert _humanize_elapsed(6) == "about 5 seconds"
+    assert _humanize_elapsed(33) == "about 35 seconds"
+    assert _humanize_elapsed(60) == "about 1 minute"
+    assert _humanize_elapsed(150) == "about 2 minutes and 30 seconds"
+    assert "40 seconds" in _default_reassurance(41)  # the spoken line carries the elapsed time
+
+
+def test_a_quick_reply_gets_no_check_in():
     tts = FakeTTS()
     convo = Conversation(
         FakeSTT(["hello"]), FakeBrain(), tts,
-        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=30,
+        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=30,
     )
     convo.turn()
 
@@ -181,12 +198,12 @@ def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
     tts = FakeTTS()
     convo = Conversation(
         FakeSTT(["hello"]), SlowBoom(), tts,
-        acknowledger=lambda: "ACK", reassurer=lambda: "WAIT", patience=0.01,
+        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.01,
     )
     turn = convo.turn()
 
     assert turn.error is True
-    assert tts.spoken == ["ACK", "WAIT", convo.error_reply]  # the off-thread error is re-raised in context
+    assert tts.spoken[0] == "ACK" and tts.spoken[-1] == convo.error_reply  # off-thread error re-raised
 
 
 def test_blank_utterance_is_skipped():
@@ -206,7 +223,7 @@ def test_run_loops_until_should_continue_is_false():
     stt = FakeSTT(["one", "two", "three"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts, acknowledger=lambda: "ACK")
+    convo = Conversation(stt, brain, tts, acknowledgement="ACK")
 
     checks = {"n": 0}
 

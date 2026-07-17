@@ -1,7 +1,7 @@
-import random
 import re
 import sys
 import threading
+import time
 from dataclasses import dataclass
 
 DEFAULT_FAREWELLS = (
@@ -18,47 +18,30 @@ DEFAULT_SUSPEND_REPLY = "Paused. Say resume when you're back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
 # Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
-# dead air waiting to find out he was heard. Kept short and varied; a single canned line said every
-# turn is exactly the "pre-packaged" tic he called out, so the default picker never repeats itself
-# back to back.
-DEFAULT_ACKS = (
-    "Got it.",
-    "Mm-hm.",
-    "Okay.",
-    "Right.",
-    "Gotcha.",
-    "Sure thing.",
-    "Let me think.",
-    "One sec.",
-    "On it.",
-    "Hmm, okay.",
-)
+# dead air waiting to find out he was heard. One plain line he asked for by name (the varied ones
+# came out as awkward TTS - "Mm-hm." read aloud as "m m").
+DEFAULT_ACK = "Message received."
 
-# When a reply is taking a while, say something so a long think doesn't read as a crash - the exact
-# fear he's had ("feels crashed then finally responds"). Only fires past DEFAULT_PATIENCE seconds,
-# so a normal quick turn never hears it; varied for the same reason the acks are.
+# A long reply must never feel like a crash. The first "still working" comes after DEFAULT_PATIENCE;
+# after that it repeats at least every DEFAULT_CHECK_IN, each time saying how long it's been (the
+# model gives no real progress percentage to report, so elapsed time is the honest stand-in).
 DEFAULT_PATIENCE = 6.0
-DEFAULT_REASSURANCES = (
-    "Still with you.",
-    "Almost there.",
-    "One more moment.",
-    "Still on it.",
-    "Bear with me.",
-)
+DEFAULT_CHECK_IN = 30.0
 
 
-def _make_picker(pool, rng=None):
-    """A zero-arg picker that returns a line from the pool, never the same one twice running."""
-    rng = rng or random.Random()
-    last = None
+def _humanize_elapsed(seconds):
+    seconds = max(5, int(round(seconds / 5.0)) * 5)  # nearest 5s, never below 5
+    if seconds < 60:
+        return f"about {seconds} seconds"
+    minutes, rest = divmod(seconds, 60)
+    unit = "minute" if minutes == 1 else "minutes"
+    if rest == 0:
+        return f"about {minutes} {unit}"
+    return f"about {minutes} {unit} and {rest} seconds"
 
-    def pick():
-        nonlocal last
-        choices = [line for line in pool if line != last] or list(pool)
-        last = rng.choice(choices)
-        return last
 
-    return pick
+def _default_reassurance(seconds):
+    return f"Still working on it - {_humanize_elapsed(seconds)} so far."
 
 
 def _canonical(text):
@@ -88,9 +71,10 @@ class Conversation:
         error_reply=DEFAULT_ERROR_REPLY,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
-        acknowledger=None,
+        acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
+        check_in=DEFAULT_CHECK_IN,
         outbox=None,
     ):
         self._stt = stt
@@ -101,9 +85,10 @@ class Conversation:
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
-        self._acknowledge = acknowledger or _make_picker(DEFAULT_ACKS)
-        self._reassure = reassurer or _make_picker(DEFAULT_REASSURANCES)
+        self._acknowledgement = acknowledgement
+        self._reassure = reassurer or _default_reassurance
         self._patience = patience
+        self._check_in = check_in
         self._outbox = outbox
         self._paused = False
 
@@ -121,9 +106,10 @@ class Conversation:
             self._tts.speak(message)
 
     def _think(self, heard):
-        """Ask the brain off the main thread so, if the answer is slow to come, we can speak a
-        reassurance instead of leaving him in silence wondering if it crashed. Re-raises whatever
-        the brain raised, so the caller's error handling is unchanged."""
+        """Ask the brain off the main thread so a slow reply can't read as a crash. The first
+        check-in comes after `patience`, then it keeps checking in every `check_in` seconds -
+        each time saying how long it's been - until the reply lands. Re-raises whatever the brain
+        raised, so the caller's error handling is unchanged."""
         outcome = {}
         done = threading.Event()
 
@@ -135,10 +121,12 @@ class Conversation:
             finally:
                 done.set()
 
+        start = time.monotonic()
         threading.Thread(target=work, daemon=True).start()
-        if not done.wait(self._patience):  # still thinking after a while - say so, then keep waiting
-            self._tts.speak(self._reassure())
-            done.wait()
+        wait_for = self._patience
+        while not done.wait(wait_for):  # still thinking - tell him how long, then keep waiting
+            self._tts.speak(self._reassure(time.monotonic() - start))
+            wait_for = self._check_in
         if "error" in outcome:
             raise outcome["error"]
         return outcome["reply"]
@@ -162,7 +150,7 @@ class Conversation:
             self._paused = True
             self._tts.speak(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
-        self._tts.speak(self._acknowledge())  # let him know he was heard before the thinking pause
+        self._tts.speak(self._acknowledgement)  # let him know he was heard before the thinking pause
         try:
             said = self._think(heard)
         except Exception as exc:  # surface the real cause instead of a silent "glitch"

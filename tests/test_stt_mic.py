@@ -2,7 +2,7 @@ import threading
 
 import numpy as np
 
-from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _strip_terminator
+from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _is_backchannel, _strip_terminator
 
 
 class FakeMic:
@@ -46,6 +46,23 @@ def test_strip_terminator_handles_case_and_punctuation():
     assert _strip_terminator("Hey there Over.", "over") == "Hey there"
     assert _strip_terminator("no keyword here", "over") is None
     assert _strip_terminator("Over", "over") == ""
+
+
+def test_is_backchannel_spots_filler_but_keeps_real_words_and_the_terminator():
+    assert _is_backchannel("Mm-hmm. Yeah. Uh.", "over") is True
+    assert _is_backchannel("yeah", "over") is True
+    assert _is_backchannel("Hey, I'm confused.", "over") is False  # real words, not filler
+    assert _is_backchannel("yeah over", "over") is False  # carries the terminator - a real end
+    assert _is_backchannel("", "over") is False
+
+
+def test_pure_backchannel_noise_is_dropped_from_the_turn():
+    # a silent stretch that Parakeet hallucinates as "Mm-hmm." must not pollute the real turn.
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
+    transcriber = SeqTranscriber(["Mm-hmm.", "hello there over"])
+    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="", threshold=0.01)
+
+    assert stt.listen() == "hello there"  # the hallucinated chunk was dropped, only real speech kept
 
 
 def test_a_quiet_voice_on_a_quiet_mic_is_speech():

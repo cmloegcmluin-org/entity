@@ -17,6 +17,8 @@ measure of the room's quiet level; anything a few times louder is speech. That s
 whatever the mic's level is.
 """
 
+import re
+
 import numpy as np
 
 FRAME = 480  # 30 ms at 16 kHz
@@ -25,12 +27,30 @@ SPEECH_RATIO = 2.5  # this many times the room's quiet level counts as speech
 FLOOR_MIN = 0.0008  # the floor never drops below this, so digital silence can't set an absurd bar
 FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
 
+# Parakeet hallucinates little backchannel words on near-silence - a quiet stretch comes back as
+# "Mm-hmm. Yeah. Uh." though he said nothing. A chunk that's ONLY these (and has no terminator) is
+# that noise, not a turn, so it's dropped.
+_BACKCHANNEL = {
+    "mm", "mmm", "mmhmm", "mhm", "hmm", "hm", "uh", "uhh", "um", "umm",
+    "uhhuh", "yeah", "yep", "yup", "huh", "ah", "oh", "er", "erm",
+}
+
 
 def rms(frame):
     frame = np.asarray(frame, dtype=np.float32)
     if frame.size == 0:
         return 0.0
     return float(np.sqrt(np.mean(frame * frame)))
+
+
+def _is_backchannel(text, terminator):
+    """True if the chunk is nothing but hallucinated filler words - and doesn't carry the terminator,
+    so a real 'yeah, over' still ends the turn."""
+    words = [re.sub(r"[^a-z]", "", w.lower()) for w in text.split()]
+    words = [w for w in words if w]
+    if not words or terminator in words:
+        return False
+    return all(w in _BACKCHANNEL for w in words)
 
 
 class NoiseFloor:
@@ -132,8 +152,8 @@ class MicSTT:
         listening. Only this chunk is transcribed, never the whole turn, so the work per pause
         stays flat however long the turn runs."""
         text = self._transcriber.transcribe(np.concatenate(chunk)).strip()
-        if text:
-            segments.append(text)
+        if text and not _is_backchannel(text, self._terminator):
+            segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence
         without_terminator = _strip_terminator(" ".join(segments), self._terminator)
         if without_terminator is not None:
             if self._cue is not None:

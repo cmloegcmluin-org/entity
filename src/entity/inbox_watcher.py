@@ -13,12 +13,53 @@ import time
 from pathlib import Path
 
 
+class QuietMonitor:
+    """Watch the agents for silence instead of only waiting to be told.
+
+    An agent reaches the user by writing to its inbox file; if it hangs or stalls it writes
+    nothing, and he'd hear nothing (he once waited hours). So every check-in stamps the agent's
+    last-heard time, and `tick()` — called on the same cheap poll the InboxWatcher already runs —
+    surfaces one spoken heads-up once an agent has been silent past `quiet_after`. One warning per
+    silence episode (no nagging); a later check-in re-arms it. Clock and threshold are injected so
+    this is testable without real waiting.
+    """
+
+    def __init__(self, outbox, *, quiet_after, clock=time.monotonic):
+        self._outbox = outbox
+        self._quiet_after = quiet_after
+        self._clock = clock
+        self._last_seen = {}  # agent -> clock() when we last heard from it
+        self._warned = set()  # agents already flagged silent this episode
+
+    def checked_in(self, agent):
+        """The agent produced a line (or just appeared) — it's alive; reset its silence timer."""
+        self._last_seen[agent] = self._clock()
+        self._warned.discard(agent)
+
+    def tick(self):
+        now = self._clock()
+        for agent, last_seen in self._last_seen.items():
+            if agent in self._warned:
+                continue
+            elapsed = now - last_seen
+            if elapsed >= self._quiet_after:
+                self._warned.add(agent)
+                self._outbox.push(self._message(agent, elapsed))
+
+    @staticmethod
+    def _message(agent, elapsed):
+        minutes = round(elapsed / 60)
+        unit = "minute" if minutes == 1 else "minutes"
+        return f"The {agent} agent hasn't checked in for {minutes} {unit}."
+
+
 class InboxWatcher:
-    def __init__(self, directory, outbox, *, poll_interval=1.0, sleep=time.sleep):
+    def __init__(self, directory, outbox, *, poll_interval=1.0, sleep=time.sleep, monitor=None):
         self._dir = Path(directory)
         self._outbox = outbox
         self._poll_interval = poll_interval
         self._sleep = sleep
+        self._monitor = monitor  # optional QuietMonitor: flags agents that go silent
         self._offsets = {}  # file -> bytes already surfaced
         self._stop = threading.Event()
         # Seed offsets past whatever's already there, so a fresh start doesn't replay old questions.
@@ -37,27 +78,40 @@ class InboxWatcher:
 
     def poll_once(self):
         for path in self._files():
-            size = self._size(path)
-            start = self._offsets.get(path, 0)
-            if size < start:  # file was truncated or rewritten smaller - resync from the top
-                start = 0
-            if size <= start:
-                self._offsets[path] = size
-                continue
-            try:
-                with open(path, "rb") as handle:
-                    handle.seek(start)
-                    chunk = handle.read(size - start)
-            except OSError:
-                continue
-            newline = chunk.rfind(b"\n")
-            if newline == -1:
-                continue  # only a half-written line so far; wait for it to finish
-            self._offsets[path] = start + newline + 1
-            for line in chunk[: newline + 1].decode("utf-8", "replace").splitlines():
-                line = line.strip()
-                if line:
-                    self._outbox.push(line)
+            active = path not in self._offsets  # a file first appearing counts as a check-in
+            if self._read_new_lines(path):
+                active = True
+            if active and self._monitor is not None:
+                self._monitor.checked_in(path.stem)
+        if self._monitor is not None:
+            self._monitor.tick()
+
+    def _read_new_lines(self, path):
+        """Surface any complete new lines from `path` to the outbox; True if any were pushed."""
+        size = self._size(path)
+        start = self._offsets.get(path, 0)
+        if size < start:  # file was truncated or rewritten smaller - resync from the top
+            start = 0
+        if size <= start:
+            self._offsets[path] = size
+            return False
+        try:
+            with open(path, "rb") as handle:
+                handle.seek(start)
+                chunk = handle.read(size - start)
+        except OSError:
+            return False
+        newline = chunk.rfind(b"\n")
+        if newline == -1:
+            return False  # only a half-written line so far; wait for it to finish
+        self._offsets[path] = start + newline + 1
+        pushed = False
+        for line in chunk[: newline + 1].decode("utf-8", "replace").splitlines():
+            line = line.strip()
+            if line:
+                self._outbox.push(line)
+                pushed = True
+        return pushed
 
     def run(self):
         while not self._stop.is_set():

@@ -3,9 +3,11 @@
 Three layers, all under the gitignored `runtime/` dir (private):
 - `profile.md`  - the hand-written standing profile (goals, projects, life context).
 - `learned.md`  - facts the Entity captured itself from past conversations.
-- `lexicon.md`  - his own coined names and jargon (Notecraft, WaveShaper, Skylark, ...). This does
-                  double duty: it's part of the brain's standing context so it recognises his
-                  terms, and transcription is biased toward the same terms (see `vocabulary`).
+- `lexicon.md`  - his working vocabulary: names he coined (Notecraft, WaveShaper, Skylark) AND the
+                  domain terms and proper nouns of his fields (Bayesian, acoustic, a collaborator,
+                  ...) - one word or several. Double duty: it's part of the brain's standing
+                  context so it knows his words, and transcription is biased toward the same list
+                  (see `vocabulary`), so teaching him a term in one place fixes both.
 
 All are folded into the brain's system prompt at startup, so it knows him without being
 re-told. At the end of a session the brain is asked what new, durable facts came up; those get
@@ -27,9 +29,11 @@ _PREAMBLE = (
 )
 
 _LEXICON_INTRO = (
-    "These are the user's own coined names and personal jargon - his projects and terms. Recognise "
-    "them when he uses them (his speech-to-text is biased toward them too); use his own words back, "
-    "but don't force them into the conversation:"
+    "This is the user's working vocabulary - not only names he coined, but the domain terms, proper "
+    "nouns and terms of art of the fields he lives in (his projects, acoustic music and notation, "
+    "film, his health, the people he works with). Recognise them when he uses them, and get them "
+    "right when you use them back - his speech-to-text is biased toward this same list. Don't force "
+    "them into the conversation:"
 )
 
 # A gloss can follow the term after " - " / " — " / ": "; the term itself is the head of the line.
@@ -64,8 +68,8 @@ def _read(path):
 
 
 def lexicon_terms(text):
-    """The bare terms from a lexicon file, for biasing transcription - the head of each line, with
-    any gloss, bullet, blank line or '#' comment stripped off."""
+    """The bare terms from a lexicon file, for biasing transcription - the head of each line (one
+    word or a whole phrase), with any gloss, bullet, blank line or '#' comment stripped off."""
     terms = []
     for line in text.splitlines():
         line = line.strip()

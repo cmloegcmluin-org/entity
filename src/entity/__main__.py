@@ -75,8 +75,8 @@ def _mic_gain():
 def _vocab_terms():
     """The terms Parakeet is biased toward, so it stops hearing "Notecraft" as "high ideas". Two
     sources: his project folder names (scanned off ~/workspace, plus any roots in vocab-roots.txt),
-    and his hand-kept lexicon.md - the same coined-terms file the brain carries as standing context,
-    so teaching the Entity a new word in one place updates both."""
+    and his hand-kept lexicon.md - coined names and the domain vocabulary of his fields alike, the
+    same file the brain carries as standing context, so a term added in one place fixes both."""
     from entity.vocabulary import scan_terms
 
     roots = [WORKSPACE]
@@ -110,10 +110,10 @@ def _build_ears(text_mode, stop, interrupt):
     from entity.stt_mic import MicSTT
     from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
-    # Bias transcription toward his own project names so "Notecraft" stops coming back as "high ideas".
+    # Bias transcription toward his own vocabulary so "Notecraft" stops coming back as "high ideas".
     terms = _vocab_terms()
     if terms:
-        print(f"(custom vocabulary: {len(terms)} of your names, e.g. {', '.join(sorted(terms)[:3])})")
+        print(f"(custom vocabulary: {len(terms)} of your terms, e.g. {', '.join(sorted(terms)[:3])})")
     transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms)
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
 

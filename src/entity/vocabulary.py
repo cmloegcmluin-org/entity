@@ -1,11 +1,14 @@
-"""Custom vocabulary: bias transcription toward the user's own coined names.
+"""Custom vocabulary: bias transcription toward the words the user actually uses.
 
-Parakeet has no idea what "Notecraft", "WaveShaper" or "Skylark" are, so it renders them as whatever
+That's two kinds of word, and a general-purpose model knows neither: names he coined ("Notecraft",
+"WaveShaper", "Skylark") and the domain vocabulary of the fields he lives in - acoustic music and
+Bayesian notation, film, his health, the people he works with. Parakeet renders both as whatever
 ordinary words sound closest ("high ideas", "gina"). onnx-asr's Parakeet path exposes no hotword /
 contextual-biasing hook (its RecognizeOptions cover only Whisper/Canary language flags), so the
-bias happens AFTER transcription: `correct_terms` swaps any near-miss token for the closest known
-term. The term list is pluggable - `scan_terms` reads it off his filesystem, but tests inject a
-plain list, so none of this needs a real disk.
+bias happens AFTER transcription: `correct_terms` swaps any near-miss - a single word or a whole
+phrase - for the closest known term. The term list is pluggable: `scan_terms` reads project names
+off his filesystem and his lexicon supplies the rest, but tests inject a plain list, so none of
+this needs a real disk.
 """
 
 import difflib
@@ -14,6 +17,7 @@ from pathlib import Path
 
 _SPLIT = re.compile(r"^(\W*)(.*?)(\W*)$")  # leading punctuation, the bare word, trailing punctuation
 _SEPARATORS = re.compile(r"[ _\-]+")
+_SENTENCE_END = (".", "!", "?")
 
 # Generic folder names that are ordinary English (or infrastructure) and so aren't worth biasing
 # toward - and, being common words, would invite false corrections of normal speech.
@@ -65,11 +69,30 @@ def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
     return terms
 
 
-def correct_terms(text, terms, *, threshold=0.82):
-    """Replace each near-miss token in `text` with the closest known term above `threshold`.
+def _match_at(tokens, start, by_length, longest, threshold):
+    """The (window size, term) of the LONGEST run of words at `start` that matches a known term, or
+    None. Longest-first so "Bayesian notation" wins over a stray one-word match inside it; a window
+    is only compared against terms of the same word count."""
+    for size in range(min(longest, len(tokens) - start), 0, -1):
+        window = tokens[start:start + size]
+        if size > 1 and any(token[2].endswith(_SENTENCE_END) for token in window[:-1]):
+            continue  # never glue a phrase together across a sentence boundary
+        words = " ".join(token[1] for token in window if token[1])
+        if not words:
+            continue
+        match = _closest(words, by_length.get(size, ()), threshold)
+        if match is not None:
+            return size, match
+    return None
 
-    Matching is on the bare word - punctuation is peeled off first so a trailing period can't drag
-    the similarity down, then re-attached so "hideas." comes back "Notecraft." not "Notecraft".
+
+def correct_terms(text, terms, *, threshold=0.82):
+    """Rewrite `text`, replacing each near-miss with the closest known term above `threshold`.
+
+    A term can be one word or several - domain vocabulary usually is ("Bayesian notation"), so runs
+    of words are matched as phrases, longest first, not one token at a time. Punctuation is peeled
+    off before comparing so a trailing period can't drag the similarity down, then re-attached, and
+    a phrase is never glued together across a sentence boundary.
 
     The 0.82 default was set from his real recordings: below ~0.78 ordinary words start getting
     corrupted - "are" -> "Harem", and (worst of all) the terminator "over" -> "Evolver", which would
@@ -77,9 +100,20 @@ def correct_terms(text, terms, *, threshold=0.82):
     near-misses (his "hideas"/"notecraft" scores 0.86)."""
     if not text or not terms:
         return text
+    by_length = {}
+    for term in terms:
+        by_length.setdefault(len(term.split()), []).append(term)
+    tokens = [_SPLIT.match(token).groups() for token in text.split()]
     out = []
-    for token in text.split():
-        prefix, word, suffix = _SPLIT.match(token).groups()
-        match = _closest(word, terms, threshold) if word else None
-        out.append(f"{prefix}{match}{suffix}" if match is not None else token)
+    index = 0
+    while index < len(tokens):
+        found = _match_at(tokens, index, by_length, max(by_length), threshold)
+        if found is None:
+            prefix, word, suffix = tokens[index]
+            out.append(f"{prefix}{word}{suffix}")
+            index += 1
+            continue
+        size, term = found
+        out.append(f"{tokens[index][0]}{term}{tokens[index + size - 1][2]}")
+        index += size
     return " ".join(out)

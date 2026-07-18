@@ -44,6 +44,25 @@ def test_the_nearest_of_several_terms_wins():
     assert correct_terms("start funtim", terms) == "start WaveShaper"  # closest to WaveShaper, not the others
 
 
+def test_a_multi_word_domain_term_is_corrected_as_a_phrase():
+    # Domain vocabulary is often several words ("Bayesian notation", "Gray Area"), which a
+    # token-at-a-time pass can never fix - the phrase has to be matched as a whole.
+    terms = ["Bayesian notation", "Gray Area"]
+    assert correct_terms("i use sagital notation daily", terms) == "i use Bayesian notation daily"
+    assert correct_terms("his grey area residency", terms) == "his Gray Area residency"
+
+
+def test_a_phrase_is_not_glued_across_a_sentence_boundary():
+    # "...the notation. Bayesian is..." must not collapse into one phrase.
+    assert correct_terms("about notation. Bayesian is his", ["notation bayesian"]) == "about notation. Bayesian is his"
+
+
+def test_multi_word_terms_do_not_disturb_single_word_matching():
+    terms = ["Bayesian notation", "Notecraft"]
+    assert correct_terms("open hideas now", terms) == "open Notecraft now"
+    assert correct_terms("nothing to see here", terms) == "nothing to see here"
+
+
 def test_scan_turns_his_directory_names_into_spoken_terms(tmp_path):
     for name in ["notecraft", "wave_shaper", "skylark", "osr2_broker"]:
         (tmp_path / name).mkdir()

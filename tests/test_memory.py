@@ -35,7 +35,10 @@ def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
     assert "BASE" in out
     assert "Notecraft" in out
     # the lexicon is his vocabulary, framed to be recognised - NOT under the life-context/therapy warning
-    assert "coined" in out.lower() or "jargon" in out.lower()
+    assert "vocabulary" in out.lower()
+    # and it is NOT only his coined names: the domain terms of his fields belong here too, so the
+    # framing must invite those rather than reading as "words the user made up"
+    assert "domain" in out.lower()
 
 
 def test_load_profile_returns_empty_when_missing(tmp_path):

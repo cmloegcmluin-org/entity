@@ -199,7 +199,7 @@ def main(argv=None):
     print()
 
     if not text_mode and not muted:
-        tts.speak("I'm ready. What's on your mind?")  # say out loud that startup finished
+        tts.speak("I'm ready. What can I do for you?")  # say out loud that startup finished
 
     had_conversation = []
     farewelled = []

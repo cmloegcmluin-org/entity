@@ -7,6 +7,7 @@ them through the same voice, and then answers the user with a summary instead of
 General on purpose: `<where>` is whatever worktrees he named, not anything Notecraft-specific.
 """
 
+import os.path
 import re
 from pathlib import Path
 
@@ -24,11 +25,16 @@ def parse_supervise(reply):
 
 
 def _resolve(target):
-    """A worktrees directory (globbed to its sub-dirs) or explicit comma/newline-separated paths."""
+    """A worktrees directory (globbed to its sub-dirs) or explicit comma/newline-separated paths.
+
+    A path that doesn't exist yet (the usual case - a fresh worktree named for new work) lands in
+    the explicit branch, so expand ~ there too or the agent's cwd would be a bogus literal.
+    """
     expanded = str(Path(target).expanduser())
     if Path(expanded).is_dir():
         return find_worktrees(expanded) or [expanded]
-    return [part.strip() for part in re.split(r"[,\n]", target) if part.strip()]
+    # expanduser only (not full Path normalization) so plain paths pass through verbatim and only ~ resolves.
+    return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
 class SupervisingBrain:

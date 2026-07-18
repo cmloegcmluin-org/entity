@@ -5,10 +5,8 @@
   --no-timings  hide the per-turn think/speak readout (shown by default)
 """
 
-import functools
 import re
 import signal
-import subprocess
 import sys
 import threading
 from datetime import datetime
@@ -19,7 +17,6 @@ from entity.console import Console
 from entity.conversation import Conversation
 from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
 from entity.fleet_log import FleetLog
-from entity.fleet_session import prepare_worktree, supervise
 from entity.heartbeat import HeartbeatMonitor
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
@@ -55,18 +52,15 @@ def _make_fleet_log(target):
     return FleetLog(FLEET_LOGS / f"{slug}-{stamp}.log")
 
 
-def _prepare_fresh_worktree(path):
-    """Set up a not-yet-existing worktree fresh from current origin/main, so a newly delegated agent
-    never starts on stale local code. The repo is the git tree the requested path belongs under; the
-    branch mirrors the worktree's own name."""
-    target = Path(path)
-    repo = subprocess.run(
-        ["git", "-C", str(target.parent), "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    prepare_worktree(repo, target, f"claude/{target.name}")
+def _fresh_worktree_note():
+    """Persona line: new work means a new worktree cut from freshly-fetched origin/main, not a stale
+    local resume - the user said almost everything from here on starts a new worktree."""
+    return (
+        " Almost every agent you start is NEW work, which means a NEW worktree - don't resume an old "
+        "one unless the user explicitly tells you to. When you set one up, base it on current "
+        "origin/main: git fetch origin main first, then cut the worktree's branch from origin/main, "
+        "so the agent never starts on stale local code that's fallen behind what's already merged."
+    )
 
 
 def _mic_gain():
@@ -171,6 +165,7 @@ def main(argv=None):
     persona = (
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
+        + _fresh_worktree_note()
     )
     sdk_brain = SdkBrain(persona=persona)
     sdk_brain.warmup()
@@ -194,14 +189,9 @@ def main(argv=None):
     # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper
     # catches a "[SUPERVISE] ..." directive from the brain and runs the agents through the same voice.
     # Each session gets a fresh timestamped transcript; a worktree it names but that doesn't exist yet
-    # is cut fresh from current origin/main before the agent starts.
+    # is cut fresh from current origin/main (supervise's default) before the agent starts.
     fleet_io = ConsoleFleetIO() if text_mode else VoiceFleetIO(speak=tts.speak, listen=stt.listen)
-    brain = SupervisingBrain(
-        sdk_brain,
-        fleet_io,
-        supervise_fn=functools.partial(supervise, prepare=_prepare_fresh_worktree),
-        make_log=_make_fleet_log,
-    )
+    brain = SupervisingBrain(sdk_brain, fleet_io, make_log=_make_fleet_log)
 
     def watch_keys():
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up

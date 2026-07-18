@@ -1,3 +1,4 @@
+import os.path
 from pathlib import Path
 
 from entity.supervising_brain import SupervisingBrain, _resolve, parse_supervise
@@ -47,6 +48,12 @@ def test_interrupt_is_forwarded_to_the_inner_brain():
     brain.interrupt()
 
     assert inner.interrupted is True  # a barge-in reaches the real brain through the wrapper
+
+
+def test_resolve_expands_a_home_relative_fresh_path():
+    # A brand-new worktree path the brain names for new work won't exist yet, so it falls to the
+    # explicit-path branch - which must still expand ~ so the agent's cwd is real.
+    assert _resolve("~/work/new-agent") == [os.path.expanduser("~/work/new-agent")]
 
 
 def test_normal_replies_pass_straight_through():

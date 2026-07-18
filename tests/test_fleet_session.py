@@ -1,8 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from entity.fleet import FleetSupervisor, Need
 from entity.fleet_runner import Fleet
-from entity.fleet_session import drive_fleet, prepare_worktree, run_fleet, supervise
+from entity.fleet_session import drive_fleet, prepare_worktree, prepare_worktree_for, run_fleet, supervise
 
 
 class FakeFleet:
@@ -140,6 +141,64 @@ def test_prepare_worktree_fetches_before_branching_from_current_origin_main():
     ]
     assert all(kwargs.get("check") for _, kwargs in calls)  # a git failure must raise, not slip by
     assert returned == "/repo/.claude/worktrees/new-agent"
+
+
+def test_prepare_worktree_for_infers_the_repo_and_branch_then_cuts_fresh(tmp_path):
+    worktrees = tmp_path / ".claude" / "worktrees"
+    worktrees.mkdir(parents=True)  # exists; the new leaf below does not yet
+    new = worktrees / "brave-swan"
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return SimpleNamespace(stdout=f"{tmp_path}\n")  # git rev-parse answers with the repo root
+
+    returned = prepare_worktree_for(str(new), run=fake_run)
+
+    assert calls[0] == ["git", "-C", str(worktrees), "rev-parse", "--show-toplevel"]
+    assert ["git", "-C", str(tmp_path), "fetch", "origin", "main"] in calls
+    assert [
+        "git", "-C", str(tmp_path), "worktree", "add", "-b", "claude/brave-swan", str(new), "origin/main"
+    ] in calls
+    assert returned == str(new)
+
+
+def test_prepare_worktree_for_walks_up_to_the_first_existing_ancestor(tmp_path):
+    # The very first worktree in a repo: neither the leaf nor .claude/worktrees exists, so the repo
+    # root itself is where we ask git which repo this is.
+    new = tmp_path / ".claude" / "worktrees" / "calm-lake"
+    seen = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return SimpleNamespace(stdout=f"{tmp_path}\n")
+
+    prepare_worktree_for(str(new), run=fake_run)
+
+    assert seen[0] == ["git", "-C", str(tmp_path), "rev-parse", "--show-toplevel"]
+
+
+def test_supervise_cuts_a_fresh_worktree_by_default(tmp_path, monkeypatch):
+    # Starting new worktrees is the norm, so supervise creates a missing one with no prepare step
+    # handed in - it falls back to prepare_worktree_for. Stub that to keep the test repo-free.
+    from entity import fleet_session
+
+    fresh = tmp_path / "new-agent"  # doesn't exist yet
+    prepared = []
+
+    def spy(path):
+        prepared.append(path)
+        Path(path).mkdir(parents=True)
+
+    monkeypatch.setattr(fleet_session, "prepare_worktree_for", spy)
+
+    supervise(
+        [str(fresh)],
+        FakeIO(picks=[], approvals=[]),
+        agent_factory=lambda name, cwd, decide: FakeAgent(name, "done"),
+    )
+
+    assert prepared == [str(fresh)]  # created fresh, though no prepare was passed
 
 
 def test_supervise_creates_only_the_missing_worktree_then_launches_every_agent(tmp_path):

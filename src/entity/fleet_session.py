@@ -41,21 +41,43 @@ def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin",
     return str(path)
 
 
+def prepare_worktree_for(path, *, run=subprocess.run):
+    """Cut a fresh worktree for `path` from current origin/main, inferring which repo it belongs to.
+
+    Starting brand-new worktrees is the norm, so this assumes nothing already exists: it finds the
+    repo by asking git at `path`'s nearest existing ancestor (the leaf - and maybe the whole
+    .claude/worktrees dir - don't exist yet), names the branch after the worktree, and hands off to
+    `prepare_worktree`. `run` is injected so it's exercised without a real repo.
+    """
+    target = Path(path)
+    anchor = target
+    while not anchor.exists():
+        anchor = anchor.parent
+    repo = run(
+        ["git", "-C", str(anchor), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return prepare_worktree(repo, target, f"claude/{target.name}", run=run)
+
+
 def supervise(worktree_paths, io, *, model="sonnet", task=TASK, agent_factory=None, log=None, prepare=None):
     """Launch a supervised agent per worktree path and manage them through `io`.
 
-    `prepare(path)` (when given) sets up any path that doesn't exist yet - see `prepare_worktree`,
-    which cuts it fresh from current origin/main - so a newly delegated agent starts clean.
+    Any path that doesn't exist yet is cut fresh from current origin/main before its agent starts -
+    this is the common case, since new work means a new worktree, not resuming an old one. `prepare`
+    overrides how that happens (tests inject it); by default it's `prepare_worktree_for`.
     """
     from entity.fleet import FleetSupervisor
     from entity.fleet_runner import Fleet
     from entity.supervised_agent import SupervisedAgent
 
     make_agent = agent_factory or (lambda name, cwd, decide: SupervisedAgent(name, cwd, decide, model=model))
-    if prepare is not None:
-        for path in worktree_paths:
-            if not Path(path).exists():
-                prepare(path)
+    cut_fresh = prepare or prepare_worktree_for
+    for path in worktree_paths:
+        if not Path(path).exists():
+            cut_fresh(path)
     fleet = Fleet(FleetSupervisor())
     agents = {Path(p).name: make_agent(Path(p).name, p, fleet.decide) for p in worktree_paths}
     tasks = {name: task for name in agents}

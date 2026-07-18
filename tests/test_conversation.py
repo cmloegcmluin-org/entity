@@ -873,3 +873,18 @@ def test_a_wake_word_with_words_after_it_still_wakes_it():
     convo.run()
 
     assert brain.heard == ["so about that bug"]  # it woke on the first try and took the next turn
+
+
+def test_agent_news_still_reaches_him_while_it_is_asleep():
+    # He asked outright: if he says "stop listening" and then it has something to relay from an
+    # agent, does it speak up or wait for him? Sleep silences HIS turns, not the agents' news.
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["stop listening", "anything?", "goodbye entity"]),
+                         FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()  # "stop listening" - now asleep
+    outbox.push("the auth agent is blocked on you")
+    convo.turn()  # his words are ignored while asleep, but the news is not
+
+    assert "the auth agent is blocked on you" in tts.spoken

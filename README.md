@@ -49,9 +49,9 @@ Swapping any layer touches one adapter and nothing else. Speech-in is split two 
 ## Run it
 
 ```
-~/workspace/entity/.venv/Scripts/python -m entity           # speak to it, hear spoken replies
-~/workspace/entity/.venv/Scripts/python -m entity --text    # type instead of speaking
-~/workspace/entity/.venv/Scripts/python -m entity --timings # show per-turn think/speak seconds
+~/workspace/entity/.venv/Scripts/python -m entity             # speak to it, hear spoken replies
+~/workspace/entity/.venv/Scripts/python -m entity --text     # type instead of speaking
+~/workspace/entity/.venv/Scripts/python -m entity --no-timings # hide the per-turn think/speak readout (on by default)
 ```
 
 Speak, then say **"over"** to hand the turn back (silence-detection was too flaky). To end,

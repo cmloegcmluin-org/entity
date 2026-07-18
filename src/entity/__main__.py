@@ -1,8 +1,8 @@
 """Run the Entity: `python -m entity` (speak to it).
 
-  --text      type instead of speaking
-  --mute      show replies as text, don't speak them
-  --timings   print how long each turn spends thinking vs. speaking
+  --text        type instead of speaking
+  --mute        show replies as text, don't speak them
+  --no-timings  hide the per-turn think/speak readout (shown by default)
 """
 
 import functools
@@ -145,7 +145,7 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     text_mode = "--text" in argv
     muted = "--mute" in argv
-    timings = "--timings" in argv
+    timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
 
     # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
     # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
@@ -241,10 +241,10 @@ def main(argv=None):
         if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
             if not text_mode and not muted:
                 try:
-                    tts.speak("Talk soon.")
+                    tts.speak("Be seeing you.")
                 except Exception:
                     pass
-            print("Talk soon.")
+            print("Be seeing you.")
         if had_conversation:  # remember what it learned - bounded so a slow model can't hang the exit
             try:
                 append_learned(consolidate(brain))

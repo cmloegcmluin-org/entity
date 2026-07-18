@@ -17,7 +17,7 @@ DEFAULT_FAREWELLS = (
 # wakes it. (While asleep it still transcribes, only to catch the wake word - nothing reaches the brain.)
 DEFAULT_SUSPENDS = ("suspend", "stop listening")
 DEFAULT_RESUMES = ("resume", "hey entity")
-DEFAULT_FAREWELL_REPLY = "Talk soon."
+DEFAULT_FAREWELL_REPLY = "Be seeing you."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
 # He ended a turn ("over") but said nothing in it. Rather than ignore him - which just makes him
 # repeat "over" wondering if he was heard - acknowledge that the turn registered and invite him on.

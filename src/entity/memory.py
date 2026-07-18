@@ -1,13 +1,15 @@
 """The Entity's memory of the user.
 
-Three layers, all under the gitignored `runtime/` dir (private):
+Three layers, two of them under the gitignored `runtime/` dir (private):
 - `profile.md`  - the hand-written standing profile (goals, projects, life context).
 - `learned.md`  - facts the Entity captured itself from past conversations.
 - `lexicon.md`  - his working vocabulary: names he coined (Notecraft, WaveShaper, Skylark) AND the
                   domain terms and proper nouns of his fields (Bayesian, acoustic, a collaborator,
-                  ...) - one word or several. Double duty: it's part of the brain's standing
-                  context so it knows his words, and transcription is biased toward the same list
-                  (see `vocabulary`), so teaching him a term in one place fixes both.
+                  ...) - one word or several. Triple duty: it's part of the brain's standing
+                  context so it knows his words, transcription here is biased toward the same
+                  list (see `vocabulary`), and Notecraft corrects its voice memos against it too —
+                  so teaching a term once fixes all three. That last one is why it lives outside
+                  this repo, in the state folder Notecraft syncs between his machines.
 
 All are folded into the brain's system prompt at startup, so it knows him without being
 re-told. At the end of a session the brain is asked what new, durable facts came up; those get
@@ -20,7 +22,11 @@ from pathlib import Path
 _RUNTIME = Path(__file__).resolve().parents[2] / "runtime"
 DEFAULT_PROFILE_PATH = _RUNTIME / "profile.md"
 DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
-DEFAULT_LEXICON_PATH = _RUNTIME / "lexicon.md"
+# The lexicon is the one file Notecraft reads too, so a term taught in either place fixes
+# both. Notecraft runs on his MacBook besides this PC, so the shared list lives in the
+# state folder it syncs between them (its NOTECRAFT_STATE_DIR); a file under this PC-only
+# checkout could never reach the other machine.
+DEFAULT_LEXICON_PATH = Path.home() / "Notecraft" / "state" / "lexicon.md"
 
 _PREAMBLE = (
     "Here is standing context about the user's life, for your awareness only. Do NOT raise any of "

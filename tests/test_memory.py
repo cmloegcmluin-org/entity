@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from entity.memory import (
+    DEFAULT_LEXICON_PATH,
     append_learned,
     compose_persona,
     lexicon_terms,
@@ -95,3 +98,11 @@ def test_append_learned_does_nothing_for_empty(tmp_path):
     append_learned([], path=path)
 
     assert not path.exists()
+
+
+def test_the_lexicon_is_the_same_file_notecraft_reads():
+    # One list, two tools: a term taught here has to fix his transcripts there too.
+    # Notecraft runs on his MacBook as well as this PC, so the shared file sits in the
+    # state folder it syncs between them (NOTECRAFT_STATE_DIR) — never in this repo's
+    # runtime dir, which no other machine can see.
+    assert DEFAULT_LEXICON_PATH == Path.home() / "Notecraft" / "state" / "lexicon.md"

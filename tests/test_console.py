@@ -68,6 +68,38 @@ def test_ignoring_says_it_heard_something_and_dropped_it():
     assert lines == ["\r(ignoring…)"]
 
 
+def test_what_is_printed_is_also_written_to_the_session_record():
+    # The terminal scrolls away, and it was the only record of what he actually saw.
+    recorded = []
+    console = Console(echo=lambda _: None, record=recorded.append)
+
+    console.heard("pick up the drive work")
+    console.reply("on it")
+
+    assert recorded == ["you said: pick up the drive work", "entity> on it\n"]
+
+
+def test_a_typed_run_still_records_what_he_said_even_though_it_is_not_echoed():
+    recorded, lines = [], []
+    console = Console(echo=lines.append, record=recorded.append, voice=False)
+
+    console.heard("typed input")
+
+    assert lines == []  # his own typing isn't echoed back at him
+    assert recorded == ["you said: typed input"]  # but the record still has his side of it
+
+
+def test_a_run_of_ignores_is_recorded_once_as_a_tally_not_line_by_line():
+    recorded = []
+    console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
+
+    for _ in range(16):
+        console.ignored()
+    console.reply("back with you")
+
+    assert recorded == ["(ignored 16 while asleep)", "entity> back with you\n"]
+
+
 def test_a_run_of_ignores_collapses_onto_one_line_with_a_tally():
     lines, console = _recording()
 

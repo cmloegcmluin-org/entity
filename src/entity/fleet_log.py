@@ -1,49 +1,28 @@
-"""A timestamped, readable transcript of a fleet-driving session.
+"""A readable transcript of a fleet-driving session, in the labelled ENTITY/AGENT format.
 
 the user can't watch the agents' screens, so besides hearing them by voice he wants a durable
-record he can scroll back through - and he wants it in the clean, labelled ENTITY/AGENT format
-with a timestamp on every line, written from the start of the session (not reconstructed after
-the fact). `FleetLog` is that writer: each entry is stamped with the current time and prefixed
-with who said it. The clock is injected so tests are deterministic; writes are locked because the
-agents' worker threads and the drive loop log concurrently. `NullFleetLog` is the do-nothing
-stand-in for runs (and tests) that don't want a file.
+record he can scroll back through - labelled, with a timestamp on every line, written from the
+start of the session (not reconstructed after the fact). `FleetLog` is the labelling; the
+stamping, locking and file handling live in `Transcript`, shared with the conversation's own
+session record. `NullFleetLog` is the do-nothing stand-in for runs (and tests) with no file.
 """
 
-import threading
 from datetime import datetime
-from pathlib import Path
+
+from entity.transcript import Transcript
 
 
 class FleetLog:
     def __init__(self, path, *, clock=datetime.now, timefmt="%H:%M:%S"):
-        self._path = Path(path)
-        self._clock = clock
-        self._timefmt = timefmt
-        self._lock = threading.Lock()
-        self._last_day = None  # the date the last line was written under, to mark day rollovers
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._transcript = Transcript(path, clock=clock, timefmt=timefmt)
 
     def entity(self, text):
         """Something the Entity said or did, on the user's behalf."""
-        self._write("ENTITY", text)
+        self._transcript.write(text, prefix="ENTITY: ")
 
     def agent(self, name, text):
         """Something the named agent reported back."""
-        self._write(f"AGENT {name}", text)
-
-    def _write(self, speaker, text):
-        # The date lives in the filename and in a header written once per day; the lines themselves
-        # carry only the time, and a fresh header marks a session that runs past midnight.
-        now = self._clock()
-        stamp = now.strftime(self._timefmt)
-        lines = str(text).splitlines() or [""]
-        body = "".join(f"[{stamp}] {speaker}: {line}\n" for line in lines)
-        with self._lock:
-            with open(self._path, "a", encoding="utf-8") as handle:
-                if now.date() != self._last_day:
-                    handle.write(f"===== {now.strftime('%Y-%m-%d')} =====\n")
-                    self._last_day = now.date()
-                handle.write(body)
+        self._transcript.write(text, prefix=f"AGENT {name}: ")
 
 
 class NullFleetLog:

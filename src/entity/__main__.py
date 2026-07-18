@@ -31,11 +31,13 @@ from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
+from entity.transcript import Transcript
 from entity.tts_system import NullTTS, SystemTTS
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 FLEET_LOGS = RUNTIME_DIR / "fleet-logs"  # one timestamped transcript per driving session
+TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for his project names
@@ -211,7 +213,11 @@ def main(argv=None):
 
     # A beat to read a reply before the mic reopens, but not in text mode (he sets his own pace there).
     read_pause = 0.0 if text_mode else 1.2
-    console = Console(voice=not text_mode)
+    # Keep the same lines the terminal shows, timestamped, so a session that went wrong can be read
+    # back afterwards instead of the user having to copy his scrollback out by hand.
+    session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
+    print(f"(this conversation is being written to {session_record.path})\n")
+    console = Console(voice=not text_mode, record=session_record.write)
 
     try:
         Conversation(

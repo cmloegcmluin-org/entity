@@ -22,10 +22,13 @@ def _overwrite_flushed(text):
 
 
 class Console:
-    def __init__(self, *, echo=_print_flushed, overwrite=_overwrite_flushed, voice=True,
+    def __init__(self, *, echo=_print_flushed, overwrite=_overwrite_flushed, record=None, voice=True,
                  thinking_notice="(thinking…)", listening_notice="(listening… say 'over' when you're done)"):
         self._echo = echo
         self._overwrite = overwrite
+        # Where the same lines go to be kept - the terminal scrolls away, and it was the only record
+        # of what he actually saw when something went wrong.
+        self._record = record or (lambda line: None)
         # A voice run narrates the mic - "listening", and what it heard. A typed run needs neither:
         # he has his own prompt and his own words on screen already.
         self._voice = voice
@@ -45,17 +48,20 @@ class Console:
         tally = f" {self._ignored}x" if self._ignored > 1 else ""
         self._overwrite(f"\r(ignoring…{tally})")
 
-    def _line(self, text):
+    def _line(self, text, *, show=True):
         """Every ordinary line goes through here so it can first close an open ignore run - without
-        that newline it would be written on top of the counter, which is still sitting unterminated."""
+        that newline it would be written on top of the counter, which is still sitting unterminated.
+        A line that isn't shown is still kept: the record is of the session, not of the screen."""
         if self._ignored:
+            self._record(f"(ignored {self._ignored} while asleep)")  # the tally, not every scrap
             self._ignored = 0
             self._overwrite("\n")
-        self._echo(text)
+        if show:
+            self._echo(text)
+        self._record(text)
 
     def heard(self, text):
-        if self._voice:
-            self._line(f"you said: {text}")
+        self._line(f"you said: {text}", show=self._voice)
 
     def thinking(self):
         self._line(self._thinking_notice)

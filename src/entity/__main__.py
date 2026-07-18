@@ -170,15 +170,16 @@ def main(argv=None):
     timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
     gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
 
-    # In a windowed run every startup line goes to the window's feed as well as stdout (which
-    # pythonw discards) - launched from Entity.bat there IS no terminal, so the window is the only
-    # place he can read that the mic was found, where the audio is saved, and so on.
+    # In a windowed run every startup line goes to the window's feed INSTEAD of stdout - launched
+    # from Entity.bat there is no terminal at all, and launched from a command line he doesn't want
+    # the window's contents spat out there too.
     feed = TranscriptFeed() if gui else None
 
     def announce(line=""):
-        print(line, flush=True)
         if feed is not None:
             feed.push("line", line)
+        else:
+            print(line, flush=True)
 
     # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
     # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute

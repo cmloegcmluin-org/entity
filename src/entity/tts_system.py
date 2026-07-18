@@ -33,6 +33,9 @@ def _default_ps_run(script, text, interrupt=None):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
+        # Launched from a window (or Git Bash) there's no console to inherit, so every utterance
+        # was popping its own PowerShell window onto his monitors. The voice needs no window.
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     while True:
         try:

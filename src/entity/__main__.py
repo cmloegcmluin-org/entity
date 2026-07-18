@@ -25,7 +25,9 @@ from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
     append_learned,
     compose_persona,
+    lexicon_terms,
     load_learned,
+    load_lexicon,
     load_profile,
 )
 from entity.outbox import Outbox
@@ -77,15 +79,16 @@ def _mic_gain():
 
 
 def _vocab_terms():
-    """His coined project names, mined off disk so Parakeet can be biased toward them (it keeps
-    hearing "Notecraft" as "high ideas"). Always scans ~/workspace; also any extra roots he lists in
-    vocab-roots.txt, since his projects live in more than one tree."""
+    """The terms Parakeet is biased toward, so it stops hearing "Notecraft" as "high ideas". Two
+    sources: his project folder names (scanned off ~/workspace, plus any roots in vocab-roots.txt),
+    and his hand-kept lexicon.md - the same coined-terms file the brain carries as standing context,
+    so teaching the Entity a new word in one place updates both."""
     from entity.vocabulary import scan_terms
 
     roots = [WORKSPACE]
     if VOCAB_ROOTS.exists():
         roots += [Path(line) for line in VOCAB_ROOTS.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return scan_terms(roots)
+    return scan_terms(roots) | set(lexicon_terms(load_lexicon()))
 
 
 def _agent_inbox_note(inbox):
@@ -165,7 +168,10 @@ def main(argv=None):
     inbox_watcher.start()
 
     print("Entity is waking up...")
-    persona = compose_persona(DEFAULT_PERSONA, load_profile(), load_learned()) + _agent_inbox_note(AGENT_INBOX)
+    persona = (
+        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
+        + _agent_inbox_note(AGENT_INBOX)
+    )
     sdk_brain = SdkBrain(persona=persona)
     sdk_brain.warmup()
     # Heartbeat: on a quiet timer, ask the brain if any agent has news he doesn't have yet and queue

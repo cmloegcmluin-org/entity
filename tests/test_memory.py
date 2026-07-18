@@ -1,10 +1,41 @@
 from entity.memory import (
     append_learned,
     compose_persona,
+    lexicon_terms,
     load_learned,
+    load_lexicon,
     load_profile,
     parse_facts,
 )
+
+
+def test_lexicon_terms_takes_the_head_of_each_line_ignoring_glosses_and_comments():
+    text = (
+        "# the user's lexicon\n"
+        "\n"
+        "Notecraft — his audio-memo web app\n"
+        "WaveShaper\n"
+        "- Skylark — German 'exactly', a project of his\n"
+    )
+    assert lexicon_terms(text) == ["Notecraft", "WaveShaper", "Skylark"]
+
+
+def test_lexicon_terms_is_empty_for_blank_or_comment_only_text():
+    assert lexicon_terms("") == []
+    assert lexicon_terms("# just a header\n\n") == []
+
+
+def test_load_lexicon_is_empty_when_missing(tmp_path):
+    assert load_lexicon(tmp_path / "nope.md") == ""
+
+
+def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
+    out = compose_persona("BASE", "", "", lexicon="Notecraft — his audio-memo web app")
+
+    assert "BASE" in out
+    assert "Notecraft" in out
+    # the lexicon is his vocabulary, framed to be recognised - NOT under the life-context/therapy warning
+    assert "coined" in out.lower() or "jargon" in out.lower()
 
 
 def test_load_profile_returns_empty_when_missing(tmp_path):

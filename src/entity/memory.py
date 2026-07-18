@@ -1,25 +1,39 @@
 """The Entity's memory of the user.
 
-Two layers, both under the gitignored `runtime/` dir (private):
+Three layers, all under the gitignored `runtime/` dir (private):
 - `profile.md`  - the hand-written standing profile (goals, projects, life context).
 - `learned.md`  - facts the Entity captured itself from past conversations.
+- `lexicon.md`  - his own coined names and jargon (Notecraft, WaveShaper, Skylark, ...). This does
+                  double duty: it's part of the brain's standing context so it recognises his
+                  terms, and transcription is biased toward the same terms (see `vocabulary`).
 
-Both are folded into the brain's system prompt at startup, so it knows him without being
+All are folded into the brain's system prompt at startup, so it knows him without being
 re-told. At the end of a session the brain is asked what new, durable facts came up; those get
 appended to `learned.md`, so next time it remembers them too - the auto-capture-and-remember loop.
 """
 
+import re
 from pathlib import Path
 
 _RUNTIME = Path(__file__).resolve().parents[2] / "runtime"
 DEFAULT_PROFILE_PATH = _RUNTIME / "profile.md"
 DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
+DEFAULT_LEXICON_PATH = _RUNTIME / "lexicon.md"
 
 _PREAMBLE = (
     "Here is standing context about the user's life, for your awareness only. Do NOT raise any of "
     "it unprompted, and do not turn into a therapist or life-coach about it - he has real ones. "
     "Use it only to be more useful and less clueless when he brings something up himself:"
 )
+
+_LEXICON_INTRO = (
+    "These are the user's own coined names and personal jargon - his projects and terms. Recognise "
+    "them when he uses them (his speech-to-text is biased toward them too); use his own words back, "
+    "but don't force them into the conversation:"
+)
+
+# A gloss can follow the term after " - " / " — " / ": "; the term itself is the head of the line.
+_GLOSS = re.compile(r"\s+[—–-]\s+|:\s+")
 
 CONSOLIDATION_PROMPT = (
     "Our conversation is ending. List, as short bullet points (each starting with '-'), any NEW and "
@@ -38,6 +52,10 @@ def load_learned(path=DEFAULT_LEARNED_PATH):
     return _read(path)
 
 
+def load_lexicon(path=DEFAULT_LEXICON_PATH):
+    return _read(path)
+
+
 def _read(path):
     try:
         return Path(path).read_text(encoding="utf-8")
@@ -45,11 +63,32 @@ def _read(path):
         return ""
 
 
-def compose_persona(base_persona, profile, learned=""):
-    extra = "\n\n".join(section.strip() for section in (profile, learned) if section.strip())
-    if not extra:
-        return base_persona
-    return f"{base_persona}\n\n{_PREAMBLE}\n\n{extra}"
+def lexicon_terms(text):
+    """The bare terms from a lexicon file, for biasing transcription - the head of each line, with
+    any gloss, bullet, blank line or '#' comment stripped off."""
+    terms = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line[0] in "-*•":
+            line = line[1:].strip()
+        term = _GLOSS.split(line, maxsplit=1)[0].strip()
+        if term:
+            terms.append(term)
+    return terms
+
+
+def compose_persona(base_persona, profile, learned="", lexicon=""):
+    """Fold his standing context into the brain's system prompt: life context (profile + learned)
+    under a do-not-play-therapist warning, and his lexicon under its own recognise-these framing."""
+    life = "\n\n".join(section.strip() for section in (profile, learned) if section.strip())
+    sections = [base_persona]
+    if life:
+        sections.append(f"{_PREAMBLE}\n\n{life}")
+    if lexicon.strip():
+        sections.append(f"{_LEXICON_INTRO}\n\n{lexicon.strip()}")
+    return "\n\n".join(sections)
 
 
 def parse_facts(text):

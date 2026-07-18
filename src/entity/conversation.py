@@ -127,13 +127,35 @@ def _wakes(canonical, commands):
     )
 
 
+# Words that flip the yes word right after them ("not now", "don't go ahead"). "t" is here because
+# _canonical splits contractions apart - "don't"/"won't"/"can't" all end in a bare "t" right before
+# the yes they negate.
+_NEGATORS = ("not", "no", "dont", "t", "never", "nah", "nope")
+
+
 def _is_affirmative(heard):
-    """Did he say yes to an offer? Any negative word veto-es it; otherwise any yes word counts."""
-    canonical = _canonical(heard)
-    words = canonical.split()
-    if any(neg in words for neg in _NEGATIVES):
-        return False
-    return any(yes in words if " " not in yes else yes in canonical for yes in _AFFIRMATIVES)
+    """Is there a yes in it? A yes ANYWHERE counts, even alongside negative words: with a TV in the
+    room his real "yes, I am ready" arrives wrapped in unrelated chatter, and a stray "not" from the
+    TV once vetoed his yes and cost him the answer he was promised. A false yes just speaks
+    something he half-wanted; a false no throws it away. The one exception: a yes directly preceded
+    by a negator ("not now") is that negation, not a yes."""
+    words = _canonical(heard).split()
+    for index, word in enumerate(words):
+        matched = (word,) in _AFFIRMATIVE_RUNS or any(
+            run == tuple(words[index:index + len(run)]) for run in _AFFIRMATIVE_RUNS if len(run) > 1
+        )
+        if matched and (index == 0 or words[index - 1] not in _NEGATORS):
+            return True
+    return False
+
+
+_AFFIRMATIVE_RUNS = tuple(tuple(yes.split()) for yes in _AFFIRMATIVES)
+
+
+def _is_negative(heard):
+    """Is there a no in it? Only consulted once _is_affirmative found no yes."""
+    words = _canonical(heard).split()
+    return any(neg in words for neg in _NEGATIVES)
 
 
 @dataclass(frozen=True)
@@ -468,13 +490,17 @@ class Conversation:
         return Turn(heard=heard, said=self.ready_question)
 
     def _resolve_offer(self, heard):
-        """His reply to "ready for it?": a yes speaks the held answer; anything else drops it and the
-        utterance is handled as an ordinary new turn, so he's never stuck on the offer."""
-        answer, self._offered = self._offered, None
+        """His reply to "ready for it?": a yes speaks the held answer, a no drops it, and speech
+        that answers NEITHER way - TV chatter, or him moving on to something else - is handled as an
+        ordinary turn with the offer left standing, so noise can't destroy an answer he never got
+        to accept or refuse."""
         if _is_affirmative(heard):
+            answer, self._offered = self._offered, None
             self._speak_reply(answer)
             self._pause_to_read()
             return Turn(heard=heard, said=answer)
+        if _is_negative(heard):
+            self._offered = None
         return self._answer(heard)
 
     def run(self, should_continue=lambda: True, on_turn=None):

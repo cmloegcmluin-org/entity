@@ -165,6 +165,8 @@ def test_is_affirmative_reads_a_yes_but_not_a_no():
     assert _is_affirmative("okay") and _is_affirmative("let's hear it")
     assert not _is_affirmative("no thanks") and not _is_affirmative("not now") and not _is_affirmative("nope")
     assert not _is_affirmative("maybe later")  # "later" is a decline, not a yes
+    assert not _is_affirmative("don't go ahead")  # a negated yes is that negation, not a yes
+    assert _is_affirmative("it's not great, but yes")  # a real yes beside an unrelated negative
 
 
 def test_a_short_answer_is_spoken_immediately_not_gated():
@@ -205,6 +207,42 @@ def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
     assert VariableBrain.WALL not in tts.spoken  # he declined, so it was never delivered
     assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
     assert brain.heard == ["tell me everything", "no thanks"]
+
+
+def test_his_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
+    # From the real session: his "yes, I am ready for the longer answer" arrived in the same turn
+    # as TV chatter ("I'm not super far..."), and the "not" silently vetoed his yes - the answer he
+    # was promised evaporated. A yes anywhere in the turn outranks stray negatives.
+    brain = VariableBrain()
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["tell me everything",
+                 "I'm not super far and not having a great time. Uh, yes, I am ready for the longer answer"]),
+        brain, tts, acknowledgement="ACK", long_answer_chars=100,
+    )
+
+    convo.turn()  # offers "ready?"
+    convo.turn()  # TV garbage + his real yes
+
+    assert VariableBrain.WALL in tts.spoken  # his yes won; the answer was finally delivered
+
+
+def test_speech_that_answers_neither_way_leaves_the_offer_standing():
+    # TV dialogue with no yes and no no used to silently destroy the offer before he could answer.
+    # If it isn't an answer, it isn't an answer - the offer waits for one.
+    brain = VariableBrain()
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["tell me everything", "press R to unleash a brief burst of teeth", "okay"]),
+        brain, tts, acknowledgement="ACK", long_answer_chars=100,
+    )
+
+    convo.turn()  # offers "ready?"
+    convo.turn()  # TV garbage: neither yes nor no - handled as its own turn, offer kept
+    convo.turn()  # his real yes, one turn later
+
+    assert "a short reply" in tts.spoken  # the garbage still got an ordinary answer
+    assert VariableBrain.WALL in tts.spoken  # and his okay still released the held answer
 
 
 def test_gating_off_speaks_even_a_long_answer_straight_away():

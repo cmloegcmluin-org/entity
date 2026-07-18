@@ -69,6 +69,11 @@ class Console:
     def reply(self, text):
         self._line(f"entity> {text}\n")  # trailing blank line separates turns in the transcript
 
+    def dropped(self):
+        """A long call that had been left running was cancelled so he could be answered instead.
+        He was promised an answer that then never came; at minimum the record says why."""
+        self._line("(dropped the long call that was still running)")
+
     def heads_up(self, text):
         self._line(f"entity (heads-up)> {text}\n")  # marked so an unprompted line isn't mistaken for a reply
 

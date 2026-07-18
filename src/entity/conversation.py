@@ -65,7 +65,14 @@ DEFAULT_CANCEL_WAIT = 10.0
 # detaching (a slow think just blocks with check-ins, as before). Well past the check-in cadence so
 # only a genuinely long call detaches.
 DEFAULT_DETACH_AFTER = 45.0
-DEFAULT_DETACH_REPLY = "This one'll take me a while - I'll keep at it and let you know when it's ready."
+# Said in turn, never the same one twice running: he heard one canned sentence four times in a
+# single session and told us it was unnatural and disconcerting.
+DEFAULT_DETACH_REPLIES = (
+    "This one'll take me a while - I'll keep at it and let you know when it's ready.",
+    "Still a big one. I'll break in the moment I have something for you.",
+    "That's another slow one. I'm on it - carry on, and I'll speak up when it lands.",
+    "Long again, sorry. I'll come straight to you with it.",
+)
 
 # After a reply, wait this long before listening again, so he gets a beat to read it rather than the
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
@@ -155,7 +162,7 @@ class Conversation:
         resume_reply=DEFAULT_RESUME_REPLY,
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
         ready_question=DEFAULT_READY_QUESTION,
-        detach_reply=DEFAULT_DETACH_REPLY,
+        detach_replies=DEFAULT_DETACH_REPLIES,
         acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
@@ -184,7 +191,8 @@ class Conversation:
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
         self.ready_question = ready_question
-        self.detach_reply = detach_reply
+        self.detach_replies = detach_replies
+        self._detached_count = 0  # how many calls have gone to the background, to vary the wording
         self._long_answer_chars = long_answer_chars
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
@@ -310,7 +318,7 @@ class Conversation:
                     self._cancel_think(done)
                     raise _ThinkInterrupted
                 if detach_at is not None and time.monotonic() >= detach_at:  # too slow - background it
-                    self._speak_reply(self.detach_reply)
+                    self._speak_reply(self._detach_line())
                     self._detach(done, outcome)
                     raise _ThinkDetached
                 deadline = next_check_in if detach_at is None else min(next_check_in, detach_at)
@@ -328,6 +336,13 @@ class Conversation:
         if "error" in outcome:
             raise outcome["error"]
         return outcome["reply"]
+
+    def _detach_line(self):
+        """The next way of saying "this is taking a while" - cycled, so a session where several
+        calls run long doesn't repeat one canned sentence at him."""
+        line = self.detach_replies[self._detached_count % len(self.detach_replies)]
+        self._detached_count += 1
+        return line
 
     def _cancel_think(self, done):
         """Tell the brain to drop the in-flight call, then wait for the worker to unwind before
@@ -411,6 +426,7 @@ class Conversation:
         Cancel the stale call instead: what he's saying now always outranks work he's given up on."""
         background = self._background
         self._background = None
+        self._console.dropped()  # so the promise it made doesn't just silently evaporate
         self._cancel_think(background["done"])  # unwind it before his turn starts a new call
 
     def _answer(self, heard):

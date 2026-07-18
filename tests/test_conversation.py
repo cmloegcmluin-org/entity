@@ -236,7 +236,7 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
     first = convo.turn()
 
     assert first is None  # it didn't block - the loop is free to listen again
-    assert convo.detach_reply in tts.spoken  # he was told it's running in the background
+    assert any(line in tts.spoken for line in convo.detach_replies)  # told it's running in the background
 
     bg_done = convo._background["done"]
     release.set()
@@ -278,6 +278,55 @@ def test_talking_again_cancels_the_detached_call_instead_of_deflecting_him():
     assert cancelled == [True]  # the stale call was cancelled, not left to block him
     assert second.said == "fresh answer"  # and his new turn actually got answered
     assert calls == ["slow one", "what about this"]
+
+
+def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
+    # He was told "I'll let you know when it's ready" and then never heard back, because his next
+    # words quietly killed the call. Whatever else happens, the record shows it was dropped.
+    lines = []
+
+    class SlowBrain:
+        def respond(self, utterance):
+            time.sleep(0.2) if utterance == "slow one" else None
+            return "answer"
+
+        def interrupt(self):
+            pass
+
+    convo = Conversation(
+        FakeSTT(["slow one", "what about this"]), SlowBrain(), FakeTTS(),
+        acknowledgement="ACK", detach_after=0.05, patience=30, cancel_wait=0.1,
+        console=Console(echo=lines.append, overwrite=lines.append),
+    )
+
+    convo.turn()  # detaches
+    convo.turn()  # he speaks again - the detached call is dropped for him
+
+    assert any("dropped" in line for line in lines)
+
+
+def test_a_second_long_wait_is_not_worded_the_same_as_the_first():
+    # Four identical "This one'll take me a while" in one session: "stop saying the exact same
+    # phrase over and over, that's really unnatural and disconcerting".
+    class SlowBrain:
+        def respond(self, utterance):
+            time.sleep(0.2)
+            return "answer"
+
+        def interrupt(self):
+            pass
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["one", "two", "three"]), SlowBrain(), tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30, cancel_wait=0.1,
+    )
+
+    for _ in range(3):
+        convo.turn()
+
+    said = [line for line in tts.spoken if line in convo.detach_replies]
+    assert len(said) == 3 and len(set(said)) == 3  # three long waits, three different ways of saying so
 
 
 def test_a_finished_background_answer_wakes_a_lull():

@@ -211,7 +211,7 @@ def main(argv=None):
 
     # A beat to read a reply before the mic reopens, but not in text mode (he sets his own pace there).
     read_pause = 0.0 if text_mode else 1.2
-    console = Console(show_heard=not text_mode)
+    console = Console(voice=not text_mode)
 
     try:
         Conversation(

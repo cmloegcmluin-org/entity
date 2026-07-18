@@ -904,3 +904,28 @@ def test_what_it_hears_while_asleep_is_counted_not_transcribed_at_him():
 
     assert not any("TV dialogue" in line for line in lines)  # never echoed back at him
     assert lines[-1] == "\r(ignoring… 2x)"  # just a tally that ticks up in place
+
+
+def test_it_says_it_is_listening_before_it_listens():
+    lines = []
+    console = Console(echo=lines.append, overwrite=lines.append)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), console=console)
+
+    convo.turn()
+
+    assert lines[0].startswith("(listening")  # before anything he said could be echoed
+
+
+def test_it_does_not_claim_to_be_listening_while_it_is_asleep():
+    # "(listening…)" while asleep is a flat lie - it's transcribing to catch the wake word and
+    # throwing the rest away.
+    lines = []
+    console = Console(echo=lines.append, overwrite=lines.append)
+    convo = Conversation(FakeSTT(["stop listening", "some TV dialogue", "goodbye entity"]),
+                         FakeBrain(), FakeTTS(), console=console)
+
+    convo.turn()  # "stop listening" - now asleep
+    lines.clear()
+    convo.turn()
+
+    assert not any("(listening" in line for line in lines)

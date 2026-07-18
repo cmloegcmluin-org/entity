@@ -69,7 +69,7 @@ def test_pure_backchannel_noise_is_dropped_from_the_turn():
     # a silent stretch that Parakeet hallucinates as "Mm-hmm." must not pollute the real turn.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
     transcriber = SeqTranscriber(["Mm-hmm.", "hello there over"])
-    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(transcriber, mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == "hello there"  # the hallucinated chunk was dropped, only real speech kept
 
@@ -78,7 +78,7 @@ def test_a_bare_over_ends_an_empty_turn_but_is_flagged_as_terminated():
     # he said only "over" - the transcript strips to nothing, but the terminator WAS caught, so the
     # caller can tell this apart from a lull and still let him know it registered.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("over"), mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == ""
     assert stt.caught_terminator is True
@@ -88,7 +88,7 @@ def test_an_empty_turn_without_a_terminator_is_not_flagged():
     # a lull yield (the Entity has queued news) returns "" with no terminator - must NOT look like "over".
     interrupt = threading.Event()
     interrupt.set()
-    stt = MicSTT(FakeTranscriber("unused"), FakeMic([_sil()] * 3), pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt)
+    stt = MicSTT(FakeTranscriber("unused"), FakeMic([_sil()] * 3), pause_frames=3, threshold=0.01, interrupt=interrupt)
 
     assert stt.listen() == ""
     assert stt.caught_terminator is False
@@ -96,7 +96,7 @@ def test_an_empty_turn_without_a_terminator_is_not_flagged():
 
 def test_a_normal_terminated_turn_is_flagged():
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == "hello"
     assert stt.caught_terminator is True
@@ -122,7 +122,7 @@ def test_listen_flushes_stale_audio_before_reading_this_turn():
     # between turns the background mic buffers the Entity's own reply and room noise; drop it before
     # a new listen so it isn't transcribed as his next turn.
     mic = FlushableMic([_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == "hi"
     assert mic.events[0] == "flush"  # flushed before the first frame was read
@@ -130,7 +130,7 @@ def test_listen_flushes_stale_audio_before_reading_this_turn():
 
 def test_catch_stop_flushes_stale_audio_before_watching():
     mic = FlushableMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("keep going"), mic, pause_frames=3, prompt="")
+    stt = MicSTT(FakeTranscriber("keep going"), mic, pause_frames=3)
 
     stt.catch_stop(lambda: True)
 
@@ -140,20 +140,20 @@ def test_catch_stop_flushes_stale_audio_before_watching():
 def test_listen_and_catch_stop_work_on_a_mic_without_flush():
     # ConsoleSTT-style / test mics have no flush(); listening must still work, unguarded getattr aside.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("hello over"), mic, pause_frames=3, threshold=0.01)
     assert stt.listen() == "hello"
 
 
 def test_catch_stop_fires_on_a_spoken_stop_word():
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)  # quiet, a burst, then a pause
-    stt = MicSTT(FakeTranscriber("Stop!"), mic, pause_frames=3, prompt="")
+    stt = MicSTT(FakeTranscriber("Stop!"), mic, pause_frames=3)
 
     assert stt.catch_stop(lambda: True) is True  # he barked "stop" while it was talking
 
 
 def test_catch_stop_ignores_ordinary_speech():
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("keep going that's fine"), mic, pause_frames=3, prompt="")
+    stt = MicSTT(FakeTranscriber("keep going that's fine"), mic, pause_frames=3)
 
     assert stt.catch_stop(lambda: True) is False  # not a stop word, so it lets the reply run
 
@@ -166,7 +166,7 @@ def test_catch_stop_gives_up_the_moment_the_reply_finishes():
         return ticks["n"] < 3  # the reply ends after a couple of frames
 
     transcriber = FakeTranscriber("stop")
-    stt = MicSTT(transcriber, FakeMic([_sil()] * 100), pause_frames=3, prompt="")
+    stt = MicSTT(transcriber, FakeMic([_sil()] * 100), pause_frames=3)
 
     assert stt.catch_stop(still_speaking) is False
     assert transcriber.got is None  # stopped watching without transcribing anything
@@ -213,7 +213,7 @@ def test_listen_hears_a_quiet_voice_over_a_quiet_room_by_default():
     ambient = [_sp(0.002)] * 6
     voice = [_sp(0.009)] * 4
     trailing = [_sp(0.002)] * 3
-    stt = MicSTT(FakeTranscriber("hello over"), FakeMic(ambient + voice + trailing), pause_frames=3, prompt="")
+    stt = MicSTT(FakeTranscriber("hello over"), FakeMic(ambient + voice + trailing), pause_frames=3)
 
     assert stt.listen() == "hello"
 
@@ -221,7 +221,7 @@ def test_listen_hears_a_quiet_voice_over_a_quiet_room_by_default():
 def test_pausing_after_over_ends_the_turn_and_fires_the_cue():
     fired = []
     mic = FakeMic([_sp()] * 5 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hello there over"), mic, pause_frames=3, prompt="", threshold=0.01, cue=lambda: fired.append(True))
+    stt = MicSTT(FakeTranscriber("hello there over"), mic, pause_frames=3, threshold=0.01, cue=lambda: fired.append(True))
 
     assert stt.listen() == "hello there"
     assert fired == [True]  # the "registered" cue fired the moment it caught the terminator
@@ -232,7 +232,7 @@ def test_a_thinking_pause_without_over_keeps_listening():
     # pieces join, so the turn only ends when the LATEST piece carries the terminator.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
     transcriber = SeqTranscriber(["still thinking", "it over"])
-    stt = MicSTT(transcriber, mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(transcriber, mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == "still thinking it"  # the first pause did NOT end the turn
     assert transcriber.calls == 2
@@ -250,7 +250,7 @@ def test_each_pause_transcribes_only_new_audio_not_the_whole_buffer():
             return "chunk"
 
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3 + [_sp()] * 5 + [_sil()] * 3)
-    stt = MicSTT(MeasuringTranscriber(), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(MeasuringTranscriber(), mic, pause_frames=3, threshold=0.01)
     stt.listen()
 
     assert sizes == [7 * FRAME, 8 * FRAME]  # NOT [7*FRAME, 15*FRAME] - the old buffer wasn't re-sent
@@ -258,7 +258,7 @@ def test_each_pause_transcribes_only_new_audio_not_the_whole_buffer():
 
 def test_leading_silence_is_skipped():
     mic = FakeMic([_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("finally over"), mic, pause_frames=3, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("finally over"), mic, pause_frames=3, threshold=0.01)
 
     assert stt.listen() == "finally"
 
@@ -267,7 +267,7 @@ def test_stream_end_returns_what_it_captured():
     # a real mic never ends, so nothing but "over" (or quitting) stops a turn; this only guards
     # the fallback for a finite source that runs out without a terminator.
     mic = FakeMic([_sp()] * 5)
-    stt = MicSTT(FakeTranscriber("just some words"), mic, pause_frames=100, prompt="", threshold=0.01)
+    stt = MicSTT(FakeTranscriber("just some words"), mic, pause_frames=100, threshold=0.01)
 
     assert stt.listen() == "just some words"
 
@@ -278,7 +278,7 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
             return True
 
     transcriber = FakeTranscriber("should not run over")
-    stt = MicSTT(transcriber, FakeMic([_sp()] * 5), prompt="", stop=Flag())
+    stt = MicSTT(transcriber, FakeMic([_sp()] * 5), stop=Flag())
 
     assert stt.listen() == ""
 
@@ -287,7 +287,7 @@ def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
     interrupt = threading.Event()
     interrupt.set()  # the Entity has word from an agent to pass on, and he isn't talking
     transcriber = FakeTranscriber("should never run")
-    stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt)
+    stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, threshold=0.01, interrupt=interrupt)
 
     assert stt.listen() == ""  # yields so the loop can speak the queued message
     assert transcriber.got is None  # nothing was captured or transcribed
@@ -308,7 +308,7 @@ def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
 
     stt = MicSTT(
         FakeTranscriber("finishing my thought over"), InterruptingMic(),
-        pause_frames=3, prompt="", threshold=0.01, interrupt=interrupt,
+        pause_frames=3, threshold=0.01, interrupt=interrupt,
     )
 
     assert stt.listen() == "finishing my thought"  # he finished; the message waits its turn
@@ -358,7 +358,7 @@ def test_micstt_drives_a_real_background_microphone_end_to_end():
     source = GatedSource([_sp()] * 4 + [_sil()] * 3)
     background = BackgroundMicrophone(source)
     stt = MicSTT(FakeTranscriber("hello there over"), FlushSignallingMic(background, flushed),
-                 pause_frames=3, prompt="", threshold=0.01)
+                 pause_frames=3, threshold=0.01)
 
     heard = {}
     turn = threading.Thread(target=lambda: heard.__setitem__("text", stt.listen()))
@@ -380,7 +380,7 @@ def test_every_captured_frame_is_recorded_to_disk():
             written.append(frame)
 
     mic = FakeMic([_sp()] * 3 + [_sil()] * 3)
-    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, prompt="", threshold=0.01, recorder=Rec())
+    stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, threshold=0.01, recorder=Rec())
 
     assert stt.listen() == "hi"
     assert len(written) == 6  # every frame read went to the recorder, before anything else

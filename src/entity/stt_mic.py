@@ -99,7 +99,6 @@ class MicSTT:
         terminator="over",
         threshold=None,
         pause_frames=PAUSE_FRAMES,
-        prompt="(listening... say 'over' when you're done)",
         stop=None,
         cue=None,
         recorder=None,
@@ -111,7 +110,6 @@ class MicSTT:
         # A fixed threshold is for tests and odd setups; live use adapts to the room instead.
         self._is_speech = (lambda level: level >= threshold) if threshold is not None else NoiseFloor().is_speech
         self._pause_frames = pause_frames
-        self._prompt = prompt
         self._stop = stop
         self._cue = cue
         self._recorder = recorder
@@ -128,8 +126,6 @@ class MicSTT:
             flush()
 
     def listen(self):
-        if self._prompt:
-            print(self._prompt, flush=True)
         self.caught_terminator = False  # about this turn only; forget the last one
         self._flush_mic()
         segments = []  # transcribed text so far, one entry per pause-delimited chunk

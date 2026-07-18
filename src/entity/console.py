@@ -22,13 +22,20 @@ def _overwrite_flushed(text):
 
 
 class Console:
-    def __init__(self, *, echo=_print_flushed, overwrite=_overwrite_flushed, show_heard=True,
-                 thinking_notice="(thinking…)"):
+    def __init__(self, *, echo=_print_flushed, overwrite=_overwrite_flushed, voice=True,
+                 thinking_notice="(thinking…)", listening_notice="(listening… say 'over' when you're done)"):
         self._echo = echo
         self._overwrite = overwrite
-        self._show_heard = show_heard
+        # A voice run narrates the mic - "listening", and what it heard. A typed run needs neither:
+        # he has his own prompt and his own words on screen already.
+        self._voice = voice
         self._thinking_notice = thinking_notice
+        self._listening_notice = listening_notice
         self._ignored = 0  # length of the current run of ignored utterances, collapsed onto one line
+
+    def listening(self):
+        if self._voice:
+            self._line(self._listening_notice)
 
     def ignored(self):
         """It heard something while asleep and dropped it. A TV in the room can produce these all
@@ -47,7 +54,7 @@ class Console:
         self._echo(text)
 
     def heard(self, text):
-        if self._show_heard:  # off in text mode - he can see what he typed
+        if self._voice:
             self._line(f"you said: {text}")
 
     def thinking(self):

@@ -16,10 +16,11 @@ def test_heard_shows_what_he_said():
     assert lines == ["you said: turn on the lights"]
 
 
-def test_heard_is_silent_when_show_heard_is_off():
+def test_a_typed_run_narrates_neither_the_mic_nor_his_own_words():
     lines = []
-    console = Console(echo=lines.append, show_heard=False)  # text mode - he can see what he typed
+    console = Console(echo=lines.append, voice=False)  # he has his own prompt and his words on screen
 
+    console.listening()
     console.heard("typed input")
 
     assert lines == []

@@ -370,6 +370,8 @@ class Conversation:
             self._interrupt.clear()  # a fresh turn; forget any leftover "stop" from the last one
         self._deliver_outbox()  # say any queued agent news before we start listening again
         self._collect_background()  # a slow answer that has since landed is offered here
+        if not self._paused:  # asleep it's only watching for the wake word - don't claim otherwise
+            self._console.listening()
         heard = self._stt.listen()
         if not heard.strip():
             # An empty turn that still ended on "over" means he said only the terminator - let him

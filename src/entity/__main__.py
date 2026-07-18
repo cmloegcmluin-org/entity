@@ -29,13 +29,11 @@ from entity.memory import (
 )
 from entity.outbox import Outbox
 from entity.shutdown import consolidate
-from entity.startup import ScriptedFirstTurn, load_startup_instructions
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
 from entity.tts_system import NullTTS, SystemTTS
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
-STARTUP_INSTRUCTIONS = RUNTIME_DIR / "startup-instructions.txt"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 FLEET_LOGS = RUNTIME_DIR / "fleet-logs"  # one timestamped transcript per driving session
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
@@ -174,15 +172,6 @@ def main(argv=None):
     heartbeat = HeartbeatMonitor(sdk_brain, outbox)
     heartbeat.start()
     stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived)
-
-    # Standing kickoff: whatever he's dropped in the startup-instructions file becomes his first
-    # turn automatically, so he never retypes the same long instructions to get going.
-    first = load_startup_instructions(STARTUP_INSTRUCTIONS)
-    if first is not None:
-        print(f"(read your startup instructions from {STARTUP_INSTRUCTIONS})")
-    else:
-        print(f"(tip: drop standing startup instructions in {STARTUP_INSTRUCTIONS} to skip retyping them)")
-    stt = ScriptedFirstTurn(stt, first)
 
     tts = NullTTS() if muted else SystemTTS(rate=2)
 

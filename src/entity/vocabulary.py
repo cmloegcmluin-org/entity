@@ -38,12 +38,23 @@ def _normalize(name):
     return "".join(p.capitalize() for p in parts)
 
 
-def _closest(word, terms, threshold):
-    """The known term closest to `word` (case-insensitively), or None if nothing clears `threshold`."""
-    lowered = word.lower()
+def _letters(text):
+    """Just the letters and digits, lowercased - the form a term is compared in when the spaces
+    can't be trusted, so "Git Bash" and a run-together "GitMash" still line up."""
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _closest(word, candidates, threshold):
+    """The term closest to `word`, or None if nothing clears `threshold`. `candidates` are
+    (what to compare against, the term to hand back) pairs, so the caller decides whether the
+    comparison keeps the spaces or closes them up."""
     best, best_score = None, 0.0
-    for term in terms:
-        score = difflib.SequenceMatcher(None, lowered, term.lower()).ratio()
+    for compared, term in candidates:
+        # Strings this different in length can't clear the bar however well they line up
+        # (ratio <= 2*min/total), so skip the comparison rather than pay for it.
+        if 2 * min(len(word), len(compared)) < threshold * (len(word) + len(compared)):
+            continue
+        score = difflib.SequenceMatcher(None, word, compared).ratio()
         if score > best_score:
             best, best_score = term, score
     return best if best_score >= threshold else None
@@ -69,10 +80,15 @@ def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
     return terms
 
 
-def _match_at(tokens, start, by_length, longest, threshold):
+def _match_at(tokens, start, run_together, by_length, longest, threshold):
     """The (window size, term) of the LONGEST run of words at `start` that matches a known term, or
-    None. Longest-first so "Bayesian notation" wins over a stray one-word match inside it; a window
-    is only compared against terms of the same word count."""
+    None. Longest-first so "Bayesian notation" wins over a stray one-word match inside it.
+
+    A run of words is only compared against terms of the same word count - two ordinary words are
+    never glued into a coined name. A SINGLE token is the exception: it's compared against every
+    term with the spaces closed up, because speech-to-text routinely runs a two-word name together
+    ("Git Bash" comes back as the one word "GitMash") - and with only one token in play, there's no
+    neighbouring word for the term to wrongly swallow."""
     for size in range(min(longest, len(tokens) - start), 0, -1):
         window = tokens[start:start + size]
         if size > 1 and any(token[2].endswith(_SENTENCE_END) for token in window[:-1]):
@@ -80,7 +96,10 @@ def _match_at(tokens, start, by_length, longest, threshold):
         words = " ".join(token[1] for token in window if token[1])
         if not words:
             continue
-        match = _closest(words, by_length.get(size, ()), threshold)
+        if size == 1:
+            match = _closest(_letters(words), run_together, threshold)
+        else:
+            match = _closest(words.lower(), by_length.get(size, ()), threshold)
         if match is not None:
             return size, match
     return None
@@ -100,14 +119,17 @@ def correct_terms(text, terms, *, threshold=0.82):
     near-misses (his "hideas"/"notecraft" scores 0.86)."""
     if not text or not terms:
         return text
+    # Both comparison forms, built once: phrases matched word-for-word, and every term with its
+    # spaces closed up for the case where speech-to-text ran the whole name into one token.
     by_length = {}
     for term in terms:
-        by_length.setdefault(len(term.split()), []).append(term)
+        by_length.setdefault(len(term.split()), []).append((term.lower(), term))
+    run_together = [(_letters(term), term) for term in terms]
     tokens = [_SPLIT.match(token).groups() for token in text.split()]
     out = []
     index = 0
     while index < len(tokens):
-        found = _match_at(tokens, index, by_length, max(by_length), threshold)
+        found = _match_at(tokens, index, run_together, by_length, max(by_length), threshold)
         if found is None:
             prefix, word, suffix = tokens[index]
             out.append(f"{prefix}{word}{suffix}")

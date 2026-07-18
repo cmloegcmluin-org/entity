@@ -52,6 +52,13 @@ def test_a_multi_word_domain_term_is_corrected_as_a_phrase():
     assert correct_terms("his grey area residency", terms) == "his Gray Area residency"
 
 
+def test_a_two_word_term_run_together_into_one_token_is_still_corrected():
+    # Speech-to-text hears "Git Bash" as one word and writes its own compound for it. Comparing a
+    # one-token window only against one-word terms left that unfixable, however close it sounded.
+    assert correct_terms("pop open a GitMash tab", ["Git Bash"]) == "pop open a Git Bash tab"
+    assert correct_terms("open gitbash", ["Git Bash"]) == "open Git Bash"
+
+
 def test_a_phrase_is_not_glued_across_a_sentence_boundary():
     # "...the notation. Bayesian is..." must not collapse into one phrase.
     assert correct_terms("about notation. Bayesian is his", ["notation bayesian"]) == "about notation. Bayesian is his"

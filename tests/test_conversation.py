@@ -248,29 +248,36 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
     assert "the finished long-running answer" in tts.spoken
 
 
-def test_a_new_request_while_a_think_is_detached_is_deflected_not_run_concurrently():
-    # One brain, one session: a second brain call must NOT overlap the detached one.
+def test_talking_again_cancels_the_detached_call_instead_of_deflecting_him():
+    # He was bounced with a canned "still finishing your last one" every time he spoke, which threw
+    # his words away and locked him out of the conversation. His live turn outranks the stale call.
     release = threading.Event()
     calls = []
+    cancelled = []
 
     class SlowBrain:
         def respond(self, utterance):
             calls.append(utterance)
-            release.wait(2.0)
-            return "done"
+            if len(calls) == 1:
+                release.wait(2.0)  # the first call hangs until it's cancelled
+                return "stale"
+            return "fresh answer"
 
-    tts = FakeTTS()
+        def interrupt(self):
+            cancelled.append(True)
+            release.set()  # the real brain's interrupt frees the one session the same way
+
     convo = Conversation(
-        FakeSTT(["slow one", "what about this"]), SlowBrain(), tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30, busy_reply="BUSY",
+        FakeSTT(["slow one", "what about this"]), SlowBrain(), FakeTTS(),
+        acknowledgement="ACK", detach_after=0.05, patience=30,
     )
 
     convo.turn()  # detaches
-    second = convo.turn()  # a new ask while the first is still running
+    second = convo.turn()  # he speaks again while it's still running
 
-    assert second.said == "BUSY"  # deflected
-    assert calls == ["slow one"]  # the second request did not start a concurrent brain call
-    release.set()
+    assert cancelled == [True]  # the stale call was cancelled, not left to block him
+    assert second.said == "fresh answer"  # and his new turn actually got answered
+    assert calls == ["slow one", "what about this"]
 
 
 def test_a_finished_background_answer_wakes_a_lull():

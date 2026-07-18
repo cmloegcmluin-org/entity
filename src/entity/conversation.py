@@ -66,9 +66,6 @@ DEFAULT_CANCEL_WAIT = 10.0
 # only a genuinely long call detaches.
 DEFAULT_DETACH_AFTER = 45.0
 DEFAULT_DETACH_REPLY = "This one'll take me a while - I'll keep at it and let you know when it's ready."
-# One brain, one session: while a detached call is still running, a new request can't start a second
-# one, so it's deflected with this until the first lands.
-DEFAULT_BUSY_REPLY = "Still finishing your last one - give me a moment."
 
 # After a reply, wait this long before listening again, so he gets a beat to read it rather than the
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
@@ -159,7 +156,6 @@ class Conversation:
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
         ready_question=DEFAULT_READY_QUESTION,
         detach_reply=DEFAULT_DETACH_REPLY,
-        busy_reply=DEFAULT_BUSY_REPLY,
         acknowledgement=DEFAULT_ACK,
         reassurer=None,
         patience=DEFAULT_PATIENCE,
@@ -189,7 +185,6 @@ class Conversation:
         self.empty_turn_reply = empty_turn_reply
         self.ready_question = ready_question
         self.detach_reply = detach_reply
-        self.busy_reply = busy_reply
         self._long_answer_chars = long_answer_chars
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
@@ -402,10 +397,18 @@ class Conversation:
             return Turn(heard=heard, said=self.suspend_reply)
         if self._offered is not None:  # he's answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
-        if self._background is not None:  # a detached call is still running - one session, so wait it out
-            self._speak_reply(self.busy_reply)
-            return Turn(heard=heard, said=self.busy_reply)
+        if self._background is not None:
+            self._abandon_background()  # he's talking again - his live turn outranks the old call
         return self._answer(heard)
+
+    def _abandon_background(self):
+        """He spoke while a detached call was still running. There's only one session, so it can't
+        answer him until that call ends - and bouncing him with a canned "still finishing your last
+        one" threw his words away every time, which locked him out of the conversation entirely.
+        Cancel the stale call instead: what he's saying now always outranks work he's given up on."""
+        background = self._background
+        self._background = None
+        self._cancel_think(background["done"])  # unwind it before his turn starts a new call
 
     def _answer(self, heard):
         """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case

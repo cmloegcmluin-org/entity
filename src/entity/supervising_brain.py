@@ -4,12 +4,18 @@ The Entity has no special "fleet mode": it's one program, and driving agents is 
 the user asks for in conversation. The brain says so with a directive, this wrapper acts on it, and
 the user gets a short answer instead of the raw marker.
 
-  [SUPERVISE] <where>        start a fresh agent per worktree there
+  [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
+  <the task, any length>     following lines is the task that agent is given
   [TELL] <name>: <message>   say something more to an agent already running
 
-Both hand off to the AgentDesk and return AT ONCE. Nothing here waits on an agent: an agent that
-takes twenty minutes used to hold the whole conversation for twenty minutes, which is how the user
-ended up talking to a wall while it worked.
+The task travels WITH the directive on purpose. Without it the brain had no way to pass on what
+the user actually asked for, so it would go and work the request out for itself first - forty-five
+seconds of digging before a single word came back to him, on a request that should have been
+handed straight to an agent. Relaying his requirements needs no investigation: the agent does that.
+
+Both markers hand off to the AgentDesk and return AT ONCE. Nothing here waits on an agent: an
+agent that takes twenty minutes used to hold the whole conversation for twenty minutes, which is
+how the user ended up talking to a wall while it worked.
 """
 
 import os.path
@@ -29,18 +35,26 @@ _TELL = "[TELL]"
 
 
 def parse_supervise(reply):
-    """Pull the target out of a `[SUPERVISE] <where>` reply, or None if it isn't one."""
+    """Pull (where, task) out of a `[SUPERVISE] <where>` reply, or None if it isn't one.
+
+    The first line names the worktree; everything after it is the task for the agent, which is how
+    the user's own requirements reach it. No task lines means the caller's default task.
+    """
     if _SUPERVISE not in reply:
         return None
     after = reply.split(_SUPERVISE, 1)[1].strip()
-    return after.split("\n", 1)[0].strip() or None
+    target, _, task = after.partition("\n")
+    if not target.strip():
+        return None
+    return target.strip(), task.strip() or None
 
 
 def parse_tell(reply):
-    """Pull (agent name, message) out of a `[TELL] <name>: <message>` reply, or None."""
+    """Pull (agent name, message) out of a `[TELL] <name>: <message>` reply, or None. The message
+    runs to the end of the reply, so a correction can be as long as it needs to be."""
     if _TELL not in reply:
         return None
-    after = reply.split(_TELL, 1)[1].strip().split("\n", 1)[0]
+    after = reply.split(_TELL, 1)[1].strip()
     name, separator, message = after.partition(":")
     if not separator or not name.strip() or not message.strip():
         return None
@@ -76,16 +90,17 @@ class SupervisingBrain:
             if self._desk.send(name, message):
                 return f"Passed that to {name}."
             return f"I don't have an agent called {name} running."
-        target = parse_supervise(reply)
-        if target is None:
+        directive = parse_supervise(reply)
+        if directive is None:
             return reply
+        target, task = directive
         paths = self._resolve(target)
         if not paths:
             return "I couldn't find any sessions to drive there."
         for path in paths:
             if not Path(path).exists():  # new work means a new worktree, cut from current origin/main
                 self._prepare(path)
-            self._desk.start(Path(path).name, path, self._task)
+            self._desk.start(Path(path).name, path, task or self._task)
         count = len(paths)
         return f"Started {count} agent{'' if count == 1 else 's'}. I'll pass on whatever they say."
 

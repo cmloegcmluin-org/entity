@@ -37,15 +37,17 @@ def _brain(inner, desk, **kwargs):
     return SupervisingBrain(inner, desk, **kwargs)
 
 
-def test_parse_supervise_extracts_the_target():
-    assert parse_supervise("[SUPERVISE] ~/workspace/notecraft/.claude/worktrees") == "~/workspace/notecraft/.claude/worktrees"
-    assert parse_supervise("Sure. [SUPERVISE] /a, /b\nignored") == "/a, /b"
+def test_parse_supervise_extracts_the_target_and_the_task():
+    assert parse_supervise("[SUPERVISE] ~/wts\nFinish the WIP commits.\nTests green.") == (
+        "~/wts", "Finish the WIP commits.\nTests green.")
+    assert parse_supervise("Sure. [SUPERVISE] /a, /b") == ("/a, /b", None)  # no task lines -> default
     assert parse_supervise("Just chatting, no directive here.") is None
 
 
-def test_parse_tell_extracts_the_agent_and_the_message():
+def test_parse_tell_extracts_the_agent_and_the_whole_message():
     assert parse_tell("[TELL] fixer: only the subfolder, not the file") == ("fixer", "only the subfolder, not the file")
-    assert parse_tell("[TELL] fixer:   spaces trimmed  \nignored") == ("fixer", "spaces trimmed")
+    # A correction can run several lines - all of it is the message, none of it is dropped.
+    assert parse_tell("[TELL] fixer: first line\nand the rest of it") == ("fixer", "first line\nand the rest of it")
     assert parse_tell("[TELL] no colon here") is None
     assert parse_tell("nothing to see") is None
 
@@ -104,6 +106,32 @@ def test_a_supervise_directive_starts_an_agent_per_worktree_and_says_so():
     assert [name for name, _, _ in desk.started] == ["a", "b"]
     assert [cwd for _, cwd, _ in desk.started] == ["/work/trees/a", "/work/trees/b"]
     assert "2" in said  # tells the user it started two
+
+
+def test_the_task_the-user_gave_travels_with_the_directive_to_the_agent():
+    # Without this the brain had no way to pass his requirements on, so it went and worked the
+    # request out itself - 45 seconds of digging before he heard a word, on a pure relay.
+    desk = FakeDesk()
+    brain = _brain(
+        FakeInner("[SUPERVISE] /work/trees\nFinish the six WIP commits, get the tests green,\n"
+                  "and don't merge until the user has verified it himself."),
+        desk, resolve=lambda target: ["/work/trees/a"],
+    )
+
+    brain.respond("pick up the drive subfolder work")
+
+    _, _, task = desk.started[0]
+    assert "six WIP commits" in task and "verified it himself" in task  # his ask, not a canned task
+
+
+def test_a_directive_with_no_task_lines_falls_back_to_the_default_task():
+    desk = FakeDesk()
+    brain = _brain(FakeInner("[SUPERVISE] /work/trees"), desk,
+                   resolve=lambda target: ["/work/trees/a"], task="DEFAULT TASK")
+
+    brain.respond("resume it")
+
+    assert desk.started[0][2] == "DEFAULT TASK"
 
 
 def test_starting_agents_does_not_wait_for_any_of_them():

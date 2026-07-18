@@ -20,6 +20,7 @@ class FleetLog:
         self._clock = clock
         self._timefmt = timefmt
         self._lock = threading.Lock()
+        self._last_day = None  # the date the last line was written under, to mark day rollovers
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
     def entity(self, text):
@@ -31,12 +32,18 @@ class FleetLog:
         self._write(f"AGENT {name}", text)
 
     def _write(self, speaker, text):
-        stamp = self._clock().strftime(self._timefmt)
+        # The date lives in the filename and in a header written once per day; the lines themselves
+        # carry only the time, and a fresh header marks a session that runs past midnight.
+        now = self._clock()
+        stamp = now.strftime(self._timefmt)
         lines = str(text).splitlines() or [""]
-        block = "".join(f"[{stamp}] {speaker}: {line}\n" for line in lines)
+        body = "".join(f"[{stamp}] {speaker}: {line}\n" for line in lines)
         with self._lock:
             with open(self._path, "a", encoding="utf-8") as handle:
-                handle.write(block)
+                if now.date() != self._last_day:
+                    handle.write(f"===== {now.strftime('%Y-%m-%d')} =====\n")
+                    self._last_day = now.date()
+                handle.write(body)
 
 
 class NullFleetLog:

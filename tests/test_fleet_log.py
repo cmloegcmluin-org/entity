@@ -16,7 +16,7 @@ def ticking_clock(*times):
     return clock
 
 
-def test_entity_and_agent_lines_are_timestamped_and_labeled(tmp_path):
+def test_entity_and_agent_lines_are_timestamped_under_a_date_header(tmp_path):
     log_path = tmp_path / "session.log"
     clock = ticking_clock(datetime(2026, 7, 17, 8, 32, 1), datetime(2026, 7, 17, 8, 32, 45))
     log = FleetLog(log_path, clock=clock)
@@ -25,6 +25,7 @@ def test_entity_and_agent_lines_are_timestamped_and_labeled(tmp_path):
     log.agent("drive-link", "Found the bug in web.py.")
 
     assert log_path.read_text(encoding="utf-8") == (
+        "===== 2026-07-17 =====\n"  # the day, written once — lines below carry only the time
         "[08:32:01] ENTITY: Started 1 agent. I'll speak up when one needs you.\n"
         "[08:32:45] AGENT drive-link: Found the bug in web.py.\n"
     )
@@ -37,22 +38,37 @@ def test_every_line_of_a_multi_line_message_is_stamped(tmp_path):
     log.agent("a", "first line\nsecond line")
 
     assert log_path.read_text(encoding="utf-8") == (
+        "===== 2026-07-17 =====\n"
         "[09:00:00] AGENT a: first line\n"
         "[09:00:00] AGENT a: second line\n"
     )
 
 
-def test_writes_append_across_calls(tmp_path):
+def test_a_new_date_header_marks_a_session_running_past_midnight(tmp_path):
     log_path = tmp_path / "session.log"
-    log = FleetLog(log_path, clock=ticking_clock(datetime(2026, 7, 17, 1, 0, 0)))
+    clock = ticking_clock(datetime(2026, 7, 17, 23, 59, 0), datetime(2026, 7, 18, 0, 2, 0))
+    log = FleetLog(log_path, clock=clock)
+
+    log.entity("still going late")
+    log.agent("a", "past midnight now")
+
+    assert log_path.read_text(encoding="utf-8") == (
+        "===== 2026-07-17 =====\n"
+        "[23:59:00] ENTITY: still going late\n"
+        "===== 2026-07-18 =====\n"  # the day rolled over — you can tell without the filename
+        "[00:02:00] AGENT a: past midnight now\n"
+    )
+
+
+def test_the_date_header_is_not_repeated_within_the_same_day(tmp_path):
+    log_path = tmp_path / "session.log"
+    clock = ticking_clock(datetime(2026, 7, 17, 1, 0, 0), datetime(2026, 7, 17, 2, 0, 0))
+    log = FleetLog(log_path, clock=clock)
 
     log.entity("one")
     log.entity("two")
 
-    assert log_path.read_text(encoding="utf-8").splitlines() == [
-        "[01:00:00] ENTITY: one",
-        "[01:00:00] ENTITY: two",
-    ]
+    assert log_path.read_text(encoding="utf-8").count("=====") == 2  # one header (two ===== fences)
 
 
 def test_the_log_directory_is_created_if_missing(tmp_path):
@@ -69,7 +85,9 @@ def test_the_timestamp_format_is_configurable(tmp_path):
 
     log.entity("dated")
 
-    assert log_path.read_text(encoding="utf-8") == "[2026-07-17 08:05:09] ENTITY: dated\n"
+    assert log_path.read_text(encoding="utf-8") == (
+        "===== 2026-07-17 =====\n[2026-07-17 08:05:09] ENTITY: dated\n"
+    )
 
 
 def test_null_log_is_a_silent_no_op(tmp_path):

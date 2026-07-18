@@ -1,10 +1,12 @@
-import re
 import sys
 import threading
 import time
 from dataclasses import dataclass
 
 from entity.console import Console
+from entity.phrases import canonical as _canonical
+from entity.phrases import ends_with_command as _ends_with_command
+from entity.phrases import wakes as _wakes
 
 DEFAULT_FAREWELLS = (
     "goodbye entity",
@@ -33,9 +35,7 @@ DEFAULT_READY_QUESTION = "I've got a longer answer for you - ready for it?"
 # genuinely big reply should have to wait for a yes.
 DEFAULT_LONG_ANSWER_CHARS = 320
 
-# Whether he said yes to "ready for it?". A negative word anywhere vetoes it (so "okay, no" is a no);
-# otherwise any of the yes words counts. Deliberately generous on yes and strict on no - a false yes
-# just speaks something he half-wanted, a false no makes him repeat himself.
+# Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).
 _AFFIRMATIVES = (
     "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "ready", "please", "now",
     "go ahead", "go for it", "do it", "hit me", "hear it", "let's hear", "sounds good", "please do",
@@ -104,27 +104,6 @@ def _default_reassurance(seconds):
     # "processing your request", not "working on it" - the Entity triages and relays, it isn't doing
     # the agent's actual work, and he found "working on it" misleading.
     return f"Still processing your request - {_humanize_elapsed(seconds)} so far."
-
-
-def _canonical(text):
-    """Lowercase, strip punctuation, collapse whitespace — so 'Goodbye, Entity.' matches 'goodbye entity'."""
-    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
-
-
-def _ends_with_command(canonical, commands):
-    """A command counts if the utterance IS it or ENDS with it - so "okay, stop listening" trips
-    "stop listening", not just the bare phrase. (He rarely says these distinctive phrases by
-    accident, and transcription usually tacks a stray word on, which exact-match then missed.)"""
-    return any(canonical == cmd or canonical.endswith(" " + cmd) for cmd in commands)
-
-
-def _wakes(canonical, commands):
-    """A wake word also counts at the START. "Hey Entity, can you hear me?" is plainly him waking it,
-    but it ENDS on "hear me" - so an ends-with check left him saying it over and over until he
-    happened to say the bare phrase alone."""
-    return _ends_with_command(canonical, commands) or any(
-        canonical.startswith(cmd + " ") for cmd in commands
-    )
 
 
 # Words that flip the yes word right after them ("not now", "don't go ahead"). "t" is here because

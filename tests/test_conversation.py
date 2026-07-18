@@ -1029,3 +1029,37 @@ def test_what_he_hears_is_in_the_record_even_when_the_terminal_does_not_show_it(
 
     assert "ACK" in recorded  # spoken, deliberately not printed, still recorded
     assert recorded.count("entity> reply to hi\n") == 1  # and a printed reply isn't recorded twice
+
+
+def test_a_reply_cut_off_mid_utterance_is_noted_in_the_record():
+    # "You didn't say that aloud. You only wrote it on the screen." - the record showed the line as
+    # delivered, with nothing to say the voice was killed partway. Now the cut is on the record.
+    recorded = []
+    console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
+    interrupt = threading.Event()
+
+    class CutOffTTS:
+        def speak(self, text, *, interrupt=None):
+            interrupt.set()  # the watcher (or Enter) kills the utterance partway through
+
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), CutOffTTS(),
+                         acknowledgement="ACK", interrupt=interrupt, console=console)
+
+    convo.turn()
+
+    assert any("cut off" in line for line in recorded)
+
+
+def test_a_voice_failure_is_noted_in_the_record_not_lost_to_stderr():
+    recorded = []
+    console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
+
+    class BrokenTTS:
+        def speak(self, text, *, interrupt=None):
+            raise RuntimeError("powershell exploded")
+
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), BrokenTTS(), acknowledgement="ACK", console=console)
+
+    convo.turn()  # must not crash the loop
+
+    assert any("voice failed" in line and "powershell exploded" in line for line in recorded)

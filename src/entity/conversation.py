@@ -247,14 +247,18 @@ class Conversation:
         hiccup is logged, not fatal - a failed utterance must never crash the loop (it did, and he
         lost the whole run)."""
         if self._interrupted():
+            self._console.spoke("(left unsaid - he had cut in)")
             return
         if record:  # a line already printed records itself; this is for the ones only he hears
             self._console.spoke(text)
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
             self._tts.speak(text, interrupt=self._interrupt)
-        except Exception as exc:
-            print(f"[tts error] {exc!r}", file=sys.stderr)
+        except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
+            self._console.spoke(f"(voice failed: {exc!r})")
+        else:
+            if self._interrupted():  # the utterance was killed partway - the record must say so,
+                self._console.spoke("(cut off mid-utterance)")  # or a silenced line looks delivered
         finally:
             if stop_watching is not None:
                 stop_watching()

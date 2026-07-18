@@ -52,13 +52,27 @@ def test_parse_tell_extracts_the_agent_and_the_whole_message():
     assert parse_tell("nothing to see") is None
 
 
-def test_resolve_globs_a_worktrees_directory(tmp_path):
-    (tmp_path / "wt1").mkdir()
-    (tmp_path / "wt2").mkdir()
+def test_resolve_globs_a_worktrees_container_to_its_actual_worktrees(tmp_path):
+    for name in ("wt1", "wt2"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    (tmp_path / "junk").mkdir()  # no .git - not a worktree, so no agent belongs in it
 
     resolved = _resolve(str(tmp_path))
 
     assert sorted(Path(p).name for p in resolved) == ["wt1", "wt2"]
+
+
+def test_resolve_never_explodes_a_single_worktree_into_its_subdirectories(tmp_path):
+    # The brain named ONE worktree; globbing its subdirectories started an agent in .venv, one in
+    # docs, one in src... - a whole crowd working "the task" in folders that aren't worktrees at all.
+    worktree = tmp_path / "hungry-neumann"
+    worktree.mkdir()
+    (worktree / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    for name in (".venv", "docs", "src", "tests"):
+        (worktree / name).mkdir()
+
+    assert _resolve(str(worktree)) == [str(worktree)]  # one worktree, one agent
 
 
 def test_resolve_takes_explicit_comma_separated_paths():

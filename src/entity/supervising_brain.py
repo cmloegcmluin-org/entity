@@ -22,7 +22,7 @@ import os.path
 import re
 from pathlib import Path
 
-from entity.worktrees import find_worktrees, prepare_worktree_for
+from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
@@ -68,6 +68,8 @@ def _resolve(target):
     the explicit branch, so expand ~ there too or the agent's cwd would be a bogus literal.
     """
     expanded = str(Path(target).expanduser())
+    if is_worktree(expanded):
+        return [expanded]  # he named ONE worktree - never fan out into its subdirectories
     if Path(expanded).is_dir():
         return find_worktrees(expanded) or [expanded]
     # expanduser only (not full Path normalization) so plain paths pass through verbatim and only ~ resolves.

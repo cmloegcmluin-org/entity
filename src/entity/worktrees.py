@@ -9,12 +9,19 @@ import subprocess
 from pathlib import Path
 
 
+def is_worktree(path):
+    """A directory with a .git inside - a file in a linked worktree, a directory in a main checkout."""
+    return (Path(path).expanduser() / ".git").exists()
+
+
 def find_worktrees(directory):
-    """The immediate sub-directories of `directory` (each a worktree). Empty if it isn't a dir."""
+    """The worktrees directly inside `directory` - only real ones, recognised by their .git. A
+    worktree's OWN subdirectories (.venv, docs, src...) have no .git and must never count: treating
+    them as worktrees once put a separate agent to work inside each folder of a single worktree."""
     path = Path(directory).expanduser()
     if not path.is_dir():
         return []
-    return sorted(str(child) for child in path.iterdir() if child.is_dir())
+    return sorted(str(child) for child in path.iterdir() if child.is_dir() and is_worktree(child))
 
 
 def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin", run=subprocess.run):

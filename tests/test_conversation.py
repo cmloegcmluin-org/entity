@@ -854,3 +854,15 @@ def test_suspend_pauses_the_brain_until_resume():
     assert brain.heard == ["hi there"]  # nothing reached the brain while paused
     assert convo.suspend_reply in tts.spoken
     assert convo.resume_reply in tts.spoken
+
+
+def test_a_wake_word_with_words_after_it_still_wakes_it():
+    # "Hey Entity. Can you hear me?" ENDS on "hear me", so an ends-with check ignored him and he had
+    # to keep repeating himself until he said the bare phrase alone.
+    brain = FakeBrain()
+    stt = FakeSTT(["stop listening", "hey Entity, can you hear me?", "so about that bug", "goodbye entity"])
+    convo = Conversation(stt, brain, FakeTTS())
+
+    convo.run()
+
+    assert brain.heard == ["so about that bug"]  # it woke on the first try and took the next turn

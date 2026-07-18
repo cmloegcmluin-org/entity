@@ -114,6 +114,15 @@ def _ends_with_command(canonical, commands):
     return any(canonical == cmd or canonical.endswith(" " + cmd) for cmd in commands)
 
 
+def _wakes(canonical, commands):
+    """A wake word also counts at the START. "Hey Entity, can you hear me?" is plainly him waking it,
+    but it ENDS on "hear me" - so an ends-with check left him saying it over and over until he
+    happened to say the bare phrase alone."""
+    return _ends_with_command(canonical, commands) or any(
+        canonical.startswith(cmd + " ") for cmd in commands
+    )
+
+
 def _is_affirmative(heard):
     """Did he say yes to an offer? Any negative word veto-es it; otherwise any yes word counts."""
     canonical = _canonical(heard)
@@ -382,7 +391,7 @@ class Conversation:
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
         canonical = _canonical(heard)
         if self._paused:
-            if _ends_with_command(canonical, self._resumes):  # "hey entity" wakes it back up
+            if _wakes(canonical, self._resumes):  # "hey entity[, can you hear me?]" wakes it back up
                 self._paused = False
                 self._speak_reply(self.resume_reply)
                 return Turn(heard=heard, said=self.resume_reply)

@@ -1,5 +1,6 @@
-"""Run the Entity: `python -m entity` (speak to it).
+"""Run the Entity: `python -m entity` (speak to it), or double-click Entity.bat for the window.
 
+  --gui         a window instead of the terminal: live transcript + a STOP button
   --text        type instead of speaking
   --mute        show replies as text, don't speak them
   --no-timings  hide the per-turn think/speak readout (shown by default)
@@ -11,10 +12,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import Conversation
-from entity.agent_desk import AgentDesk
+from entity.gui import TranscriptFeed
 from entity.heartbeat import HeartbeatMonitor
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
@@ -119,7 +121,7 @@ def _agent_protocol_note(roster, logs):
     )
 
 
-def _build_ears(text_mode, stop, interrupt):
+def _build_ears(text_mode, stop, interrupt, announce=print):
     """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
     `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
     if text_mode:
@@ -136,7 +138,7 @@ def _build_ears(text_mode, stop, interrupt):
     # Bias transcription toward his own vocabulary so "Notecraft" stops coming back as "high ideas".
     terms = _vocab_terms()
     if terms:
-        print(f"(custom vocabulary: {len(terms)} of your terms, e.g. {', '.join(sorted(terms)[:3])})")
+        announce(f"(custom vocabulary: {len(terms)} of your terms, e.g. {', '.join(sorted(terms)[:3])})")
     transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms)
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
 
@@ -150,13 +152,13 @@ def _build_ears(text_mode, stop, interrupt):
         sd.query_devices(), probe_input_device, override=override, hostapi=hostapi
     )
     gain = _mic_gain()
-    print(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
+    announce(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
     # Capture on a background thread: keep draining the mic even while Parakeet is transcribing, so
     # nothing he says mid-transcription is lost to a PortAudio overflow.
     mic = BackgroundMicrophone(Microphone(device=device, gain=gain))
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
-    print(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
-    cue = lambda: print("  ✓ got it", flush=True)  # visual "registered" the instant you say "over"
+    announce(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
+    cue = lambda: announce("  ✓ got it")  # visual "registered" the instant you say "over"
     stt = MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder, interrupt=interrupt)
     return stt, mic, recorder
 
@@ -166,6 +168,17 @@ def main(argv=None):
     text_mode = "--text" in argv
     muted = "--mute" in argv
     timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
+    gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
+
+    # In a windowed run every startup line goes to the window's feed as well as stdout (which
+    # pythonw discards) - launched from Entity.bat there IS no terminal, so the window is the only
+    # place he can read that the mic was found, where the audio is saved, and so on.
+    feed = TranscriptFeed() if gui else None
+
+    def announce(line=""):
+        print(line, flush=True)
+        if feed is not None:
+            feed.push("line", line)
 
     # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
     # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
@@ -184,7 +197,7 @@ def main(argv=None):
     inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor)
     inbox_watcher.start()
 
-    print("Entity is waking up...")
+    announce("Entity is waking up...")
     persona = (
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
@@ -197,7 +210,7 @@ def main(argv=None):
     # it to the Outbox, so word from an agent reaches him the moment it lands, not only when he asks.
     heartbeat = HeartbeatMonitor(sdk_brain, outbox)
     heartbeat.start()
-    stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived)
+    stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived, announce)
 
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
@@ -212,17 +225,20 @@ def main(argv=None):
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up
             barge_in.set()
 
-    if not text_mode:
+    if not text_mode and not gui:  # the window binds Enter itself, and pythonw has no stdin
         threading.Thread(target=watch_keys, daemon=True).start()
 
     if text_mode:
-        print("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
+        announce("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
+    elif gui:
+        announce("Entity is here. Speak, and say 'over' when you finish each turn.")
+        announce("STOP (or Enter) cuts it off. Close the window, or say 'goodbye entity over', to quit.")
     else:
-        print("Entity is here. Speak, and say 'over' when you finish each turn.")
-        print("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
+        announce("Entity is here. Speak, and say 'over' when you finish each turn.")
+        announce("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
     if muted:
-        print("(muted: replies are shown, not spoken)")
-    print()
+        announce("(muted: replies are shown, not spoken)")
+    announce()
 
     if not text_mode and not muted:
         tts.speak("I'm ready. What can I do for you?")  # say out loud that startup finished
@@ -240,42 +256,71 @@ def main(argv=None):
     # Keep the same lines the terminal shows, timestamped, so a session that went wrong can be read
     # back afterwards instead of the user having to copy his scrollback out by hand.
     session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
-    print(f"(this conversation is being written to {session_record.path})\n")
-    console = Console(voice=not text_mode, record=session_record.write)
+    announce(f"(this conversation is being written to {session_record.path})\n")
+    if gui:
+        # The window plugs into the same Console seams the terminal uses - one source of truth for
+        # what a session looks like, whichever surface shows it.
+        console = Console(voice=True, record=session_record.write,
+                          echo=lambda t: feed.push("line", t),
+                          overwrite=lambda t: feed.push("overwrite", t))
+    else:
+        console = Console(voice=not text_mode, record=session_record.write)
 
-    try:
-        Conversation(
-            stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
-            console=console, read_pause=read_pause, timings=timings,
-        ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
-    except KeyboardInterrupt:
-        stop.set()
-    finally:
-        inbox_watcher.stop()
-        heartbeat.stop()
-        desk.close()
-        if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
-            if not text_mode and not muted:
+    def converse():
+        try:
+            Conversation(
+                stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
+                console=console, read_pause=read_pause, timings=timings,
+            ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
+        except KeyboardInterrupt:
+            stop.set()
+        finally:
+            inbox_watcher.stop()
+            heartbeat.stop()
+            desk.close()
+            if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
+                if not text_mode and not muted:
+                    try:
+                        tts.speak("Be seeing you.")
+                    except Exception:
+                        pass
+                announce("Be seeing you.")
+            if had_conversation:  # remember what it learned - bounded so a slow model can't hang the exit
                 try:
-                    tts.speak("Be seeing you.")
+                    append_learned(consolidate(brain))
                 except Exception:
                     pass
-            print("Be seeing you.")
-        if had_conversation:  # remember what it learned - bounded so a slow model can't hang the exit
-            try:
-                append_learned(consolidate(brain))
-            except Exception:
-                pass
-        for closer in (
-            brain.close,
-            mic.close if mic is not None else None,
-            recorder.close if recorder is not None else None,
-        ):
-            try:
-                if closer is not None:
-                    closer()
-            except Exception:
-                pass
+            for closer in (
+                brain.close,
+                mic.close if mic is not None else None,
+                recorder.close if recorder is not None else None,
+            ):
+                try:
+                    if closer is not None:
+                        closer()
+                except Exception:
+                    pass
+
+    if not gui:
+        converse()
+        return
+    # Windowed: the conversation runs on a worker; Tk owns the main thread. Closing the window asks
+    # the loop to stop (the mic checks `stop` every frame), and once the worker has wound all the
+    # way down - goodbye said, memory consolidated - `done` lets the window end itself.
+    from entity.gui import EntityWindow
+
+    done = threading.Event()
+
+    def worker():
+        try:
+            converse()
+        finally:
+            done.set()
+
+    window = EntityWindow(feed, on_stop=barge_in.set, on_close=stop.set)
+    window.close_when(done)
+    threading.Thread(target=worker, daemon=True).start()
+    window.run()
 
 
 if __name__ == "__main__":

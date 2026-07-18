@@ -69,6 +69,12 @@ class Console:
     def reply(self, text):
         self._line(f"entity> {text}\n")  # trailing blank line separates turns in the transcript
 
+    def spoke(self, text):
+        """Something he HEARD that the terminal deliberately doesn't show - the acknowledgement, the
+        still-working check-ins. It still belongs in the record: reading a session back and seeing no
+        check-ins made it look like none had fired, when he had actually heard every one."""
+        self._line(text, show=False)
+
     def dropped(self):
         """A long call that had been left running was cancelled so he could be answered instead.
         He was promised an answer that then never came; at minimum the record says why."""

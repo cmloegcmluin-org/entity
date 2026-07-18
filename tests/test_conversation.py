@@ -978,3 +978,16 @@ def test_it_does_not_claim_to_be_listening_while_it_is_asleep():
     convo.turn()
 
     assert not any("(listening" in line for line in lines)
+
+
+def test_what_he_hears_is_in_the_record_even_when_the_terminal_does_not_show_it():
+    # Reading a session back and seeing no check-ins made it look like none fired, when in fact he
+    # had heard them - the record has to hold everything he heard, printed or not.
+    recorded = []
+    console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), acknowledgement="ACK", console=console)
+
+    convo.turn()
+
+    assert "ACK" in recorded  # spoken, deliberately not printed, still recorded
+    assert recorded.count("entity> reply to hi\n") == 1  # and a printed reply isn't recorded twice

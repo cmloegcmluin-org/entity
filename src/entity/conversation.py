@@ -216,7 +216,7 @@ class Conversation:
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
 
-    def _say(self, text):
+    def _say(self, text, *, record=True):
         """Speak, unless he's cut in. Once the interrupt is set, every later line this turn stays
         unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
         watcher listens for him saying "stop", which trips the same interrupt - so he can cut it off
@@ -226,6 +226,8 @@ class Conversation:
         lost the whole run)."""
         if self._interrupted():
             return
+        if record:  # a line already printed records itself; this is for the ones only he hears
+            self._console.spoke(text)
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
             self._tts.speak(text, interrupt=self._interrupt)
@@ -238,9 +240,9 @@ class Conversation:
     def _speak_reply(self, text):
         """Print the line to the terminal, then speak it - so he can read the reply as it's said,
         not only hear it go by. Used for whatever a turn returns as its `said`; the ack and check-ins
-        stay terminal-silent."""
+        stay off the terminal, though the record keeps them."""
         self._console.reply(text)
-        self._say(text)
+        self._say(text, record=False)
 
     def _pause_to_read(self):
         """A short beat after a reply before the mic reopens, so he isn't rushed off it - skipped if
@@ -283,7 +285,7 @@ class Conversation:
             return
         for message in self._outbox.drain():
             self._console.heads_up(message)  # to the terminal too, not only spoken
-            self._say(message)
+            self._say(message, record=False)
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first

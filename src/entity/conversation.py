@@ -205,9 +205,6 @@ class Conversation:
         self._paused = False
         self._floor_watched = False  # true while a stop-watcher already holds the mic (see _say)
 
-    def _is_farewell(self, heard):
-        return _ends_with_command(_canonical(heard), self._farewells)
-
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
 
@@ -380,17 +377,21 @@ class Conversation:
             if getattr(self._stt, "caught_terminator", False):
                 self._say(self.empty_turn_reply)
             return None
+        canonical = _canonical(heard)
+        farewell = _ends_with_command(canonical, self._farewells)
+        if self._paused and not farewell and not _wakes(canonical, self._resumes):
+            # Asleep, and it's neither a wake word nor a goodbye - so it's the TV, or someone else in
+            # the room. Don't transcribe it back at him; just show that it landed and was dropped.
+            self._console.ignored()
+            return None
         self._console.heard(heard)  # show what was transcribed before we act on it
-        if self._is_farewell(heard):
+        if farewell:
             self._speak_reply(self.farewell_reply)
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
-        canonical = _canonical(heard)
-        if self._paused:
-            if _wakes(canonical, self._resumes):  # "hey entity[, can you hear me?]" wakes it back up
-                self._paused = False
-                self._speak_reply(self.resume_reply)
-                return Turn(heard=heard, said=self.resume_reply)
-            return None  # while asleep, ignore everything except a wake word (and farewell above)
+        if self._paused:  # a wake word - the only other thing that gets through
+            self._paused = False
+            self._speak_reply(self.resume_reply)
+            return Turn(heard=heard, said=self.resume_reply)
         if _ends_with_command(canonical, self._suspends):  # "stop listening" puts it to sleep, doesn't quit
             self._paused = True
             self._speak_reply(self.suspend_reply)

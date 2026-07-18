@@ -888,3 +888,19 @@ def test_agent_news_still_reaches_him_while_it_is_asleep():
     convo.turn()  # his words are ignored while asleep, but the news is not
 
     assert "the auth agent is blocked on you" in tts.spoken
+
+
+def test_what_it_hears_while_asleep_is_counted_not_transcribed_at_him():
+    # Asleep it still transcribes, but only to catch the wake word. Echoing a TV's dialogue back at
+    # him all evening is noise; a collapsing count says "heard you, ignoring you" without the scroll.
+    lines = []
+    console = Console(echo=lines.append, overwrite=lines.append)
+    convo = Conversation(FakeSTT(["stop listening", "some TV dialogue", "more TV dialogue", "goodbye entity"]),
+                         FakeBrain(), FakeTTS(), console=console)
+
+    convo.turn()  # "stop listening" - now asleep
+    convo.turn()
+    convo.turn()
+
+    assert not any("TV dialogue" in line for line in lines)  # never echoed back at him
+    assert lines[-1] == "\r(ignoring… 2x)"  # just a tally that ticks up in place

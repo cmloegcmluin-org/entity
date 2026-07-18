@@ -35,6 +35,7 @@ from entity.tts_system import NullTTS, SystemTTS
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
+AGENT_LOGS = RUNTIME_DIR / "agent-logs"  # one timestamped exchange log per agent, written by the desk
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
@@ -87,7 +88,7 @@ def _agent_inbox_note(inbox):
     )
 
 
-def _agent_protocol_note(roster):
+def _agent_protocol_note(roster, logs):
     """Persona lines for the ONE way it should start and talk to coding agents.
 
     Without this the brain never emitted the directive at all: it fell back to spawning detached
@@ -110,7 +111,11 @@ def _agent_protocol_note(roster):
         "who's live, especially after any gap in your memory - it is the truth, and it survives you. "
         "Do NOT start coding agents with your own Agent/Task tool: those hand back an id you can "
         "never talk to again, and you have already lost four agents that way. Never wait on an agent "
-        "either - starting one comes straight back, and whatever it says reaches the user on its own."
+        "either - starting one comes straight back, and whatever it says reaches the user on its own. "
+        f"Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log - "
+        "when the user wants to watch a conversation, open a Git Bash window tailing THAT file "
+        "(tail -f), AFTER dispatching. Never hand-write your own log of the exchange; the desk "
+        "already keeps the real one."
     )
 
 
@@ -184,7 +189,7 @@ def main(argv=None):
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
         + _fresh_worktree_note()
-        + _agent_protocol_note(ACTIVE_AGENTS)
+        + _agent_protocol_note(ACTIVE_AGENTS, AGENT_LOGS)
     )
     sdk_brain = SdkBrain(persona=persona)
     sdk_brain.warmup()
@@ -200,7 +205,7 @@ def main(argv=None):
     # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
     # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
     # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
-    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS)
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS)
     brain = SupervisingBrain(sdk_brain, desk)
 
     def watch_keys():

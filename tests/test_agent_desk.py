@@ -131,6 +131,36 @@ def test_the_roster_on_disk_says_who_is_live_and_what_they_are_doing(tmp_path):
     desk.close()
 
 
+def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
+    # "still no timestamps in the logs": the tailable record of what the Entity and an agent said
+    # to each other, stamped, written by the desk itself as it happens - not left to the brain to
+    # hand-author in whatever format it invents that day.
+    outbox = Outbox()
+    made = []
+
+    def factory(name, cwd, decide):
+        agent = FakeAgent(name, cwd, decide)
+        made.append(agent)
+        return agent
+
+    desk = AgentDesk(outbox, agent_factory=factory, log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+    assert _wait_for(lambda: bool(outbox))
+    desk.send("fixer", "only the subfolder")
+    assert _wait_for(lambda: len(outbox.drain()) >= 0 and len(made[0].messages) == 2)
+    assert _wait_for(lambda: "only the subfolder" in (tmp_path / "fixer.log").read_text(encoding="utf-8"))
+    desk.close()
+
+    log = (tmp_path / "fixer.log").read_text(encoding="utf-8")
+    assert "ENTITY> fix the drive link" in log
+    assert "AGENT> [fixer] did: fix the drive link" in log
+    assert "ENTITY> only the subfolder" in log
+    for line in log.splitlines():
+        if line.startswith("====="):
+            continue
+        assert line.startswith("["), f"unstamped line: {line!r}"  # every line carries its time
+
+
 def test_closing_the_desk_shuts_its_agents_down():
     desk, outbox, made = _desk()
     desk.start("fixer", "/tmp/wt", "a task")

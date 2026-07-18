@@ -12,30 +12,37 @@ whatever the agent says back is pushed to the Outbox for the conversation to del
 natural moment. The conversation never waits on an agent again.
 
 The roster is written to a file as agents come and go, so the brain - which can read files but
-can't reach into this process - can always see who it has running.
+can't reach into this process - can always see who it has running. And every exchange goes into a
+timestamped per-agent log the desk writes itself (log_dir/<name>.log) - the file the user tails to
+watch a conversation happen, which used to be hand-authored by the brain in whatever format it
+invented that day, with no timestamps.
 """
 
 import threading
 import time
 from pathlib import Path
 
+from entity.transcript import Transcript
+
 
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
-    def __init__(self, agent, cwd, task):
+    def __init__(self, agent, cwd, task, log):
         self.agent = agent
         self.cwd = cwd
         self.task = task
+        self.log = log  # the timestamped exchange log the user can tail, or None
         self.state = "starting"
         self.last_word = None  # the last thing it said back, trimmed for the roster
 
 
 class AgentDesk:
-    def __init__(self, outbox, *, agent_factory=None, roster_path=None, clock=time.strftime):
+    def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None, clock=time.strftime):
         self._outbox = outbox
         self._factory = agent_factory or _real_agent
         self._roster_path = Path(roster_path) if roster_path else None
+        self._log_dir = Path(log_dir) if log_dir else None
         self._clock = clock
         self._desked = {}
         self._lock = threading.Lock()
@@ -46,7 +53,7 @@ class AgentDesk:
         the Outbox when it lands."""
         agent = self._factory(name, cwd, self._decide)
         with self._lock:
-            self._desked[name] = _Desked(agent, cwd, task)
+            self._desked[name] = _Desked(agent, cwd, task, self._open_log(name))
         self._dispatch(name, task)
 
     def send(self, name, message):
@@ -80,6 +87,9 @@ class AgentDesk:
         unattended, so it goes through too - but the desk is where that policy lives if it changes."""
         return True
 
+    def _open_log(self, name):
+        return Transcript(self._log_dir / f"{name}.log") if self._log_dir is not None else None
+
     def _dispatch(self, name, message):
         thread = threading.Thread(target=self._carry, args=(name, message), daemon=True)
         self._threads.append(thread)
@@ -91,15 +101,22 @@ class AgentDesk:
             entry = self._desked.get(name)
         if entry is None:  # closed out from under us
             return
+        self._log(entry, message, prefix="ENTITY> ")
         self._set_state(name, "working")
         try:
             reply = entry.agent.work(message)
         except Exception as exc:  # a dead agent is news, not something to swallow
+            self._log(entry, f"(died: {exc})", prefix="AGENT> ")
             self._set_state(name, "failed")
             self._outbox.push(f"The {name} agent died: {exc}")
             return
+        self._log(entry, reply, prefix="AGENT> ")
         self._set_state(name, "idle", last_word=reply)
         self._outbox.push(f"{name}: {reply}")
+
+    def _log(self, entry, text, *, prefix):
+        if entry.log is not None:
+            entry.log.write(text, prefix=prefix)
 
     def _set_state(self, name, state, *, last_word=None):
         with self._lock:

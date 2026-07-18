@@ -225,6 +225,34 @@ def test_the_floor_follows_the_room_back_down():
     assert floor.is_speech(0.009) is True  # the bar came down with it
 
 
+def test_a_steady_room_tone_over_a_stale_low_floor_settles_back_to_quiet():
+    # The 16:30 session, replayed from its real audio: deep silence between his words dragged the
+    # floor to its minimum, after which the room's ordinary tone (fan + PC hum, ~4x the stale floor)
+    # read as endless "speech" - the pause never fired, "Stop listening. Over." was never absorbed,
+    # and the session hung deaf inside the turn. A tone that IS the room now becomes the floor.
+    floor = NoiseFloor()
+    floor.is_speech(0.001)
+    for _ in range(60):
+        floor.is_speech(0.0008)  # deep silence between words - the floor ratchets to its minimum
+    for _ in range(150):
+        result = floor.is_speech(0.003)  # the room's steady tone, well over 2.5x the stale floor
+    assert result is False  # the steady tone became the new quiet, so a pause can fire again
+    assert floor.is_speech(0.009) is True  # his voice still clears the recalibrated bar
+
+
+def test_real_speech_with_dips_does_not_drag_the_floor_up_to_itself():
+    # The pull-up must never eat his voice: real talking always lets up somewhere within the
+    # window, and that dip keeps the rolling minimum - and so the floor - down at the true quiet.
+    floor = NoiseFloor()
+    floor.is_speech(0.002)
+    for _ in range(30):
+        floor.is_speech(0.002)  # settled room
+    for cycle in range(30):  # a long stretch of talking: bursts with brief inter-word dips
+        for _ in range(20):
+            assert floor.is_speech(0.03) is True  # loud speech stays speech throughout
+        floor.is_speech(0.003)  # a between-words dip
+
+
 def test_digital_silence_cannot_set_an_absurdly_low_bar():
     floor = NoiseFloor()
     floor.is_speech(0.0)

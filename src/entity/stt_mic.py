@@ -18,6 +18,7 @@ whatever the mic's level is.
 """
 
 import re
+from collections import deque
 
 import numpy as np
 
@@ -26,6 +27,7 @@ PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "ov
 SPEECH_RATIO = 2.5  # this many times the room's quiet level counts as speech
 FLOOR_MIN = 0.0008  # the floor never drops below this, so digital silence can't set an absurd bar
 FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
+RECENT_WINDOW = 100  # ~3 s of levels; their minimum pulls a stale floor back UP (see NoiseFloor)
 
 # Parakeet hallucinates little backchannel words on near-silence - a quiet stretch comes back as
 # "Mm-hmm. Yeah. Uh." though he said nothing. A chunk that's ONLY these (and has no terminator) is
@@ -76,18 +78,33 @@ class NoiseFloor:
     compare against). After that, a frame is speech if it's SPEECH_RATIO times the floor; every
     non-speech frame nudges the floor toward its level, so the bar follows the room - up when a fan
     kicks in, down when things settle - and never assumes anything about the mic's absolute level.
+
+    One trap that adapting only on quiet frames sets: deep silence ratchets the floor to its
+    minimum, and then the room's ordinary steady tone reads as endless "speech" - the floor can
+    never climb back up, because "speech" frames don't feed it. That deafness is real (a whole
+    session hung inside one turn, its pause never firing). So the QUIETEST level seen over the last
+    few seconds also drags the floor up - gradually, at the same EMA pace it falls, never a jump:
+    real speech always lets up somewhere in a few seconds, so its dips keep the minimum honest,
+    while a tone that never once let up for that long isn't someone talking, it's the room.
     """
 
-    def __init__(self, ratio=SPEECH_RATIO, adapt=FLOOR_ADAPT, floor_min=FLOOR_MIN):
+    def __init__(self, ratio=SPEECH_RATIO, adapt=FLOOR_ADAPT, floor_min=FLOOR_MIN, window=RECENT_WINDOW):
         self._ratio = ratio
         self._adapt = adapt
         self._floor_min = floor_min
+        self._recent = deque(maxlen=window)  # every recent level, speech or not
         self._level = None
 
     def is_speech(self, level):
         if self._level is None:
             self._level = max(level, self._floor_min)
             return False
+        self._recent.append(level)
+        if len(self._recent) == self._recent.maxlen:
+            quietest = min(self._recent)
+            if quietest > self._level:  # even the window's quietest moment beats the floor: the
+                # room itself got louder - drift up toward its quietest, at the usual EMA pace
+                self._level = self._level + (quietest - self._level) * self._adapt
         if level >= self._level * self._ratio:
             return True
         self._level = max(self._level + (level - self._level) * self._adapt, self._floor_min)

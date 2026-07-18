@@ -5,7 +5,6 @@
   --no-timings  hide the per-turn think/speak readout (shown by default)
 """
 
-import re
 import signal
 import sys
 import threading
@@ -15,8 +14,7 @@ from pathlib import Path
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import Conversation
-from entity.fleet_io import ConsoleFleetIO, VoiceFleetIO
-from entity.fleet_log import FleetLog
+from entity.agent_desk import AgentDesk
 from entity.heartbeat import HeartbeatMonitor
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
@@ -36,20 +34,13 @@ from entity.tts_system import NullTTS, SystemTTS
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
-FLEET_LOGS = RUNTIME_DIR / "fleet-logs"  # one timestamped transcript per driving session
+ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for his project names
 WORKSPACE = Path.home() / "workspace"  # his main project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entity flags it to the user
-
-
-def _make_fleet_log(target):
-    """A fresh timestamped transcript for one driving session, named after what the user asked to drive."""
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(target).name).strip("-") or "session"
-    return FleetLog(FLEET_LOGS / f"{slug}-{stamp}.log")
 
 
 def _fresh_worktree_note():
@@ -93,6 +84,27 @@ def _agent_inbox_note(inbox):
         f"write anything it needs from the user (a question, or that it's ready for review) as a single "
         f"line to {inbox}\\<a-short-agent-name>.txt. the user can't watch the agents' screens, so that "
         "inbox is the only way he hears from them - always set it up when you delegate."
+    )
+
+
+def _agent_protocol_note(roster):
+    """Persona lines for the ONE way it should start and talk to coding agents.
+
+    Without this the brain never emitted the directive at all: it fell back to spawning detached
+    background agents with its own Agent tool, which hand back an id and nothing else - four in a
+    row went unreachable, and its own context resets stranded the rest. The desk keeps each agent
+    as a live session it can always reach, and the roster is a file, so a reset can't lose them.
+    """
+    return (
+        " HOW TO PUT AN AGENT ON WORK - use this and nothing else. To start one, make your ENTIRE "
+        "reply `[SUPERVISE] <absolute path to the worktree>`; the user hears a short confirmation, not "
+        "the marker. To say something more to an agent that's already running - a correction, an "
+        "answer, a follow-up question - make your ENTIRE reply `[TELL] <agent name>: <your message>`. "
+        f"The agents you have running are listed in {roster}; READ that file whenever you're unsure "
+        "who's live, especially after any gap in your memory - it is the truth, and it survives you. "
+        "Do NOT start coding agents with your own Agent/Task tool: those hand back an id you can "
+        "never talk to again, and you have already lost four agents that way. Never wait on an agent "
+        "either - starting one comes straight back, and whatever it says reaches the user on its own."
     )
 
 
@@ -166,6 +178,7 @@ def main(argv=None):
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
         + _fresh_worktree_note()
+        + _agent_protocol_note(ACTIVE_AGENTS)
     )
     sdk_brain = SdkBrain(persona=persona)
     sdk_brain.warmup()
@@ -177,12 +190,12 @@ def main(argv=None):
 
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
-    # Driving a fleet is just something you ask the Entity to do in conversation: this wrapper
-    # catches a "[SUPERVISE] ..." directive from the brain and runs the agents through the same voice.
-    # Each session gets a fresh timestamped transcript; a worktree it names but that doesn't exist yet
-    # is cut fresh from current origin/main (supervise's default) before the agent starts.
-    fleet_io = ConsoleFleetIO() if text_mode else VoiceFleetIO(speak=tts.speak, listen=stt.listen)
-    brain = SupervisingBrain(sdk_brain, fleet_io, make_log=_make_fleet_log)
+    # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
+    # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
+    # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
+    # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS)
+    brain = SupervisingBrain(sdk_brain, desk)
 
     def watch_keys():
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up
@@ -229,6 +242,7 @@ def main(argv=None):
     finally:
         inbox_watcher.stop()
         heartbeat.stop()
+        desk.close()
         if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
             if not text_mode and not muted:
                 try:

@@ -4,7 +4,7 @@ The terminal is where the conversation actually appears, and it scrolls away - s
 goes wrong the only record of what the user saw was the user copying it out of his terminal by hand.
 This writes the same lines to a file as they're printed, stamped with the time, so a session can be
 read back afterwards. The clock is injected so tests are deterministic; writes are locked because
-the fleet's worker threads and the conversation loop both log.
+background workers and the conversation loop both log.
 """
 
 import threading

@@ -158,6 +158,31 @@ def test_catch_stop_ignores_ordinary_speech():
     assert stt.catch_stop(lambda: True) is False  # not a stop word, so it lets the reply run
 
 
+def test_catch_stop_ignores_a_stop_word_buried_in_flowing_speech():
+    # From the real session: the TV said "Wait, what do you do about it?" while the Entity was
+    # speaking, and the buried "wait" silently killed the utterance - he was then told an offer
+    # "on the screen only" that was in fact spoken and cut off at the first syllable. A deliberate
+    # stop is a BARK; a stop word inside a sentence is the room, not him.
+    mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("Wait, what do you do about it?"), mic, pause_frames=3)
+
+    assert stt.catch_stop(lambda: True) is False
+
+
+def test_catch_stop_ignores_words_that_merely_contain_a_stop_word():
+    mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("the waiter stopped by"), mic, pause_frames=3)
+
+    assert stt.catch_stop(lambda: True) is False  # "waiter"/"stopped" are not "wait"/"stop"
+
+
+def test_catch_stop_still_fires_on_a_short_emphatic_bark():
+    mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
+    stt = MicSTT(FakeTranscriber("okay stop stop"), mic, pause_frames=3)
+
+    assert stt.catch_stop(lambda: True) is True  # short and pointed - that's him, cutting in
+
+
 def test_catch_stop_gives_up_the_moment_the_reply_finishes():
     ticks = {"n": 0}
 

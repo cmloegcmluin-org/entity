@@ -47,6 +47,18 @@ def rms(frame):
     return float(np.sqrt(np.mean(frame * frame)))
 
 
+def _is_stop_bark(text, words):
+    """A deliberate stop is a BARK: one short burst that is essentially just the stop word
+    ("stop", "okay stop stop"). A stop word buried in a flowing sentence is the TV or the room -
+    matching those silently killed the Entity's own speech mid-utterance, which read to the user as
+    it never speaking at all. Whole words only, and no more than a few of them."""
+    said = [w for w in re.findall(r"[a-z]+", text.lower())]
+    if not said or len(said) > 3:
+        return False
+    canonical = " ".join(said)
+    return any(re.search(rf"\b{word}\b", canonical) for word in words)
+
+
 def _is_backchannel(text, terminator):
     """True if the chunk is nothing but hallucinated filler words - and doesn't carry the terminator,
     so a real 'yeah, over' still ends the turn."""
@@ -177,9 +189,9 @@ class MicSTT:
     def catch_stop(self, active, words=STOP_WORDS):
         """While `active()` is true - i.e. the Entity is talking - listen for him barking a stop
         word and return True the moment one lands, so the caller can cut the voice off. Returns
-        False when `active()` goes false (the reply finished on its own). Keyword-only, so the
-        Entity's own voice bleeding into the mic rarely trips it - the reply would have to contain
-        one of these words."""
+        False when `active()` goes false (the reply finished on its own). Bark-only (see
+        _is_stop_bark), so neither the Entity's own voice bleeding into the mic nor a TV sentence
+        that happens to contain "wait" can silence the reply."""
         floor = NoiseFloor()  # its own room-level, independent of a listen() in progress
         self._flush_mic()  # watch only what he says over the reply, not audio buffered before it
         chunk = []
@@ -196,9 +208,8 @@ class MicSTT:
                     continue
             chunk.append(frame)
             silence = 0 if speech else silence + 1
-            if silence >= self._pause_frames:  # a burst ended - was it a stop word?
-                said = self._transcriber.transcribe(np.concatenate(chunk)).lower()
-                if any(word in said for word in words):
+            if silence >= self._pause_frames:  # a burst ended - was it a stop bark?
+                if _is_stop_bark(self._transcriber.transcribe(np.concatenate(chunk)), words):
                     return True
                 chunk, started, silence = [], False, 0  # not a stop; keep watching
         return False

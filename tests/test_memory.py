@@ -9,6 +9,7 @@ from entity.memory import (
     load_lexicon,
     load_profile,
     parse_facts,
+    user_name,
 )
 
 
@@ -42,6 +43,27 @@ def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
     # and it is NOT only his coined names: the domain terms of his fields belong here too, so the
     # framing must invite those rather than reading as "words the user made up"
     assert "domain" in out.lower()
+
+
+def test_the_user_is_named_by_the_title_of_their_own_profile():
+    # The name is the user's, so it lives in the user's file - never in the source.
+    assert user_name("# Ada - standing profile\n\n41, lives in Lyon.\n") == "Ada"
+    assert user_name("# Ada\n") == "Ada"
+
+
+def test_a_user_with_no_profile_is_addressed_neutrally():
+    # A fresh checkout has no profile yet; the persona still has to read as sentences.
+    assert user_name("") == "the user"
+    assert user_name("no heading here\n") == "the user"
+
+
+def test_the_persona_is_addressed_to_whoever_the_profile_names():
+    # The persona ships with a placeholder, never a name: composing it against a profile is what
+    # decides who the Entity is for, so one source serves any user.
+    out = compose_persona("You are {user}'s companion.", "# Ada - standing profile\n\nintro\n")
+
+    assert "You are Ada's companion." in out
+    assert "{user}" not in out
 
 
 def test_load_profile_returns_empty_when_missing(tmp_path):

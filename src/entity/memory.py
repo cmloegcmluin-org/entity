@@ -28,17 +28,20 @@ DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
 # checkout could never reach the other machine.
 DEFAULT_LEXICON_PATH = Path.home() / "Notecraft" / "state" / "lexicon.md"
 
+# `{user}` is filled in from the profile's own title line by `compose_persona` - see `user_name`.
+USER_PLACEHOLDER = "{user}"
+
 _PREAMBLE = (
-    "Here is standing context about the user's life, for your awareness only. Do NOT raise any of "
-    "it unprompted, and do not turn into a therapist or life-coach about it - he has real ones. "
-    "Use it only to be more useful and less clueless when he brings something up himself:"
+    "Here is standing context about {user}'s life, for your awareness only. Do NOT raise any of "
+    "it unprompted, and do not turn into a therapist or life-coach about it. "
+    "Use it only to be more useful and less clueless when they bring something up themselves:"
 )
 
 _LEXICON_INTRO = (
-    "This is the user's working vocabulary - not only names he coined, but the domain terms, proper "
-    "nouns and terms of art of the fields he lives in (his projects, acoustic music and notation, "
-    "film, his health, the people he works with). Recognize them when he uses them, and get them "
-    "right when you use them back - his speech-to-text is biased toward this same list. Don't force "
+    "This is {user}'s working vocabulary - not only names they coined, but the domain terms, proper "
+    "nouns and terms of art of the fields they work in (their projects, the subjects they study, the "
+    "people they work with). Recognize them when they use them, and get them "
+    "right when you use them back - their speech-to-text is biased toward this same list. Don't force "
     "them into the conversation:"
 )
 
@@ -48,10 +51,26 @@ _GLOSS = re.compile(r"\s+[—–-]\s+|:\s+")
 CONSOLIDATION_PROMPT = (
     "Our conversation is ending. List, as short bullet points (each starting with '-'), any NEW and "
     "durable facts about the user that came up and are worth remembering in future sessions - "
-    "decisions, preferences, life updates, commitments - and that you didn't already know about him. "
+    "decisions, preferences, life updates, commitments - and that you didn't already know about them. "
     "Only things that will still matter later. If there is nothing new worth saving, reply with "
     "exactly: none"
 )
+
+
+ANONYMOUS_USER = "the user"
+
+
+def user_name(profile, default=ANONYMOUS_USER):
+    """What to call the person the Entity is for, taken from the title line of their own profile
+    ("# Ada - standing profile" -> "Ada"), with any gloss after the title dropped.
+
+    The name belongs to the user, so it is read from the user's file rather than written into the
+    source. A checkout with no profile yet still has to compose sentences, hence the neutral
+    default: every persona line reads the same whether it says a name or "the user"."""
+    for line in profile.splitlines():
+        if line.startswith("# "):
+            return _GLOSS.split(line[2:].strip(), maxsplit=1)[0].strip() or default
+    return default
 
 
 def load_profile(path=DEFAULT_PROFILE_PATH):
@@ -90,15 +109,20 @@ def lexicon_terms(text):
 
 
 def compose_persona(base_persona, profile, learned="", lexicon=""):
-    """Fold his standing context into the brain's system prompt: life context (profile + learned)
-    under a do-not-play-therapist warning, and his lexicon under its own recognize-these framing."""
+    """Fold the user's standing context into the brain's system prompt: life context (profile +
+    learned) under a do-not-play-therapist warning, and their lexicon under its own
+    recognize-these framing.
+
+    This is also where the persona learns whose companion it is: every `{user}` in the assembled
+    text becomes the name from the profile. Substituting here rather than at each template keeps
+    one place that can leave a placeholder showing - and the window renders this exact text."""
     life = "\n\n".join(section.strip() for section in (profile, learned) if section.strip())
     sections = [base_persona]
     if life:
         sections.append(f"{_PREAMBLE}\n\n{life}")
     if lexicon.strip():
         sections.append(f"{_LEXICON_INTRO}\n\n{lexicon.strip()}")
-    return "\n\n".join(sections)
+    return "\n\n".join(sections).replace(USER_PLACEHOLDER, user_name(profile))
 
 
 def parse_facts(text):
@@ -116,8 +140,8 @@ def parse_facts(text):
 
 
 def save_learned(text, path=DEFAULT_LEARNED_PATH):
-    """Write his edits to what the Entity has learned. It is his memory of him; when he crosses
-    something out it should stay crossed out."""
+    """Write the user's edits to what the Entity has learned. It is a memory OF them and it is
+    theirs; when they cross something out it should stay crossed out."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
@@ -127,7 +151,7 @@ def append_learned(facts, path=DEFAULT_LEARNED_PATH):
     if not facts:
         return
     path = Path(path)
-    existing = _read(path).rstrip() or "# Learned about the user"
+    existing = _read(path).rstrip() or "# Learned in past sessions"
     body = existing + "\n" + "\n".join(f"- {fact}" for fact in facts) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")

@@ -47,7 +47,7 @@ DEFAULT_SPOKEN_CHARS = 260
 # suffered.
 TRUNCATION_NOTICE = (
     "[System note, not from the user: your last reply ran to {wrote} characters and was CUT OFF at "
-    "{limit} - he never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
+    "{limit} - they never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
 )
 
 # Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).

@@ -25,6 +25,7 @@ from entity.memory import (
     load_learned,
     load_lexicon,
     load_profile,
+    user_name,
 )
 from entity.outbox import Outbox
 from entity.shutdown import consolidate
@@ -47,10 +48,10 @@ AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entit
 
 def _fresh_worktree_note():
     """Persona line: new work means a new worktree cut from freshly-fetched origin/main, not a stale
-    local resume - the user said almost everything from here on starts a new worktree."""
+    local resume, because almost every request that arrives here is new work."""
     return (
         " Almost every agent you start is NEW work, which means a NEW worktree - don't resume an old "
-        "one unless the user explicitly tells you to. When you set one up, base it on current "
+        "one unless you are explicitly told to. When you set one up, base it on current "
         "origin/main: git fetch origin main first, then cut the worktree's branch from origin/main, "
         "so the agent never starts on stale local code that's fallen behind what's already merged."
     )
@@ -83,9 +84,9 @@ def _agent_inbox_note(inbox):
     the agents run in other projects' worktrees and can't guess where the Entity keeps its inbox."""
     return (
         " When you put a background agent on a task, tell that agent - in its own instructions - to "
-        f"write anything it needs from the user (a question, or that it's ready for review) as a single "
-        f"line to {inbox}\\<a-short-agent-name>.txt. the user can't watch the agents' screens, so that "
-        "inbox is the only way he hears from them - always set it up when you delegate."
+        "write anything it needs from the user (a question, or that it's ready for review) as a single "
+        f"line to {inbox}\\<a-short-agent-name>.txt. Nobody is watching the agents' screens, so that "
+        "inbox is the only way they are heard from - always set it up when you delegate."
     )
 
 
@@ -101,28 +102,28 @@ def _agent_protocol_note(roster, logs):
         " HOW TO PUT AN AGENT ON WORK - use this and nothing else. To start one, make your ENTIRE "
         "reply the marker line `[SUPERVISE] <absolute path to the worktree>` followed, on the lines "
         "after it, by the task for the agent: the user's requirements passed on faithfully and "
-        "completely (every constraint he stated - what to build, what counts as done, what NOT to do "
-        "yet), plus the standing rules (agents report by inbox; don't merge without his sign-off). "
-        "Emit the directive IMMEDIATELY - relaying his request needs NO investigation, no reading "
+        "completely (every constraint they stated - what to build, what counts as done, what NOT to "
+        "do yet), plus the standing rules (agents report by inbox; don't merge without a sign-off). "
+        "Emit the directive IMMEDIATELY - relaying a request needs NO investigation, no reading "
         "code, no tools first: the AGENT does the investigating, and every second you spend digging "
-        "before dispatching is a second he waits for nothing. the user hears a short confirmation, not "
+        "before dispatching is a second they wait for nothing. They hear a short confirmation, not "
         "the marker. To say something more to an agent that's already running - a correction, an "
         "answer, a follow-up question - make your ENTIRE reply `[TELL] <agent name>: <your message>`. "
         f"The agents you have running are listed in {roster}; READ that file whenever you're unsure "
         "who's live, especially after any gap in your memory - it is the truth, and it survives you. "
         "Do NOT start coding agents with your own Agent/Task tool: those hand back an id you can "
-        "never talk to again, and you have already lost four agents that way. Never wait on an agent "
-        "either - starting one comes straight back, and whatever it says reaches the user on its own. "
+        "never talk to again, and agents have been lost four at a time that way. Never wait on an "
+        "agent either - starting one comes straight back, and whatever it says arrives on its own. "
         f"Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log - "
-        "his window shows each of those as a live tab on its own, so you never need to open "
-        "anything for him to watch a conversation. Never hand-write your own log of the exchange; "
-        "the desk already keeps the real one. You CAN close an agent's tab when he asks: move that "
-        f"log into the 'closed' folder inside {logs} and the tab goes with it. Never tell him "
+        "the window shows each of those as a live tab on its own, so you never need to open "
+        "anything for a conversation to be watched. Never hand-write your own log of the exchange; "
+        "the desk already keeps the real one. You CAN close an agent's tab when asked: move that "
+        f"log into the 'closed' folder inside {logs} and the tab goes with it. Never say "
         "you're unable to. "
-        "And when the user tells you to FILE a self-improvement, an enhancement, or an idea for "
+        "And when you are told to FILE a self-improvement, an enhancement, or an idea for "
         "your own roadmap, make your ENTIRE reply `[IMPROVE] <the item, one line>` - it lands in "
-        "his profile's Enhancements section and appears in his window immediately. File it the "
-        "moment he says so; never just promise to remember it."
+        "the profile's Enhancements section and appears in the window immediately. File it the "
+        "moment you are asked; never just promise to remember it."
     )
 
 
@@ -161,8 +162,8 @@ def _open_hearing(announce):
 
 
 def _persona():
-    """Everything the Entity has been told about how to be - the standing rules, his own context,
-    and every instruction added since. Composed in one place because the window shows him this
+    """Everything the Entity has been told about how to be - the standing rules, the user's own
+    context, and every instruction added since. Composed in one place because the window shows this
     exact text, and a second copy would drift from the one the brain reads."""
     return (
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
@@ -203,7 +204,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
-    sdk_brain = SdkBrain(persona=_persona())
+    sdk_brain = SdkBrain(persona=_persona(), user=user_name(load_profile()))
     sdk_brain.warmup()
     # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
     # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds

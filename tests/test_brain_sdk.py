@@ -1,8 +1,17 @@
 import pytest
 
-from entity.brain_sdk import BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
+from entity.brain_sdk import DEFAULT_PERSONA, BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
+from entity.memory import compose_persona
 
 _LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
+
+
+def test_the_shipped_persona_is_personalised_by_the_profile_not_by_the_source():
+    # An edit that drops the placeholder would leave every user addressed as "the user" - and a
+    # name written in its place would be wrong for everyone but its author.
+    persona = compose_persona(DEFAULT_PERSONA, "# Ada - standing profile\n\nintro\n")
+
+    assert "Ada's voice companion" in persona
 
 
 def test_is_usage_limit_spots_the_cli_spend_notice():
@@ -276,6 +285,19 @@ def test_the_reseeded_session_carries_the_base_persona_plus_the_recent_turns_ver
     # the turns that happened before the reset are carried forward verbatim, so nothing is fabricated
     assert "q0" in seeded and "q2" in seeded
     assert "reply to q1" in seeded
+
+
+def test_the_carried_turns_are_labelled_with_the_users_own_name():
+    # The reseed reads the recent turns back as a dialogue, so the label has to be who the user
+    # actually is - and that name reaches the brain from the caller, never from the source.
+    sessions = []
+    brain = SdkBrain(
+        user="Ada", session_factory=_growing_factory(sessions), compact_growth_budget=30000
+    )
+    for i in range(4):
+        brain.respond(f"q{i}")
+
+    assert "Ada: q2" in sessions[1].options.system_prompt
 
 
 def test_only_the_most_recent_turns_are_carried_across_a_reset():

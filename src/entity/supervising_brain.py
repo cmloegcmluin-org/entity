@@ -1,23 +1,23 @@
 """Wrap the companion brain so it can start - and keep talking to - coding agents.
 
 The Entity has no special "fleet mode": it's one program, and driving agents is just something
-the user asks for in conversation. The brain says so with a directive, this wrapper acts on it, and
-the user gets a short answer instead of the raw marker.
+asked for in conversation. The brain says so with a directive, this wrapper acts on it, and the
+user gets a short answer instead of the raw marker.
 
   [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
   <the task, any length>     following lines is the task that agent is given
   [TELL] <name>: <message>   say something more to an agent already running
-  [IMPROVE] <one line>       file a self-improvement the user asked to file - it lands in the
+  [IMPROVE] <one line>       file a self-improvement that was asked for - it lands in the
                              profile's Enhancements section, which the window shows live
 
 The task travels WITH the directive on purpose. Without it the brain had no way to pass on what
-the user actually asked for, so it would go and work the request out for itself first - forty-five
-seconds of digging before a single word came back to him, on a request that should have been
-handed straight to an agent. Relaying his requirements needs no investigation: the agent does that.
+was actually asked for, so it would go and work the request out for itself first - forty-five
+seconds of digging before a single word came back, on a request that should have been handed
+straight to an agent. Relaying requirements needs no investigation: the agent does that.
 
 Both markers hand off to the AgentDesk and return AT ONCE. Nothing here waits on an agent: an
-agent that takes twenty minutes used to hold the whole conversation for twenty minutes, which is
-how the user ended up talking to a wall while it worked.
+agent that takes twenty minutes used to hold the whole conversation for twenty minutes, which
+left the user talking to a wall while it worked.
 """
 
 import os.path
@@ -81,7 +81,7 @@ def _resolve(target):
     """
     expanded = str(Path(target).expanduser())
     if is_worktree(expanded):
-        return [expanded]  # he named ONE worktree - never fan out into its subdirectories
+        return [expanded]  # ONE worktree was named - never fan out into its subdirectories
     if Path(expanded).is_dir():
         return find_worktrees(expanded) or [expanded]
     # expanduser only (not full Path normalization) so plain paths pass through verbatim and only ~ resolves.

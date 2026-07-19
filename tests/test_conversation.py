@@ -1095,25 +1095,53 @@ def test_several_queued_messages_are_delivered_as_one_thing_to_stop():
     assert "first agent finished" in spoken[0] and "second agent finished" in spoken[0]
 
 
-def test_nothing_is_said_over_him_while_he_is_recording():
-    # It broke in with an agent update WHILE he was mid-recording. Whatever it has to say waits
-    # until he isn't talking.
+def test_news_that_cannot_be_delivered_yet_does_not_wedge_the_loop():
+    # THE FREEZE: an undeliverable message left outbox.arrived latched, and the window's mic yields
+    # an empty turn whenever that flag is set - so the loop spun, his submissions were never read,
+    # and only a restart got him out. Declining to deliver must never leave the flag standing.
+    outbox = Outbox()
+    convo = Conversation(FakeSTT(["tell me everything"]), VariableBrain(), FakeTTS(),
+                         outbox=outbox, long_answer_chars=100)
+
+    convo.turn()  # a long answer is offered, so an offer is now pending
+    outbox.push("the fixer agent has news")
+    convo._deliver_outbox()  # can't speak over a pending offer
+
+    assert not outbox.arrived.is_set()  # nothing latched, so listening works normally
+
+
+def test_news_held_back_is_delivered_once_it_can_be():
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["tell me everything", "no thanks", "goodbye entity"]),
+                         VariableBrain(), tts, outbox=outbox, long_answer_chars=100)
+
+    convo.turn()  # offers
+    outbox.push("the fixer agent has news")
+    convo._deliver_outbox()  # held: an offer is pending
+    convo.turn()  # "no thanks" clears the offer
+    convo.turn()  # now it can be said
+
+    assert any("fixer" in line for line in tts.spoken)  # held, not lost
+
+
+def test_it_stays_quiet_while_his_mic_is_on():
     outbox = Outbox()
     outbox.push("the fixer agent has news")
     tts = FakeTTS()
 
-    class RecordingSTT(FakeSTT):
-        busy = True
+    class MicSTT(FakeSTT):
+        on = True
 
-        def is_busy(self):
-            return self.busy
+        def is_recording(self):
+            return self.on
 
-    stt = RecordingSTT(["", "goodbye entity"])
+    stt = MicSTT(["", "goodbye entity"])
     convo = Conversation(stt, FakeBrain(), tts, outbox=outbox, long_answer_chars=None)
 
-    convo.turn()  # he's recording: the news must not be spoken over him
-    assert not any("fixer" in line for line in tts.spoken)
+    convo.turn()
+    assert not any("fixer" in line for line in tts.spoken)  # his mic is on; it does not speak
 
-    stt.busy = False
-    convo.turn()  # he's stopped; now it can speak
+    stt.on = False
+    convo.turn()
     assert any("fixer" in line for line in tts.spoken)

@@ -130,10 +130,10 @@ class Dictation:
         self._armed = recording
         self._announce_state()
 
-    def is_busy(self):
-        """Is he mid-utterance? The loop asks before speaking up on its own - it broke in with an
-        agent update while he was in the middle of recording."""
-        return self._mid_burst
+    def is_recording(self):
+        """Is his mic live? The loop asks before ever speaking up on its own: while the mic is on,
+        he may be talking, and it once broke in mid-sentence."""
+        return self._armed
 
     def begin_speaking(self):
         """The Entity has started talking: stop taking dictation until it's done."""

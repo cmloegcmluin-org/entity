@@ -312,11 +312,14 @@ def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
     assert ears.states[-1] == "muted"  # and it did go quiet, as he asked
 
 
-def test_it_knows_when_he_is_mid_utterance():
+def test_it_reports_whether_his_mic_is_live():
+    # The loop asks this before ever speaking up on its own: while his mic is on, it stays quiet.
     ears = Ears()
-    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
 
-    assert dictation.is_busy() is False  # nothing said yet, nothing to interrupt
+    assert dictation.is_recording() is False
+    dictation.set_recording(True)
+    assert dictation.is_recording() is True
 
 
 def test_the_sounds_he_makes_while_thinking_never_reach_the_draft():

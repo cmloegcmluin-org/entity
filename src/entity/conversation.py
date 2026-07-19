@@ -199,6 +199,7 @@ class Conversation:
         self._long_answer_chars = long_answer_chars
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
+        self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
         self._background = None  # a slow think handed off, still running: {"done", "outcome"}
         self._wake = wake  # event the mic waits on; set to break a lull when news is ready to speak
         self._acknowledgement = acknowledgement
@@ -292,12 +293,17 @@ class Conversation:
         is OFFERED, not read out: a wall of an agent's own words is the thing he most wants to be
         insulated from.
         """
-        if self._outbox is None or self._offered is not None or self._busy_recording():
+        if self._outbox is None:
             return
-        messages = self._outbox.drain()
-        if not messages:
+        # ALWAYS drain, even when it can't be said yet. The queue's "something is waiting" flag is
+        # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
+        # returning early with it still set spun the loop forever and swallowed every submission he
+        # made. Held news waits here instead, in hand, and goes out at the next opportunity.
+        self._held_news.extend(self._outbox.drain())
+        if self._offered is not None or self._his_mic_is_on() or not self._held_news:
             return
-        news = "\n\n".join(messages)
+        news = "\n\n".join(self._held_news)
+        self._held_news = []
         self._console.heads_up(news)  # shown in full, however it gets spoken
         if self._long_answer_chars is not None and len(news) > self._long_answer_chars:
             self._offered = news
@@ -305,11 +311,12 @@ class Conversation:
             return
         self._say(news, record=False)
 
-    def _busy_recording(self):
-        """Is he mid-utterance right now? A mic that reports it (the window's) is asked; anything
-        else can't be interrupted mid-sentence anyway, because it only yields between turns."""
-        busy = getattr(self._stt, "is_busy", None)
-        return bool(busy and busy())
+    def _his_mic_is_on(self):
+        """Is his mic live? While it is, the Entity says nothing of its own accord - it once broke
+        in while he was mid-sentence. A mic that can't report (the terminal's) never blocks: it
+        only yields between turns anyway."""
+        recording = getattr(self._stt, "is_recording", None)
+        return bool(recording and recording())
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first

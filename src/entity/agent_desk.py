@@ -85,7 +85,7 @@ class AgentDesk:
 
     async def _decide(self, agent, tool_name, tool_input):
         """Every tool an agent wants to use passes through here. Reading is waved through; anything
-        that writes or runs is what the user cares about, and he already runs these agents
+        that writes or runs is what the user cares about, and they already run these agents
         unattended, so it goes through too - but the desk is where that policy lives if it changes."""
         return True
 
@@ -106,7 +106,7 @@ class AgentDesk:
         self._log(entry, message, prefix="ENTITY> ")
         self._set_state(name, "working")
         try:
-            # Every step goes to the log as it happens, so his tab shows the agent working rather
+            # Every step goes to the log as it happens, so their tab shows the agent working rather
             # than an empty file that reads exactly like a dead one.
             reply = entry.agent.work(message, on_step=lambda step: self._step(name, step))
         except Exception as exc:  # a dead agent is news, not something to swallow

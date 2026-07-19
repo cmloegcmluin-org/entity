@@ -1,7 +1,7 @@
 """A timestamped, durable record of one session, written as it happens.
 
 The terminal is where the conversation actually appears, and it scrolls away - so when something
-goes wrong the only record of what the user saw was the user copying it out of his terminal by hand.
+goes wrong the only record of what the user saw was whatever they copied out of the terminal by hand.
 This writes the same lines to a file as they're printed, stamped with the time, so a session can be
 read back afterwards. The clock is injected so tests are deterministic; writes are locked because
 background workers and the conversation loop both log.
@@ -53,8 +53,8 @@ def recent_lines(directory, *, current, limit=150):
     return lines[-limit:]
 
 
-# Both archives this reads: his own conversation (Console's prefixes) and an agent exchange (the
-# desk's). "you" is whoever opened the exchange - him in his own thread, the Entity in an agent's.
+# Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
+# desk's). "you" is whoever opened the exchange - them in their own thread, the Entity in an agent's.
 _ROLE_PREFIXES = (
     ("you said: ", "you"),
     ("entity (heads-up)> ", "heads-up"),

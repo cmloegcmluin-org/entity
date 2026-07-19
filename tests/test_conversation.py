@@ -58,10 +58,10 @@ class FakeTTS:
 def test_a_barge_in_before_the_reply_leaves_it_unspoken():
     interrupt = threading.Event()
 
-    class InterruptingBrain:  # he hits Enter while it's thinking
+    class InterruptingBrain:  # they hit Enter while it's thinking
         def respond(self, utterance):
             interrupt.set()
-            return "a fifteen-minute novella he never wanted"
+            return "a fifteen-minute novella they never wanted"
 
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["hi"]), InterruptingBrain(), tts, acknowledgement="ACK", interrupt=interrupt)
@@ -83,7 +83,7 @@ def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
     convo.turn()
 
     printed = next(e for e in events if e.startswith("print:entity>") and "reply to hi" in e)
-    assert events.index(printed) < events.index("say:reply to hi")  # he can read it before/while it speaks
+    assert events.index(printed) < events.index("say:reply to hi")  # they can read it before/while it speaks
 
 
 def test_timings_prints_a_think_and_speak_readout_when_enabled():
@@ -120,7 +120,7 @@ def test_a_thinking_indicator_is_shown_while_it_thinks():
     assert any("thinking" in line.lower() for line in shown)
 
 
-def test_it_pauses_after_a_reply_to_give_him_a_beat_to_read():
+def test_it_pauses_after_a_reply_to_give_a_beat_to_read():
     slept = []
     convo = Conversation(
         FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
@@ -147,7 +147,7 @@ def test_read_pause_is_skipped_when_he_barges_in():
 
     class InterruptingBrain:
         def respond(self, utterance):
-            interrupt.set()  # he cuts in as the reply lands
+            interrupt.set()  # they cut in as the reply lands
             return "reply"
 
     convo = Conversation(
@@ -157,7 +157,7 @@ def test_read_pause_is_skipped_when_he_barges_in():
 
     convo.turn()
 
-    assert slept == []  # he's cutting in - don't make him wait out a read pause
+    assert slept == []  # they're cutting in - don't make them wait out a read pause
 
 
 def test_is_affirmative_reads_a_yes_but_not_a_no():
@@ -190,7 +190,7 @@ def test_a_long_answer_is_offered_first_then_delivered_on_a_yes():
     assert first.said == convo.ready_question  # it asked instead of dumping the wall of text
     assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # nothing dumped yet
 
-    convo.turn()  # he says "yes"
+    convo.turn()  # they say "yes"
 
     assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # the yes released the full answer
 
@@ -204,14 +204,14 @@ def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
     convo.turn()  # offers "ready?"
     convo.turn()  # "no thanks"
 
-    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # he declined, so it was never delivered
+    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # they declined, so it was never delivered
     assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
     assert brain.heard == ["tell me everything", "no thanks"]
 
 
-def test_his_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
-    # From the real session: his "yes, I am ready for the longer answer" arrived in the same turn
-    # as TV chatter ("I'm not super far..."), and the "not" silently vetoed his yes - the answer he
+def test_a_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
+    # From the real session: their "yes, I am ready for the longer answer" arrived in the same turn
+    # as TV chatter ("I'm not super far..."), and the "not" silently vetoed their yes - the answer they
     # was promised evaporated. A yes anywhere in the turn outranks stray negatives.
     brain = VariableBrain()
     tts = FakeTTS()
@@ -222,13 +222,13 @@ def test_his_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
     )
 
     convo.turn()  # offers "ready?"
-    convo.turn()  # TV garbage + his real yes
+    convo.turn()  # TV garbage + their real yes
 
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # his yes won; the answer was finally delivered
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # their yes won; the answer was finally delivered
 
 
 def test_speech_that_answers_neither_way_leaves_the_offer_standing():
-    # TV dialogue with no yes and no no used to silently destroy the offer before he could answer.
+    # TV dialogue with no yes and no no used to silently destroy the offer before they could answer.
     # If it isn't an answer, it isn't an answer - the offer waits for one.
     brain = VariableBrain()
     tts = FakeTTS()
@@ -239,10 +239,10 @@ def test_speech_that_answers_neither_way_leaves_the_offer_standing():
 
     convo.turn()  # offers "ready?"
     convo.turn()  # TV garbage: neither yes nor no - handled as its own turn, offer kept
-    convo.turn()  # his real yes, one turn later
+    convo.turn()  # their real yes, one turn later
 
     assert "a short reply" in tts.spoken  # the garbage still got an ordinary answer
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # and his okay still released the held answer
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # and their okay still released the held answer
 
 
 def test_gating_off_speaks_even_a_long_answer_straight_away():
@@ -280,15 +280,15 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
     release.set()
     assert bg_done.wait(2.0)  # the background call finishes on its own thread
 
-    convo.turn()  # he comes back; the answer is offered, and his "yes" releases it
+    convo.turn()  # they come back; the answer is offered, and their "yes" releases it
 
     assert convo.ready_question in tts.spoken
     assert "the finished long-running answer" in tts.spoken
 
 
-def test_talking_again_cancels_the_detached_call_instead_of_deflecting_him():
-    # He was bounced with a canned "still finishing your last one" every time he spoke, which threw
-    # his words away and locked him out of the conversation. His live turn outranks the stale call.
+def test_talking_again_cancels_the_detached_call_instead_of_deflecting_the_user():
+    # They were bounced with a canned "still finishing your last one" every time they spoke, which threw
+    # their words away and locked them out of the conversation. Their live turn outranks the stale call.
     release = threading.Event()
     calls = []
     cancelled = []
@@ -311,15 +311,15 @@ def test_talking_again_cancels_the_detached_call_instead_of_deflecting_him():
     )
 
     convo.turn()  # detaches
-    second = convo.turn()  # he speaks again while it's still running
+    second = convo.turn()  # they speak again while it's still running
 
-    assert cancelled == [True]  # the stale call was cancelled, not left to block him
-    assert second.said == "fresh answer"  # and his new turn actually got answered
+    assert cancelled == [True]  # the stale call was cancelled, not left to block them
+    assert second.said == "fresh answer"  # and their new turn actually got answered
     assert calls == ["slow one", "what about this"]
 
 
 def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
-    # He was told "I'll let you know when it's ready" and then never heard back, because his next
+    # They were told "I'll let you know when it's ready" and then never heard back, because their next
     # words quietly killed the call. Whatever else happens, the record shows it was dropped.
     lines = []
 
@@ -338,13 +338,13 @@ def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
     )
 
     convo.turn()  # detaches
-    convo.turn()  # he speaks again - the detached call is dropped for him
+    convo.turn()  # they speak again - the detached call is dropped for them
 
     assert any("dropped" in line for line in lines)
 
 
 def test_every_long_wait_says_the_one_line_he_asked_for():
-    # He asked for this sentence literally; the flowery variations were worse than repetition.
+    # They asked for this sentence literally; the flowery variations were worse than repetition.
     class SlowBrain:
         def respond(self, utterance):
             time.sleep(0.2)
@@ -422,7 +422,7 @@ def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
         def respond(self, utterance):
             thinking.set()  # we're now inside the brain call
             release.wait(2.0)  # block until cancelled (safety timeout so a bug can't hang the suite)
-            return "an essay he never wanted to sit through"
+            return "an essay they never wanted to sit through"
 
         def interrupt(self):
             self.interrupted = True
@@ -433,7 +433,7 @@ def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
 
     def barge():
         thinking.wait(2.0)
-        interrupt.set()  # he hits Enter / says "stop" while it's still thinking
+        interrupt.set()  # they hit Enter / says "stop" while it's still thinking
 
     threading.Thread(target=barge, daemon=True).start()
     convo = Conversation(
@@ -444,7 +444,7 @@ def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
 
     assert turn is None  # the turn was abandoned - the loop is free to listen again
     assert brain.interrupted is True  # the brain was told to drop the in-flight call
-    assert "an essay he never wanted to sit through" not in tts.spoken  # cancelled reply stayed unsaid
+    assert "an essay they never wanted to sit through" not in tts.spoken  # cancelled reply stayed unsaid
     assert tts.spoken == ["ACK"]  # only the heard-you ack made it out
 
 
@@ -492,7 +492,7 @@ def test_a_spoken_stop_word_while_thinking_cancels_the_brain():
         def respond(self, utterance):
             thinking.set()
             release.wait(2.0)
-            return "a monologue he tried to stop"
+            return "a monologue they tried to stop"
 
         def interrupt(self):
             self.interrupted = True
@@ -520,7 +520,7 @@ def test_a_spoken_stop_word_while_thinking_cancels_the_brain():
 
     assert turn is None
     assert brain.interrupted is True  # a spoken "stop" mid-think cancelled it, not only the Enter key
-    assert "a monologue he tried to stop" not in tts.spoken
+    assert "a monologue they tried to stop" not in tts.spoken
 
 
 def test_check_ins_still_fire_while_a_stop_watcher_holds_the_mic():
@@ -533,7 +533,7 @@ def test_check_ins_still_fire_while_a_stop_watcher_holds_the_mic():
         def catch_stop(self, active):
             while active():
                 time.sleep(0.005)
-            return False  # he never says stop
+            return False  # they never say stop
 
     class SlowBrain:
         def respond(self, utterance):
@@ -579,7 +579,7 @@ def test_the_interrupt_is_forwarded_to_the_tts_so_a_reply_in_progress_can_be_kil
 def test_a_spoken_stop_word_cuts_the_voice_off():
     interrupt = threading.Event()
 
-    class StopHearingSTT:  # he says "stop" the instant it starts talking
+    class StopHearingSTT:  # they say "stop" the instant it starts talking
         def listen(self):
             return "tell me a long story"
 
@@ -830,8 +830,8 @@ class TerminatedEmptySTT:
 
 
 def test_a_bare_over_gets_a_brief_ack_so_he_knows_it_registered():
-    # he said only "over"; the turn is empty but the terminator registered, so acknowledge it out
-    # loud instead of ignoring him - otherwise he just repeats "over" wondering if he was heard.
+    # they said only "over"; the turn is empty but the terminator registered, so acknowledge it out
+    # loud instead of ignoring them - otherwise they just repeat "over" wondering if they were heard.
     tts = FakeTTS()
     convo = Conversation(TerminatedEmptySTT([("", True)]), FakeBrain(), tts)
 
@@ -949,8 +949,8 @@ def test_suspend_pauses_the_brain_until_resume():
 
 
 def test_a_wake_word_with_words_after_it_still_wakes_it():
-    # "Hey Entity. Can you hear me?" ENDS on "hear me", so an ends-with check ignored him and he had
-    # to keep repeating himself until he said the bare phrase alone.
+    # "Hey Entity. Can you hear me?" ENDS on "hear me", so an ends-with check ignored them and they had
+    # to keep repeating themselves until they said the bare phrase alone.
     brain = FakeBrain()
     stt = FakeSTT(["stop listening", "hey Entity, can you hear me?", "so about that bug", "goodbye entity"])
     convo = Conversation(stt, brain, FakeTTS())
@@ -960,9 +960,9 @@ def test_a_wake_word_with_words_after_it_still_wakes_it():
     assert brain.heard == ["so about that bug"]  # it woke on the first try and took the next turn
 
 
-def test_agent_news_still_reaches_him_while_it_is_asleep():
-    # He asked outright: if he says "stop listening" and then it has something to relay from an
-    # agent, does it speak up or wait for him? Sleep silences HIS turns, not the agents' news.
+def test_agent_news_still_arrives_while_it_is_asleep():
+    # They asked outright: if they say "stop listening" and then it has something to relay from an
+    # agent, does it speak up or wait for them? Sleep silences the user's turns, not the agents' news.
     outbox = Outbox()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["stop listening", "anything?", "goodbye entity"]),
@@ -970,14 +970,14 @@ def test_agent_news_still_reaches_him_while_it_is_asleep():
 
     convo.turn()  # "stop listening" - now asleep
     outbox.push("the auth agent is blocked on you")
-    convo.turn()  # his words are ignored while asleep, but the news is not
+    convo.turn()  # their words are ignored while asleep, but the news is not
 
     assert "the auth agent is blocked on you" in tts.spoken
 
 
-def test_what_it_hears_while_asleep_is_counted_not_transcribed_at_him():
+def test_what_it_hears_while_asleep_is_counted_not_transcribed_back():
     # Asleep it still transcribes, but only to catch the wake word. Echoing a TV's dialogue back at
-    # him all evening is noise; a collapsing count says "heard you, ignoring you" without the scroll.
+    # them all evening is noise; a collapsing count says "heard you, ignoring you" without the scroll.
     lines = []
     console = Console(echo=lines.append, overwrite=lines.append)
     convo = Conversation(FakeSTT(["stop listening", "some TV dialogue", "more TV dialogue", "goodbye entity"]),
@@ -987,7 +987,7 @@ def test_what_it_hears_while_asleep_is_counted_not_transcribed_at_him():
     convo.turn()
     convo.turn()
 
-    assert not any("TV dialogue" in line for line in lines)  # never echoed back at him
+    assert not any("TV dialogue" in line for line in lines)  # never echoed back at them
     assert lines[-1] == "\r(ignoring… 2x)"  # just a tally that ticks up in place
 
 
@@ -998,7 +998,7 @@ def test_it_says_it_is_listening_before_it_listens():
 
     convo.turn()
 
-    assert lines[0].startswith("(listening")  # before anything he said could be echoed
+    assert lines[0].startswith("(listening")  # before anything they said could be echoed
 
 
 def test_it_does_not_claim_to_be_listening_while_it_is_asleep():
@@ -1017,8 +1017,8 @@ def test_it_does_not_claim_to_be_listening_while_it_is_asleep():
 
 
 def test_what_he_hears_is_in_the_record_even_when_the_terminal_does_not_show_it():
-    # Reading a session back and seeing no check-ins made it look like none fired, when in fact he
-    # had heard them - the record has to hold everything he heard, printed or not.
+    # Reading a session back and seeing no check-ins made it look like none fired, when in fact they
+    # had heard them - the record has to hold everything they heard, printed or not.
     recorded = []
     console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
     convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), acknowledgement="ACK", console=console)
@@ -1064,7 +1064,7 @@ def test_a_voice_failure_is_noted_in_the_record_not_lost_to_stderr():
 
 
 def test_a_long_heads_up_is_offered_rather_than_read_out_in_full():
-    # An agent's thirty-line report was read at him line after line, verbatim, with no warning -
+    # An agent's thirty-line report was read at them line after line, verbatim, with no warning -
     # the exact opposite of being insulated from the agent's internals.
     outbox = Outbox()
     outbox.push("WALL. " * 200)
@@ -1095,8 +1095,8 @@ def test_several_queued_messages_are_delivered_as_one_thing_to_stop():
 
 def test_news_that_cannot_be_delivered_yet_does_not_wedge_the_loop():
     # THE FREEZE: an undeliverable message left outbox.arrived latched, and the window's mic yields
-    # an empty turn whenever that flag is set - so the loop spun, his submissions were never read,
-    # and only a restart got him out. Declining to deliver must never leave the flag standing.
+    # an empty turn whenever that flag is set - so the loop spun, their submissions were never read,
+    # and only a restart got them out. Declining to deliver must never leave the flag standing.
     outbox = Outbox()
     convo = Conversation(FakeSTT(["tell me everything"]), VariableBrain(), FakeTTS(),
                          outbox=outbox, long_answer_chars=100)
@@ -1123,7 +1123,7 @@ def test_news_held_back_is_delivered_once_it_can_be():
     assert any("fixer" in line for line in tts.spoken)  # held, not lost
 
 
-def test_it_stays_quiet_while_his_mic_is_on():
+def test_it_stays_quiet_while_the_mic_is_on():
     outbox = Outbox()
     outbox.push("the fixer agent has news")
     tts = FakeTTS()
@@ -1138,7 +1138,7 @@ def test_it_stays_quiet_while_his_mic_is_on():
     convo = Conversation(stt, FakeBrain(), tts, outbox=outbox, long_answer_chars=None)
 
     convo.turn()
-    assert not any("fixer" in line for line in tts.spoken)  # his mic is on; it does not speak
+    assert not any("fixer" in line for line in tts.spoken)  # their mic is on; it does not speak
 
     stt.on = False
     convo.turn()
@@ -1146,14 +1146,14 @@ def test_it_stays_quiet_while_his_mic_is_on():
 
 
 def test_a_long_reply_is_cut_short_rather_than_half_read():
-    # He is never asked "ready for it?" any more, and he disliked hearing only part of what was
-    # written: a reply is CUT at a sentence, so what he reads is exactly what he hears.
+    # They are never asked "ready for it?" any more, and they disliked hearing only part of what was
+    # written: a reply is CUT at a sentence, so what they read is exactly what they hear.
     lines = []
     tts = FakeTTS()
 
     class WordyBrain:
         def respond(self, utterance):
-            return ("First, the short answer. Second, some detail he can read. " + "Padding. " * 60)
+            return ("First, the short answer. Second, some detail they can read. " + "Padding. " * 60)
 
     convo = Conversation(FakeSTT(["hi"]), WordyBrain(), tts, long_answer_chars=None,
                          spoken_chars=80, console=Console(echo=lines.append))
@@ -1163,9 +1163,9 @@ def test_a_long_reply_is_cut_short_rather_than_half_read():
     shown = chr(10).join(lines)
     spoken = [line for line in tts.spoken if "First," in line][0]
     assert len(spoken) <= 100 and spoken.startswith("First, the short answer.")
-    assert spoken in shown  # the same words on screen as in his ear
-    assert "Padding. Padding. Padding." not in shown  # the wall never reaches him at all
-    assert convo.ready_question not in tts.spoken  # and he was never asked
+    assert spoken in shown  # the same words on screen as in their ear
+    assert "Padding. Padding. Padding." not in shown  # the wall never reaches them at all
+    assert convo.ready_question not in tts.spoken  # and they were never asked
 
 
 def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():

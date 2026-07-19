@@ -156,7 +156,7 @@ def _open_hearing(announce):
     gain = _mic_gain()
     announce(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
     # Capture on a background thread: keep draining the mic even while Parakeet is transcribing, so
-    # nothing he says mid-transcription is lost to a PortAudio overflow.
+    # nothing they say mid-transcription is lost to a PortAudio overflow.
     mic = BackgroundMicrophone(Microphone(device=device, gain=gain))
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     announce(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
@@ -193,7 +193,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
 
     Windowed, this runs on a worker while Tk owns the main thread - so the window is on screen
     within a moment of the click, and the model loading, the brain waking and the spoken greeting
-    all happen where he can watch them. He was hearing "I'm ready" before any window appeared.
+    all happen where they can watch them. They were hearing "I'm ready" before any window appeared.
     """
     # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
     # Entity speaks each new line at the next lull (never cutting the user off).
@@ -223,7 +223,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         transcriber, mic, recorder = _open_hearing(announce)
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
-            muted=True,  # the mic starts OFF; he turns it on when he's ready to talk
+            muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
             on_level=lambda v: feed.push("level", v),
@@ -258,8 +258,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     announce()
 
     if not text_mode and not muted:
-        # Guarded, because the mic is already live: unguarded, the greeting went out of his
-        # speakers, back into the mic, and opened his draft box with "I do for you".
+        # Guarded, because the mic is already live: unguarded, the greeting went out of their
+        # speakers, back into the mic, and opened their draft box with "I do for you".
         if dictation is not None:
             dictation.begin_speaking()
         try:
@@ -276,10 +276,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         if turn.farewell:
             farewelled.append(True)  # the goodbye was already said this turn; don't repeat it below
 
-    # A beat to read a reply before the mic reopens, but not in text mode (he sets his own pace there).
+    # A beat to read a reply before the mic reopens, but not in text mode (they set their own pace there).
     read_pause = 0.0 if text_mode else 1.2
     # Keep the same lines the terminal shows, timestamped, so a session that went wrong can be read
-    # back afterwards instead of the user having to copy his scrollback out by hand.
+    # back afterwards instead of the user having to copy their scrollback out by hand.
     session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
     announce(f"(this conversation is being written to {session_record.path})\n")
     if gui:
@@ -298,7 +298,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             Conversation(
                 stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
                 console=console, read_pause=read_pause, timings=timings,
-                # The window shows him every word, so nothing needs to be offered first.
+                # The window shows them every word, so nothing needs to be offered first.
                 long_answer_chars=None if gui else DEFAULT_LONG_ANSWER_CHARS,
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
         except KeyboardInterrupt:
@@ -336,11 +336,11 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     text_mode = "--text" in argv
     muted = "--mute" in argv
-    timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
+    timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless they opt out
     gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
 
     # In a windowed run every startup line goes to the window's feed INSTEAD of stdout - launched
-    # from the Start Menu there is no terminal at all, and launched from a command line he doesn't
+    # from the Start Menu there is no terminal at all, and launched from a command line they don't
     # want the window's contents spat out there too.
     feed = TranscriptFeed() if gui else None
 
@@ -351,8 +351,8 @@ def main(argv=None):
             print(line, flush=True)
 
     # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
-    # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
-    # ramble he couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
+    # it's the barge-in: press it to cut off whatever the Entity is saying (they had a 15-minute
+    # ramble they couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
     stop = threading.Event()
     barge_in = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -376,7 +376,7 @@ def main(argv=None):
     from entity.transcript import recent_lines
 
     # With no console of its own to lend them, Windows gives each console child a new window: the
-    # Claude CLI the brain runs was turning up as a second window on his desktop.
+    # Claude CLI the brain runs was turning up as a second window on their desktop.
     silence_child_consoles(anyio)
 
     for line in recent_lines(TRANSCRIPTS, current=None):

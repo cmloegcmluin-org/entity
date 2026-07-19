@@ -58,7 +58,7 @@ def test_is_backchannel_spots_filler_but_keeps_real_words_and_the_terminator():
 
 
 def test_okay_hallucinations_are_treated_as_backchannel():
-    # Parakeet fills his pauses with "Okay." too; those must not pile up in front of his real turn.
+    # Parakeet fills their pauses with "Okay." too; those must not pile up in front of their real turn.
     assert _is_backchannel("Okay.", "over") is True
     assert _is_backchannel("Okay okay okay", "over") is True
     assert _is_backchannel("Alright.", "over") is True
@@ -75,8 +75,8 @@ def test_pure_backchannel_noise_is_dropped_from_the_turn():
 
 
 def test_a_bare_over_ends_an_empty_turn_but_is_flagged_as_terminated():
-    # he said only "over" - the transcript strips to nothing, but the terminator WAS caught, so the
-    # caller can tell this apart from a lull and still let him know it registered.
+    # they said only "over" - the transcript strips to nothing, but the terminator WAS caught, so the
+    # caller can tell this apart from a lull and still let them know it registered.
     mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("over"), mic, pause_frames=3, threshold=0.01)
 
@@ -120,7 +120,7 @@ class FlushableMic:
 
 def test_listen_flushes_stale_audio_before_reading_this_turn():
     # between turns the background mic buffers the Entity's own reply and room noise; drop it before
-    # a new listen so it isn't transcribed as his next turn.
+    # a new listen so it isn't transcribed as their next turn.
     mic = FlushableMic([_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, threshold=0.01)
 
@@ -148,7 +148,7 @@ def test_catch_stop_fires_on_a_spoken_stop_word():
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)  # quiet, a burst, then a pause
     stt = MicSTT(FakeTranscriber("Stop!"), mic, pause_frames=3)
 
-    assert stt.catch_stop(lambda: True) is True  # he barked "stop" while it was talking
+    assert stt.catch_stop(lambda: True) is True  # they barked "stop" while it was talking
 
 
 def test_catch_stop_ignores_ordinary_speech():
@@ -160,9 +160,9 @@ def test_catch_stop_ignores_ordinary_speech():
 
 def test_catch_stop_ignores_a_stop_word_buried_in_flowing_speech():
     # From the real session: the TV said "Wait, what do you do about it?" while the Entity was
-    # speaking, and the buried "wait" silently killed the utterance - he was then told an offer
+    # speaking, and the buried "wait" silently killed the utterance - they were then told an offer
     # "on the screen only" that was in fact spoken and cut off at the first syllable. A deliberate
-    # stop is a BARK; a stop word inside a sentence is the room, not him.
+    # stop is a BARK; a stop word inside a sentence is the room, not them.
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("Wait, what do you do about it?"), mic, pause_frames=3)
 
@@ -180,7 +180,7 @@ def test_catch_stop_still_fires_on_a_short_emphatic_bark():
     mic = FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("okay stop stop"), mic, pause_frames=3)
 
-    assert stt.catch_stop(lambda: True) is True  # short and pointed - that's him, cutting in
+    assert stt.catch_stop(lambda: True) is True  # short and pointed - that's them, cutting in
 
 
 def test_catch_stop_gives_up_the_moment_the_reply_finishes():
@@ -198,13 +198,13 @@ def test_catch_stop_gives_up_the_moment_the_reply_finishes():
 
 
 def test_a_quiet_voice_on_a_quiet_mic_is_speech():
-    # the deaf-mic bug: his voice peaked at 0.009 rms, under the old fixed 0.01 bar, so nothing
-    # ever registered. Relative to his room's ~0.002 quiet, 0.009 is clearly speech.
+    # the deaf-mic bug: their voice peaked at 0.009 rms, under the old fixed 0.01 bar, so nothing
+    # ever registered. Relative to their room's ~0.002 quiet, 0.009 is clearly speech.
     floor = NoiseFloor()
     assert floor.is_speech(0.002) is False  # first frame calibrates the room
     for _ in range(5):
         assert floor.is_speech(0.0025) is False  # ambient hovers near the floor
-    assert floor.is_speech(0.009) is True  # his quiet voice clears the relative bar
+    assert floor.is_speech(0.009) is True  # their quiet voice clears the relative bar
 
 
 def test_a_noisy_room_is_not_speech():
@@ -226,7 +226,7 @@ def test_the_floor_follows_the_room_back_down():
 
 
 def test_a_steady_room_tone_over_a_stale_low_floor_settles_back_to_quiet():
-    # The 16:30 session, replayed from its real audio: deep silence between his words dragged the
+    # The 16:30 session, replayed from its real audio: deep silence between their words dragged the
     # floor to its minimum, after which the room's ordinary tone (fan + PC hum, ~4x the stale floor)
     # read as endless "speech" - the pause never fired, "Stop listening. Over." was never absorbed,
     # and the session hung deaf inside the turn. A tone that IS the room now becomes the floor.
@@ -237,11 +237,11 @@ def test_a_steady_room_tone_over_a_stale_low_floor_settles_back_to_quiet():
     for _ in range(150):
         result = floor.is_speech(0.003)  # the room's steady tone, well over 2.5x the stale floor
     assert result is False  # the steady tone became the new quiet, so a pause can fire again
-    assert floor.is_speech(0.009) is True  # his voice still clears the recalibrated bar
+    assert floor.is_speech(0.009) is True  # their voice still clears the recalibrated bar
 
 
 def test_real_speech_with_dips_does_not_drag_the_floor_up_to_itself():
-    # The pull-up must never eat his voice: real talking always lets up somewhere within the
+    # The pull-up must never eat their voice: real talking always lets up somewhere within the
     # window, and that dip keeps the rolling minimum - and so the floor - down at the true quiet.
     floor = NoiseFloor()
     floor.is_speech(0.002)
@@ -262,7 +262,7 @@ def test_digital_silence_cannot_set_an_absurdly_low_bar():
 
 
 def test_listen_hears_a_quiet_voice_over_a_quiet_room_by_default():
-    # end-to-end with the adaptive default (no fixed threshold): his real levels in miniature.
+    # end-to-end with the adaptive default (no fixed threshold): their real levels in miniature.
     ambient = [_sp(0.002)] * 6
     voice = [_sp(0.009)] * 4
     trailing = [_sp(0.002)] * 3
@@ -338,7 +338,7 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
 
 def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
     interrupt = threading.Event()
-    interrupt.set()  # the Entity has word from an agent to pass on, and he isn't talking
+    interrupt.set()  # the Entity has word from an agent to pass on, and they aren't talking
     transcriber = FakeTranscriber("should never run")
     stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, threshold=0.01, interrupt=interrupt)
 
@@ -346,14 +346,14 @@ def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
     assert transcriber.got is None  # nothing was captured or transcribed
 
 
-def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
+def test_a_message_arriving_mid_sentence_does_not_cut_the_user_off():
     interrupt = threading.Event()
 
     class InterruptingMic:
         def frames(self):
             for _ in range(4):
                 yield _sp()
-            interrupt.set()  # word from an agent arrives, but he's already mid-sentence
+            interrupt.set()  # word from an agent arrives, but they're already mid-sentence
             for _ in range(4):
                 yield _sp()
             for _ in range(3):
@@ -364,7 +364,7 @@ def test_a_message_arriving_mid_sentence_does_not_cut_him_off():
         pause_frames=3, threshold=0.01, interrupt=interrupt,
     )
 
-    assert stt.listen() == "finishing my thought"  # he finished; the message waits its turn
+    assert stt.listen() == "finishing my thought"  # they finished; the message waits its turn
 
 
 class GatedSource:

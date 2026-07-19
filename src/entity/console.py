@@ -1,10 +1,10 @@
 """What the Entity shows, kept separate from what it speaks.
 
 The spoken word is transient - it's gone the moment it's said. A surface the user can read is where
-he catches up on the reply, sees it's thinking rather than hung, and notices an unprompted heads-up.
+they catch up on the reply, see it's thinking rather than hung, and notice an unprompted heads-up.
 One seam for all of it keeps the conversation loop about flow rather than formatting, and lets the
 same session drive a terminal, a window, or nothing at all (tests, a typed run that shouldn't echo
-his own words back at him).
+their own words back at them).
 
 Three outputs, because they answer different questions: `echo`/`overwrite` paint a terminal,
 `record` keeps the durable session file, and `messages` reports WHO said each line for a surface
@@ -34,12 +34,12 @@ class Console:
         self._echo = echo
         self._overwrite = overwrite
         # Where the same lines go to be kept - the terminal scrolls away, and it was the only record
-        # of what he actually saw when something went wrong.
+        # of what they actually saw when something went wrong.
         self._record = record or (lambda line: None)
         # Who said each line, for a conversation view. Empty for a terminal, which shows prefixes.
         self._messages = messages or (lambda role, text: None)
         # A voice run narrates the mic - "listening", and what it heard. A typed run needs neither:
-        # he has his own prompt and his own words on screen already.
+        # they have their own prompt and their own words on screen already.
         self._voice = voice
         self._thinking_notice = thinking_notice
         self._listening_notice = listening_notice
@@ -54,7 +54,7 @@ class Console:
     def ignored(self):
         """It heard something while asleep and dropped it. A TV in the room can produce these all
         evening, so the run collapses onto a single line whose count ticks up, rather than scrolling
-        his terminal away."""
+        their terminal away."""
         self._ignored += 1
         tally = f" {self._ignored}x" if self._ignored > 1 else ""
         self._overwrite(f"\r(ignoring…{tally})")
@@ -84,15 +84,15 @@ class Console:
         self._messages("entity", text)
 
     def spoke(self, text):
-        """Something he HEARD that the terminal deliberately doesn't show - the acknowledgement, the
+        """Something they HEARD that the terminal deliberately doesn't show - the acknowledgement, the
         still-working check-ins. It still belongs in the record: reading a session back and seeing no
-        check-ins made it look like none had fired, when he had actually heard every one."""
+        check-ins made it look like none had fired, when they had actually heard every one."""
         self._line(text, show=False)
-        self._messages("entity", text)  # he heard it, so a conversation view shows it
+        self._messages("entity", text)  # they heard it, so a conversation view shows it
 
     def dropped(self):
-        """A long call that had been left running was cancelled so he could be answered instead.
-        He was promised an answer that then never came; at minimum the record says why."""
+        """A long call that had been left running was cancelled so they could be answered instead.
+        They were promised an answer that then never came; at minimum the record says why."""
         self._line("(dropped the long call that was still running)")
         self._messages("status", "(dropped the long call that was still running)")
 

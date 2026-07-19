@@ -16,9 +16,9 @@ def test_heard_shows_what_he_said():
     assert lines == ["you said: turn on the lights"]
 
 
-def test_a_typed_run_narrates_neither_the_mic_nor_his_own_words():
+def test_a_typed_run_narrates_neither_the_mic_nor_the_users_own_words():
     lines = []
-    console = Console(echo=lines.append, voice=False)  # he has his own prompt and his words on screen
+    console = Console(echo=lines.append, voice=False)  # they have their own prompt and their words on screen
 
     console.listening()
     console.heard("typed input")
@@ -69,7 +69,7 @@ def test_ignoring_says_it_heard_something_and_dropped_it():
 
 
 def test_what_is_printed_is_also_written_to_the_session_record():
-    # The terminal scrolls away, and it was the only record of what he actually saw.
+    # The terminal scrolls away, and it was the only record of what they actually saw.
     recorded = []
     console = Console(echo=lambda _: None, record=recorded.append)
 
@@ -85,8 +85,8 @@ def test_a_typed_run_still_records_what_he_said_even_though_it_is_not_echoed():
 
     console.heard("typed input")
 
-    assert lines == []  # his own typing isn't echoed back at him
-    assert recorded == ["you said: typed input"]  # but the record still has his side of it
+    assert lines == []  # their own typing isn't echoed back at them
+    assert recorded == ["you said: typed input"]  # but the record still has their side of it
 
 
 def test_a_run_of_ignores_is_recorded_once_as_a_tally_not_line_by_line():
@@ -126,7 +126,7 @@ def test_a_later_ignore_starts_a_fresh_count():
     console.reply("back with you")
     console.ignored()
 
-    assert lines[-1] == "\r(ignoring…)"  # not "2x" - that run ended when he was answered
+    assert lines[-1] == "\r(ignoring…)"  # not "2x" - that run ended when they were answered
 
 
 def test_messages_are_reported_with_who_said_them():

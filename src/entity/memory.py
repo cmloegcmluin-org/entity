@@ -207,7 +207,7 @@ def find_heading(sections, stem):
 
 
 def _merged(path, heading, body, keeping):
-    """His edited body, plus any line the section has gained since he started editing it."""
+    """Their edited body, plus any line the section has gained since they started editing it."""
     if keeping is None:
         return body
     current = profile_sections(_read(path)).get(heading, "")
@@ -246,12 +246,12 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
 def save_section(path, heading, body, *, keeping=None):
     """Replace one "## heading" section's body, leaving every other line of the file untouched.
 
-    This is his own profile - the same file the brain loads as standing context - so an edit made
+    This is their own profile - the same file the brain loads as standing context - so an edit made
     in the window has to be surgical: rewriting the whole file from parsed sections would quietly
-    drop the preamble and reflow everything he didn't touch.
+    drop the preamble and reflow everything they didn't touch.
 
-    `keeping` is what that section held when he started typing. Anything the file has gained since
-    - a line Entity filed while his edit was in progress - is carried over instead of being
+    `keeping` is what that section held when they started typing. Anything the file has gained since
+    - a line Entity filed while their edit was in progress - is carried over instead of being
     overwritten, which is how one of its bullets ended up truncated mid-sentence.
     """
     body = _merged(path, heading, body, keeping)

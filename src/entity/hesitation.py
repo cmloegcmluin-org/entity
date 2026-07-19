@@ -35,7 +35,7 @@ def without_hesitations(text):
 
 def _opens_a_sentence(tokens, index):
     """Whether the token at `index` is the first word of a sentence. A token with no letters is
-    read straight past: it's punctuation the model set down, not a word he said."""
+    read straight past: it's punctuation the model set down, not a word they said."""
     while index and not any(character.isalpha() for character in tokens[index - 1]):
         index -= 1
     return index == 0 or tokens[index - 1].endswith(_SENTENCE_END)
@@ -44,7 +44,7 @@ def _opens_a_sentence(tokens, index):
 def _is_hesitation(token):
     """Whether `token` is one of the sounds, however the model punctuated it - a comma around the
     sound was the pause being written down, and it has nothing left to sit beside once the sound is
-    gone. A whole word of it and nothing less: an *umbrella* he actually said is a worse thing to
+    gone. A whole word of it and nothing less: an *umbrella* they actually said is a worse thing to
     lose than an "um" is to keep."""
     return _HESITATION.fullmatch("".join(c for c in token if c.isalpha())) is not None
 

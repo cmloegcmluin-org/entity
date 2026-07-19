@@ -1,10 +1,10 @@
 """What an agent is allowed to say to the user: a notice, never its own words.
 
-He was handed commit hashes, test counts and "I reran the suite myself" verbatim, and could not
-tell whether he was talking to the Entity or to the agent it was driving. Telling the model not to
-relay was not enough - he asked for the code to prevent it - so nothing an agent writes reaches the
+They were handed commit hashes, test counts and "I reran the suite myself" verbatim, and could not
+tell whether they were talking to the Entity or to the agent it was driving. Telling the model not to
+relay was not enough - they asked for the code to prevent it - so nothing an agent writes reaches the
 outbox except this: who spoke, and its first sentence, capped. The whole exchange stays in that
-agent's tab, where reading it is his choice.
+agent's tab, where reading it is their choice.
 """
 
 import re
@@ -15,7 +15,7 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 
 
 def notice(agent, report):
-    """One line he can act on: which agent, and the gist, with the rest left in its tab."""
+    """One line they can act on: which agent, and the gist, with the rest left in its tab."""
     said = " ".join(str(report).split())
     if not said:
         return f"{agent} sent an empty report."

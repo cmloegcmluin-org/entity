@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 # From a windowed run there's no console for git to inherit, so each call would flash its own
-# console window onto his monitors. Same git, no window.
+# console window onto their monitors. Same git, no window.
 _run_hidden = functools.partial(subprocess.run, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 

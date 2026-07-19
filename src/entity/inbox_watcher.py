@@ -1,7 +1,7 @@
 """Watch an inbox directory for word from the agents the Entity is driving, and hand it to the
 outbox so the Entity can pass it on to the user.
 
-This is how an agent reaches the user without him watching its screen: the Entity tells each agent to
+This is how an agent reaches the user without them watching its screen: the Entity tells each agent to
 write any question or "ready for review" note as a line to `runtime/agent-inbox/<name>.txt`. A
 background thread tails those files; each complete new line becomes an outbox message, spoken at the
 next lull. Deliberately dumb - plain file polling, byte-offset per file, no OS-specific watching -
@@ -19,7 +19,7 @@ class QuietMonitor:
     """Watch the agents for silence instead of only waiting to be told.
 
     An agent reaches the user by writing to its inbox file; if it hangs or stalls it writes
-    nothing, and he'd hear nothing (he once waited hours). So every check-in stamps the agent's
+    nothing, and they'd hear nothing (they once waited hours). So every check-in stamps the agent's
     last-heard time, and `tick()` — called on the same cheap poll the InboxWatcher already runs —
     surfaces one spoken heads-up once an agent has been silent past `quiet_after`. One warning per
     silence episode (no nagging); a later check-in re-arms it. Clock and threshold are injected so
@@ -118,7 +118,7 @@ class InboxWatcher:
         if not report:
             return False
         # A notice, never the file's contents: an agent overwrote this with thirty lines of its
-        # own internals and every word of it was read out at him.
+        # own internals and every word of it was read out at them.
         self._outbox.push(notice(path.stem, report))
         return True
 

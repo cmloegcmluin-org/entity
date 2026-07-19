@@ -50,7 +50,7 @@ def _wait_for(predicate, timeout=2.0):
 
 
 def test_starting_an_agent_does_not_block_the_caller():
-    # The conversation loop must never wait on agent work - that's what left him talking to a wall.
+    # The conversation loop must never wait on agent work - that's what left them talking to a wall.
     hold = threading.Event()
     desk, outbox, _ = _desk(hold=hold)
 
@@ -174,7 +174,7 @@ def test_closing_the_desk_shuts_its_agents_down():
 
 
 def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
-    # He watched an empty log for fourteen minutes while the agent was alive and working, and
+    # They watched an empty log for fourteen minutes while the agent was alive and working, and
     # Entity declared it dead one minute before it answered. Being able to SEE it work is the fix.
     outbox = Outbox()
     steps = ["Reading the router.", "Writing a failing test.", "Confirmed red."]

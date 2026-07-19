@@ -5,7 +5,7 @@ from entity.no_console import CREATE_NO_WINDOW, silence_child_consoles
 
 def test_children_are_started_without_a_console_window():
     # Launched from the window there is no console to inherit, so Windows hands each console child
-    # its own - the Claude CLI the brain runs turned up as a second window on his desktop.
+    # its own - the Claude CLI the brain runs turned up as a second window on their desktop.
     calls = []
     module = SimpleNamespace(open_process=lambda *a, **kw: calls.append(kw) or "process")
 

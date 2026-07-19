@@ -153,10 +153,10 @@ def test_listen_hands_back_what_the_window_submits():
 
     thread = threading.Thread(target=listener)
     thread.start()
-    dictation.submit("the edited draft, as he corrected it")
+    dictation.submit("the edited draft, as they corrected it")
     thread.join(2.0)
 
-    assert heard["text"] == "the edited draft, as he corrected it"
+    assert heard["text"] == "the edited draft, as they corrected it"
 
 
 def test_listen_yields_empty_when_interrupted_so_agent_news_can_speak():
@@ -210,7 +210,7 @@ def test_catch_stop_hears_a_bark_and_keeps_it_out_of_the_draft():
 
 
 def test_every_frame_reaches_the_recorder_even_while_muted():
-    # The crash-proof audio capture must not depend on the mic state - his words are only
+    # The crash-proof audio capture must not depend on the mic state - their words are only
     # recoverable if they were written before anything else happened to them.
     written = []
 
@@ -228,8 +228,8 @@ def test_every_frame_reaches_the_recorder_even_while_muted():
 
 
 def test_nothing_is_drafted_while_the_entity_is_speaking():
-    # His draft box opened with "I do for you" - the tail of Entity's own spoken greeting, heard
-    # through his speakers. Its own voice must never become his words.
+    # Their draft box opened with "I do for you" - the tail of Entity's own spoken greeting, heard
+    # through their speakers. Its own voice must never become their words.
     ears = Ears()
     dictation = Dictation(FakeTranscriber("I'm ready. What can I do for you?"),
                           FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
@@ -239,7 +239,7 @@ def test_nothing_is_drafted_while_the_entity_is_speaking():
 
     assert ears.drafted == []
     assert ears.states[-1] == "speaking"  # and the window can say so on its button
-    assert ears.levels[-1] == 0.0  # the meter shows nothing: it isn't listening to him
+    assert ears.levels[-1] == 0.0  # the meter shows nothing: it isn't listening to them
 
 
 def test_when_it_stops_speaking_the_mic_returns_to_how_he_left_it():
@@ -249,10 +249,10 @@ def test_when_it_stops_speaking_the_mic_returns_to_how_he_left_it():
     dictation.begin_speaking()
     dictation.end_speaking()
 
-    assert ears.states == ["speaking", "recording"]  # he was recording before, so he still is
+    assert ears.states == ["speaking", "recording"]  # they were recording before, so they still are
 
 
-def test_cutting_it_off_leaves_the_mic_off_rather_than_recording_his_next_breath():
+def test_cutting_it_off_leaves_the_mic_off_rather_than_recording_the_next_breath():
     # "stopping shouldn't immediately turn on record".
     ears = Ears()
     dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
@@ -286,13 +286,13 @@ def test_starting_the_pump_announces_the_state_it_was_built_in():
 
 
 def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
-    # He spoke a whole sentence, then hit mic-off, and the words never appeared: the burst was
+    # They spoke a whole sentence, then hit mic-off, and the words never appeared: the burst was
     # still buffered, waiting for a pause that muting made irrelevant. Muting is not "forget the
     # part you hadn't transcribed yet".
     held = []
 
     class MicHePressesMuteDuring:
-        """He is mid-sentence when he reaches for the button - the burst has started and no pause
+        """They are mid-sentence when they reach for the button - the burst has started and no pause
         has ended it yet."""
 
         def frames(self):
@@ -309,11 +309,11 @@ def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
     dictation.pump()
 
     assert ears.drafted == ["the whole sentence I just said"]
-    assert ears.states[-1] == "muted"  # and it did go quiet, as he asked
+    assert ears.states[-1] == "muted"  # and it did go quiet, as they asked
 
 
-def test_it_reports_whether_his_mic_is_live():
-    # The loop asks this before ever speaking up on its own: while his mic is on, it stays quiet.
+def test_it_reports_whether_the_mic_is_live():
+    # The loop asks this before ever speaking up on its own: while their mic is on, it stays quiet.
     ears = Ears()
     dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
 

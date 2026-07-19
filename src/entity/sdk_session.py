@@ -82,7 +82,7 @@ class SdkSession:
         A real task takes many minutes, and until now nothing at all was visible until the very
         end - so an agent hard at work and an agent that had died looked exactly the same, and
         the user sat watching an empty log for fourteen minutes while Entity declared it dead one
-        minute before it answered. The steps are the narration Claude Code shows him natively."""
+        minute before it answered. The steps are the narration Claude Code shows them natively."""
         return self._submit(self._ask(prompt, on_step))
 
     def close(self):

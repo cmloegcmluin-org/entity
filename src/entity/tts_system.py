@@ -34,7 +34,7 @@ def _default_ps_run(script, text, interrupt=None):
         stderr=subprocess.PIPE,
         text=True,
         # Launched from a window (or Git Bash) there's no console to inherit, so every utterance
-        # was popping its own PowerShell window onto his monitors. The voice needs no window.
+        # was popping its own PowerShell window onto their monitors. The voice needs no window.
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     while True:
@@ -48,7 +48,7 @@ def _default_ps_run(script, text, interrupt=None):
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                return  # he cut it off - not a failure
+                return  # they cut it off - not a failure
     if proc.returncode != 0:
         raise TTSError(f"System.Speech failed: {(proc.stderr.read() if proc.stderr else '').strip()}")
 

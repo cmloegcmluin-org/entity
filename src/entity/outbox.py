@@ -2,7 +2,7 @@
 driving. A background producer pushes; the conversation loop drains and speaks the messages the
 next time it's the Entity's turn to talk. `arrived` lets a quiet moment (a lull while it's waiting
 for the user to start speaking) be interrupted so the message goes out promptly, rather than sitting
-until he happens to say something.
+until they happen to say something.
 """
 
 import threading

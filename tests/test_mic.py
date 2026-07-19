@@ -42,7 +42,7 @@ def test_flush_discards_audio_captured_before_listening_began():
 
     bg.flush()  # between-turn backlog - the Entity's own reply - is thrown away
 
-    assert list(bg.frames()) == []  # nothing replayed into his next turn
+    assert list(bg.frames()) == []  # nothing replayed into their next turn
     bg.close()
 
 

@@ -23,7 +23,7 @@ def test_agent_runs_approval_gated_and_isolated_from_the_global_config():
     # nothing runs without a decision: approvals stay ON and every request routes to can_use_tool
     assert opts.permission_mode == "default"
     assert opts.can_use_tool is not None
-    # load NO settings — the worktrees sit under his home, so any discovery would drag in his
+    # load NO settings — the worktrees sit under their home, so any discovery would drag in their
     # global companion-format CLAUDE.md + Stop hook and contaminate the agent.
     assert list(opts.setting_sources) == []
 

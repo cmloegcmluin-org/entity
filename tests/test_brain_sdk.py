@@ -122,7 +122,7 @@ def test_respond_does_not_retry_after_an_interrupt():
 
         def ask(self, message):
             self.asks += 1
-            brain.interrupt()  # he barges in while we're waiting on the model
+            brain.interrupt()  # they barge in while we're waiting on the model
             raise RuntimeError("stream aborted by interrupt")
 
         def interrupt(self):
@@ -148,7 +148,7 @@ def test_respond_discards_a_partial_reply_after_an_interrupt():
 
         def ask(self, message):
             brain.interrupt()
-            return "half a sentence he never asked to h"
+            return "half a sentence they never asked to h"
 
         def interrupt(self):
             pass

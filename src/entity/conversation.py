@@ -22,23 +22,23 @@ DEFAULT_SUSPENDS = ("suspend", "stop listening")
 DEFAULT_RESUMES = ("resume", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Be seeing you."
 DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
-# He ended a turn ("over") but said nothing in it. Rather than ignore him - which just makes him
-# repeat "over" wondering if he was heard - acknowledge that the turn registered and invite him on.
+# They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
+# repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
 DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Entity' when you want me back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
-# A long or slow answer isn't dumped on him - it's offered first, and only spoken once he says yes,
-# so a wall of text (or a reply he's stopped caring about) never just barges out of the speaker.
+# A long or slow answer isn't dumped on them - it's offered first, and only spoken once they say yes,
+# so a wall of text (or a reply they've stopped caring about) never just barges out of the speaker.
 DEFAULT_READY_QUESTION = "I've got a longer answer for you - ready for it?"
 # Replies over this many characters are gated behind DEFAULT_READY_QUESTION. Set to None to never
 # gate. Kept a few sentences long, since the persona already pushes hard for brevity - only a
 # genuinely big reply should have to wait for a yes.
 DEFAULT_LONG_ANSWER_CHARS = 320
 
-# How long a reply may BE. Not how much of it is read aloud - he disliked hearing only part of
+# How long a reply may BE. Not how much of it is read aloud - they disliked hearing only part of
 # what was written, and said the real answer is that it shouldn't send such long messages. So a
-# reply is cut to this at the seam of a sentence, and what he reads is what he hears.
+# reply is cut to this at the seam of a sentence, and what they read is what they hear.
 DEFAULT_SPOKEN_CHARS = 260
 
 # Said back to the brain on the turn AFTER one of its replies was cut. Truncating silently taught
@@ -50,7 +50,7 @@ TRUNCATION_NOTICE = (
     "{limit} - they never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
 )
 
-# Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).
+# Whether they said yes to "ready for it?" (see _is_affirmative for the full rules).
 _AFFIRMATIVES = (
     "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "ready", "please", "now",
     "go ahead", "go for it", "do it", "hit me", "hear it", "let's hear", "sounds good", "please do",
@@ -58,14 +58,14 @@ _AFFIRMATIVES = (
 _NEGATIVES = ("no", "nope", "nah", "not", "dont", "later", "wait", "hold", "stop", "skip")
 
 # Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
-# dead air waiting to find out he was heard. One plain line he asked for by name (the varied ones
+# dead air waiting to find out they were heard. One plain line they asked for by name (the varied ones
 # came out as awkward TTS - "Mm-hm." read aloud as "m m").
 DEFAULT_ACK = "Message received."
 
 # Waiting is answered ONCE, by handing the question to the background (see DEFAULT_DETACH_AFTER) -
-# not by a stream of "still working" updates, which he found annoying rather than reassuring. These
+# not by a stream of "still working" updates, which they found annoying rather than reassuring. These
 # stay for a caller that wants the old cadence; both sit past the detach, so neither fires by
-# default: a wait ends by getting an answer or by being told he'll be got back to.
+# default: a wait ends by getting an answer or by being told they'll be got back to.
 DEFAULT_PATIENCE = 60.0
 DEFAULT_CHECK_IN = 60.0
 
@@ -81,12 +81,12 @@ DEFAULT_CANCEL_WAIT = 10.0
 # detaching (a slow think just blocks with check-ins, as before). Well past the check-in cadence so
 # only a genuinely long call detaches.
 DEFAULT_DETACH_AFTER = 5.0
-# His words, verbatim, every time. Varying it was a fix for hearing one canned sentence four
-# times; he then heard the variations and asked for exactly this line instead - flowery
-# alternatives are worse than repetition when all he wants to know is that it heard him.
+# Their words, verbatim, every time. Varying it was a fix for hearing one canned sentence four
+# times; they then heard the variations and asked for exactly this line instead - flowery
+# alternatives are worse than repetition when all they want to know is that it heard them.
 DEFAULT_DETACH_REPLIES = ("I'll get back to you on that.",)
 
-# After a reply, wait this long before listening again, so he gets a beat to read it rather than the
+# After a reply, wait this long before listening again, so they get a beat to read it rather than the
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
 DEFAULT_READ_PAUSE = 0.0
 
@@ -130,7 +130,7 @@ def _opening(text, limit):
 
 def _default_reassurance(seconds):
     # "processing your request", not "working on it" - the Entity triages and relays, it isn't doing
-    # the agent's actual work, and he found "working on it" misleading.
+    # the agent's actual work, and they found "working on it" misleading.
     return f"Still processing your request - {_humanize_elapsed(seconds)} so far."
 
 
@@ -142,9 +142,9 @@ _NEGATORS = ("not", "no", "dont", "t", "never", "nah", "nope")
 
 def _is_affirmative(heard):
     """Is there a yes in it? A yes ANYWHERE counts, even alongside negative words: with a TV in the
-    room his real "yes, I am ready" arrives wrapped in unrelated chatter, and a stray "not" from the
-    TV once vetoed his yes and cost him the answer he was promised. A false yes just speaks
-    something he half-wanted; a false no throws it away. The one exception: a yes directly preceded
+    room their real "yes, I am ready" arrives wrapped in unrelated chatter, and a stray "not" from the
+    TV once vetoed their yes and cost them the answer they were promised. A false yes just speaks
+    something they half-wanted; a false no throws it away. The one exception: a yes directly preceded
     by a negator ("not now") is that negation, not a yes."""
     words = _canonical(heard).split()
     for index, word in enumerate(words):
@@ -227,7 +227,7 @@ class Conversation:
         self._spoken_chars = spoken_chars
         self._cut_last_reply = None  # (written, limit) when the last reply was cut, else None
         self._detach_after = detach_after
-        self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
+        self._offered = None  # a long/slow answer spoken only once they say yes to "ready for it?"
         self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
         self._background = None  # a slow think handed off, still running: {"done", "outcome"}
         self._wake = wake  # event the mic waits on; set to break a lull when news is ready to speak
@@ -237,7 +237,7 @@ class Conversation:
         self._check_in = check_in
         self._interrupt_poll = interrupt_poll
         self._cancel_wait = cancel_wait
-        self._read_pause = read_pause  # a beat after a reply so he can read it before listening resumes
+        self._read_pause = read_pause  # a beat after a reply so they can read it before listening resumes
         self._console = console or Console()
         self._sleep = sleep
         self._timings = timings  # --timings: show how long each turn spent thinking vs. speaking
@@ -250,17 +250,17 @@ class Conversation:
         return self._interrupt is not None and self._interrupt.is_set()
 
     def _say(self, text, *, record=True):
-        """Speak, unless he's cut in. Once the interrupt is set, every later line this turn stays
+        """Speak, unless they've cut in. Once the interrupt is set, every later line this turn stays
         unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
-        watcher listens for him saying "stop", which trips the same interrupt - so he can cut it off
+        watcher listens for them saying "stop", which trips the same interrupt - so they can cut it off
         by voice, not just the Enter key. When a watcher already holds the mic (a check-in spoken
         mid-think), we don't open a second one - two readers on one mic corrupt each other. A voice
-        hiccup is logged, not fatal - a failed utterance must never crash the loop (it did, and he
+        hiccup is logged, not fatal - a failed utterance must never crash the loop (it did, and they
         lost the whole run)."""
         if self._interrupted():
-            self._console.spoke("(left unsaid - he had cut in)")
+            self._console.spoke("(left unsaid - they had cut in)")
             return
-        if record:  # a line already printed records itself; this is for the ones only he hears
+        if record:  # a line already printed records itself; this is for the ones only they hear
             self._console.spoke(text)
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
@@ -275,7 +275,7 @@ class Conversation:
                 stop_watching()
 
     def _speak_reply(self, text):
-        """Show him all of it, say the opening of it.
+        """Show them all of it, say the opening of it.
 
         Everything the Entity says goes on screen in full - that is what the window is for - while
         the voice reads only as much as anyone wants read aloud. Speaking every word of a long reply
@@ -283,7 +283,7 @@ class Conversation:
         and being asked that constantly was worse than the wall it guarded against.
         """
         whole = text
-        text = _opening(text, self._spoken_chars)  # what he reads IS what he hears
+        text = _opening(text, self._spoken_chars)  # what they read IS what they hear
         # Remember a cut so the next turn can say so: a limit nothing ever reports is not a limit
         # anything can learn from.
         self._cut_last_reply = (len(whole), self._spoken_chars) if len(text) < len(whole) else None
@@ -291,8 +291,8 @@ class Conversation:
         self._say(text, record=False)
 
     def _pause_to_read(self):
-        """A short beat after a reply before the mic reopens, so he isn't rushed off it - skipped if
-        he's barged in (he's cutting in, not reading)."""
+        """A short beat after a reply before the mic reopens, so they aren't rushed off it - skipped if
+        they've barged in (they're cutting in, not reading)."""
         if self._read_pause > 0 and not self._interrupted():
             self._sleep(self._read_pause)
 
@@ -308,7 +308,7 @@ class Conversation:
 
         def watch():
             try:
-                if catch_stop(speaking.is_set):  # he said "stop" while it was talking
+                if catch_stop(speaking.is_set):  # they said "stop" while it was talking
                     self._interrupt.set()
             except Exception as exc:
                 print(f"[voice-stop error] {exc!r}", file=sys.stderr)
@@ -325,20 +325,20 @@ class Conversation:
     def _deliver_outbox(self):
         """Say what the Entity has queued to say on its own - word from an agent.
 
-        Everything queued goes out as ONE utterance, so a single stop silences all of it; he had to
-        hit stop over and over while a report came at him line by line. It waits while he is
-        recording, because it once broke in mid-sentence while he was talking. And if it's long it
-        is OFFERED, not read out: a wall of an agent's own words is the thing he most wants to be
+        Everything queued goes out as ONE utterance, so a single stop silences all of it; they had to
+        hit stop over and over while a report came at them line by line. It waits while they are
+        recording, because it once broke in mid-sentence while they were talking. And if it's long it
+        is OFFERED, not read out: a wall of an agent's own words is the thing they most want to be
         insulated from.
         """
         if self._outbox is None:
             return
         # ALWAYS drain, even when it can't be said yet. The queue's "something is waiting" flag is
         # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
-        # returning early with it still set spun the loop forever and swallowed every submission he
+        # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
         self._held_news.extend(self._outbox.drain())
-        if self._offered is not None or self._his_mic_is_on() or not self._held_news:
+        if self._offered is not None or self._mic_is_live() or not self._held_news:
             return
         news = "\n\n".join(self._held_news)
         self._held_news = []
@@ -349,9 +349,9 @@ class Conversation:
             return
         self._say(news, record=False)
 
-    def _his_mic_is_on(self):
-        """Is his mic live? While it is, the Entity says nothing of its own accord - it once broke
-        in while he was mid-sentence. A mic that can't report (the terminal's) never blocks: it
+    def _mic_is_live(self):
+        """Is their mic live? While it is, the Entity says nothing of its own accord - it once broke
+        in while they were mid-sentence. A mic that can't report (the terminal's) never blocks: it
         only yields between turns anyway."""
         recording = getattr(self._stt, "is_recording", None)
         return bool(recording and recording())
@@ -359,7 +359,7 @@ class Conversation:
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
         check-in comes after `patience`, then it keeps checking in every `check_in` seconds - each
-        time saying how long it's been - until the reply lands. If he barges in while it's thinking,
+        time saying how long it's been - until the reply lands. If they barge in while it's thinking,
         the call is cancelled and `_ThinkInterrupted` is raised so the loop drops the turn. If it
         runs past `detach_after`, it's handed to the background and `_ThinkDetached` is raised so the
         loop is freed and the answer is offered later. Re-raises whatever the brain raised, so the
@@ -377,7 +377,7 @@ class Conversation:
 
         start = time.monotonic()
         threading.Thread(target=work, daemon=True).start()
-        # Listen for a spoken "stop" for the whole think, not just during a check-in - so he can cut
+        # Listen for a spoken "stop" for the whole think, not just during a check-in - so they can cut
         # off a slow brain call by voice even in its silent stretches, the same as pressing Enter.
         stop_watching = self._watch_for_spoken_stop()
         self._floor_watched = stop_watching is not None
@@ -385,7 +385,7 @@ class Conversation:
             next_check_in = start + self._patience
             detach_at = start + self._detach_after if self._detach_after is not None else None
             while not done.is_set():
-                if self._interrupted():  # he cut in - cancel the call and abandon the turn
+                if self._interrupted():  # they cut in - cancel the call and abandon the turn
                     self._cancel_think(done)
                     raise _ThinkInterrupted
                 if detach_at is not None and time.monotonic() >= detach_at:  # too slow - background it
@@ -397,7 +397,7 @@ class Conversation:
                 if done.wait(timeout):
                     break
                 now = time.monotonic()
-                if now >= next_check_in:  # still thinking - tell him how long, then keep waiting
+                if now >= next_check_in:  # still thinking - tell them how long, then keep waiting
                     self._say(self._reassure(now - start))
                     next_check_in = now + self._check_in
         finally:
@@ -410,7 +410,7 @@ class Conversation:
 
     def _detach_line(self):
         """The next way of saying "this is taking a while" - cycled, so a session where several
-        calls run long doesn't repeat one canned sentence at him."""
+        calls run long doesn't repeat one canned sentence at them."""
         line = self.detach_replies[self._detached_count % len(self.detach_replies)]
         self._detached_count += 1
         return line
@@ -429,7 +429,7 @@ class Conversation:
 
     def _detach(self, done, outcome):
         """Leave the slow call running on its worker and remember it; a reaper breaks the next lull
-        the moment it lands, so the finished answer gets offered promptly rather than waiting for him
+        the moment it lands, so the finished answer gets offered promptly rather than waiting for them
         to speak first."""
         self._background = {"done": done, "outcome": outcome}
         if self._wake is not None:
@@ -445,8 +445,8 @@ class Conversation:
         background = self._background
         if background is None or not background["done"].is_set():
             return
-        if self._his_mic_is_on():
-            return  # he's talking; a finished answer waits, exactly as agent news does
+        if self._mic_is_live():
+            return  # they're talking; a finished answer waits, exactly as agent news does
         self._background = None
         reply = background["outcome"].get("reply")
         if reply is not None and self._offered is None:
@@ -462,7 +462,7 @@ class Conversation:
             self._console.listening()
         heard = self._stt.listen()
         if not heard.strip():
-            # An empty turn that still ended on "over" means he said only the terminator - let him
+            # An empty turn that still ended on "over" means they said only the terminator - let them
             # know it registered (the "✓ got it" cue already printed) instead of leaving dead air.
             if getattr(self._stt, "caught_terminator", False):
                 self._say(self.empty_turn_reply)
@@ -471,7 +471,7 @@ class Conversation:
         farewell = _ends_with_command(canonical, self._farewells)
         if self._paused and not farewell and not _wakes(canonical, self._resumes):
             # Asleep, and it's neither a wake word nor a goodbye - so it's the TV, or someone else in
-            # the room. Don't transcribe it back at him; just show that it landed and was dropped.
+            # the room. Don't transcribe it back at them; just show that it landed and was dropped.
             self._console.ignored()
             return None
         self._console.heard(heard)  # show what was transcribed before we act on it
@@ -486,24 +486,24 @@ class Conversation:
             self._paused = True
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
-        if self._offered is not None:  # he's answering "ready for it?" from a held long/slow reply
+        if self._offered is not None:  # they're answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
         if self._background is not None:
-            self._abandon_background()  # he's talking again - his live turn outranks the old call
+            self._abandon_background()  # they're talking again - their live turn outranks the old call
         return self._answer(heard)
 
     def _abandon_background(self):
-        """He spoke while a detached call was still running. There's only one session, so it can't
-        answer him until that call ends - and bouncing him with a canned "still finishing your last
-        one" threw his words away every time, which locked him out of the conversation entirely.
-        Cancel the stale call instead: what he's saying now always outranks work he's given up on."""
+        """They spoke while a detached call was still running. There's only one session, so it can't
+        answer them until that call ends - and bouncing them with a canned "still finishing your last
+        one" threw their words away every time, which locked them out of the conversation entirely.
+        Cancel the stale call instead: what they're saying now always outranks work they've given up on."""
         background = self._background
         self._background = None
         self._console.dropped()  # so the promise it made doesn't just silently evaporate
-        self._cancel_think(background["done"])  # unwind it before his turn starts a new call
+        self._cancel_think(background["done"])  # unwind it before their turn starts a new call
 
     def _with_truncation_notice(self, heard):
-        """His words, prefixed with the consequence of the last reply if there was one."""
+        """Their words, prefixed with the consequence of the last reply if there was one."""
         cut, self._cut_last_reply = self._cut_last_reply, None
         if cut is None:
             return heard
@@ -513,12 +513,12 @@ class Conversation:
     def _answer(self, heard):
         """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case
         it's held and offered first (see _offer)."""
-        self._say(self._acknowledgement)  # let him know he was heard before the thinking pause
+        self._say(self._acknowledgement)  # let them know they were heard before the thinking pause
         self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
         think_start = time.monotonic()
         try:
             said = self._think(self._with_truncation_notice(heard))
-        except _ThinkInterrupted:  # he cut the thinking off - no reply, straight back to listening
+        except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             return None
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands
             return None
@@ -530,7 +530,7 @@ class Conversation:
         if self._should_gate(said):
             return self._offer(heard, said)
         speak_start = time.monotonic()
-        self._speak_reply(said)  # if he hit Enter while it was talking, this is cut off
+        self._speak_reply(said)  # if they hit Enter while it was talking, this is cut off
         if self._timings:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()
@@ -540,16 +540,16 @@ class Conversation:
         return self._long_answer_chars is not None and len(reply) > self._long_answer_chars
 
     def _offer(self, heard, answer):
-        """Hold a long answer and ask if he wants it, rather than dumping it. His next turn's yes
+        """Hold a long answer and ask if they want it, rather than dumping it. Their next turn's yes
         releases it (see _resolve_offer)."""
         self._offered = answer
         self._speak_reply(self.ready_question)
         return Turn(heard=heard, said=self.ready_question)
 
     def _resolve_offer(self, heard):
-        """His reply to "ready for it?": a yes speaks the held answer, a no drops it, and speech
-        that answers NEITHER way - TV chatter, or him moving on to something else - is handled as an
-        ordinary turn with the offer left standing, so noise can't destroy an answer he never got
+        """Their reply to "ready for it?": a yes speaks the held answer, a no drops it, and speech
+        that answers NEITHER way - TV chatter, or them moving on to something else - is handled as an
+        ordinary turn with the offer left standing, so noise can't destroy an answer they never got
         to accept or refuse."""
         if _is_affirmative(heard):
             answer, self._offered = self._offered, None

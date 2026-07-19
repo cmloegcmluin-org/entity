@@ -1,7 +1,7 @@
 """Continuously write mic frames to a WAV on disk, so nothing the user says is ever lost.
 
 Every frame is flushed to disk the instant it's captured. If the process crashes mid-turn (it
-has, losing minutes of his ideas), the audio is already on disk - recoverable even if the WAV
+has, losing minutes of their ideas), the audio is already on disk - recoverable even if the WAV
 header never got finalized (the raw 16-bit PCM sits right after the 44-byte header).
 """
 

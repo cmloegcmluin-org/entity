@@ -2,9 +2,8 @@
 are the same taskbar button.
 
 Windows matches a pinned shortcut to a running window by AppUserModelID. The Entity process
-declares one (entity.gui.APP_ID); without the same id on the .lnk, pinning it would give him a
-second, separate button - the running app lighting up somewhere else entirely, which is the bug he
-just had. Run once after install-start-menu.ps1, and again if that shortcut is ever recreated.
+declares one (entity.gui.APP_ID); without the same id on the .lnk, pinning it gives a second,
+separate button - the pin sitting inert while the running app lights up somewhere else entirely. Run once after install-start-menu.ps1, and again if that shortcut is ever recreated.
 """
 
 import sys

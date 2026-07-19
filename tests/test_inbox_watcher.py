@@ -135,7 +135,7 @@ def test_files_present_before_startup_are_not_monitored(tmp_path):
 
 def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):
     # An agent overwrote its inbox file with a 30-line report; every line became its own spoken
-    # heads-up, and he had to hit STOP for each one in turn. Now it is one notice, and the report
+    # heads-up, and they had to hit STOP for each one in turn. Now it is one notice, and the report
     # itself stays in that agent's tab.
     outbox = Outbox()
     watcher = InboxWatcher(tmp_path, outbox)
@@ -149,4 +149,4 @@ def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):
 
     said = outbox.drain()
     assert said == ["fixer: IN PROGRESS - backfill. (the rest is in fixer's tab)"]
-    assert "91459e5" not in said[0]  # its internals never reach him
+    assert "91459e5" not in said[0]  # its internals never reach them

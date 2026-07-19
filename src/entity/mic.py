@@ -52,10 +52,10 @@ class BackgroundMicrophone:
     """Reads a frame source continuously on a background thread into a queue.
 
     The main loop reads the mic only between transcriptions; while Parakeet chews on a chunk (a
-    second or more) nothing was draining PortAudio, so it overflowed and dropped whatever he said in
+    second or more) nothing was draining PortAudio, so it overflowed and dropped whatever they said in
     that window. Here a dedicated thread keeps reading no matter what the main thread is doing, and
     `frames()` hands over the buffered audio. `flush()` throws away audio captured between turns (the
-    Entity's own spoken reply, room noise) so it isn't replayed as his next turn.
+    Entity's own spoken reply, room noise) so it isn't replayed as their next turn.
     """
 
     def __init__(self, source, *, max_frames=MAX_BUFFERED_FRAMES):

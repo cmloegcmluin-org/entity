@@ -15,14 +15,14 @@ def canonical(text):
 
 def ends_with_command(canonical_text, commands):
     """A command counts if the utterance IS it or ENDS with it - so "okay, stop listening" trips
-    "stop listening", not just the bare phrase. (He rarely says these distinctive phrases by
+    "stop listening", not just the bare phrase. (They rarely say these distinctive phrases by
     accident, and transcription usually tacks a stray word on, which exact-match then missed.)"""
     return any(canonical_text == cmd or canonical_text.endswith(" " + cmd) for cmd in commands)
 
 
 def wakes(canonical_text, commands):
-    """A wake word also counts at the START. "Hey Entity, can you hear me?" is plainly him waking it,
-    but it ENDS on "hear me" - so an ends-with check left him saying it over and over until he
+    """A wake word also counts at the START. "Hey Entity, can you hear me?" is plainly them waking it,
+    but it ENDS on "hear me" - so an ends-with check left them saying it over and over until they
     happened to say the bare phrase alone."""
     return ends_with_command(canonical_text, commands) or any(
         canonical_text.startswith(cmd + " ") for cmd in commands

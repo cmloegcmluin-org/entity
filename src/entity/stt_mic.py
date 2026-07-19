@@ -30,12 +30,12 @@ FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
 RECENT_WINDOW = 100  # ~3 s of levels; their minimum pulls a stale floor back UP (see NoiseFloor)
 
 # Parakeet hallucinates little backchannel words on near-silence - a quiet stretch comes back as
-# "Mm-hmm. Yeah. Uh." though he said nothing. A chunk that's ONLY these (and has no terminator) is
+# "Mm-hmm. Yeah. Uh." though they said nothing. A chunk that's ONLY these (and has no terminator) is
 # that noise, not a turn, so it's dropped.
 _BACKCHANNEL = {
     "mm", "mmm", "mmhmm", "mhm", "hmm", "hm", "uh", "uhh", "um", "umm",
     "uhhuh", "yeah", "yep", "yup", "huh", "ah", "oh", "er", "erm",
-    "okay", "ok", "kay", "alright", "aright",  # Parakeet fills his pauses with these too
+    "okay", "ok", "kay", "alright", "aright",  # Parakeet fills their pauses with these too
 }
 
 # Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).
@@ -144,7 +144,7 @@ class MicSTT:
         self._recorder = recorder
         self._interrupt = interrupt
         # Set once a turn ends on the terminator - even a bare "over" with nothing before it. Lets the
-        # caller acknowledge an otherwise-empty turn instead of silently ignoring it (he'd repeat "over").
+        # caller acknowledge an otherwise-empty turn instead of silently ignoring it (they'd repeat "over").
         self.caught_terminator = False
 
     def _flush_mic(self):
@@ -163,7 +163,7 @@ class MicSTT:
         started = False
         for frame in self._mic.frames():
             if self._recorder is not None:
-                self._recorder.write(frame)  # to disk first, so a crash can't lose what he said
+                self._recorder.write(frame)  # to disk first, so a crash can't lose what they said
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
             speech = self._is_speech(rms(frame))
@@ -204,13 +204,13 @@ class MicSTT:
         return None
 
     def catch_stop(self, active, words=STOP_WORDS):
-        """While `active()` is true - i.e. the Entity is talking - listen for him barking a stop
+        """While `active()` is true - i.e. the Entity is talking - listen for them barking a stop
         word and return True the moment one lands, so the caller can cut the voice off. Returns
         False when `active()` goes false (the reply finished on its own). Bark-only (see
         _is_stop_bark), so neither the Entity's own voice bleeding into the mic nor a TV sentence
         that happens to contain "wait" can silence the reply."""
         floor = NoiseFloor()  # its own room-level, independent of a listen() in progress
-        self._flush_mic()  # watch only what he says over the reply, not audio buffered before it
+        self._flush_mic()  # watch only what they say over the reply, not audio buffered before it
         chunk = []
         silence = 0
         started = False

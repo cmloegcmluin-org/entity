@@ -122,20 +122,20 @@ def test_a_supervise_directive_starts_an_agent_per_worktree_and_says_so():
     assert "2" in said  # tells the user it started two
 
 
-def test_the_task_the-user_gave_travels_with_the_directive_to_the_agent():
-    # Without this the brain had no way to pass his requirements on, so it went and worked the
-    # request out itself - 45 seconds of digging before he heard a word, on a pure relay.
+def test_the_task_the_user_gave_travels_with_the_directive_to_the_agent():
+    # Without this the brain had no way to pass their requirements on, so it went and worked the
+    # request out itself - 45 seconds of digging before they heard a word, on a pure relay.
     desk = FakeDesk()
     brain = _brain(
         FakeInner("[SUPERVISE] /work/trees\nFinish the six WIP commits, get the tests green,\n"
-                  "and don't merge until the user has verified it himself."),
+                  "and don't merge until the user has verified it themselves."),
         desk, resolve=lambda target: ["/work/trees/a"],
     )
 
     brain.respond("pick up the drive subfolder work")
 
     _, _, task = desk.started[0]
-    assert "six WIP commits" in task and "verified it himself" in task  # his ask, not a canned task
+    assert "six WIP commits" in task and "verified it themselves" in task  # their ask, not a canned task
 
 
 def test_a_directive_with_no_task_lines_falls_back_to_the_default_task():

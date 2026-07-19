@@ -1,6 +1,6 @@
 # Put "Entity" in the Start Menu: a shortcut to pythonw -m entity --gui with the repo's icon.
 # Run from anywhere; everything is derived from this script's own location. Re-run after moving
-# the repo. (Agents run this; the user just clicks the Start Menu entry it creates.)
+# the repo. Run it once after cloning; it creates the entry, nothing else is needed.
 $repo = Split-Path -Parent $PSScriptRoot
 $pythonw = Join-Path $repo ".venv\Scripts\pythonw.exe"
 $icon = Join-Path $repo "assets\entity.ico"

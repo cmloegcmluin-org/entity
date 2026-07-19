@@ -34,3 +34,20 @@ class Transcript:
                     handle.write(f"===== {now.strftime('%Y-%m-%d')} =====\n")
                     self._last_day = now.date()
                 handle.write(body)
+
+
+def recent_lines(directory, *, current, limit=150):
+    """The tail of the most recent past sessions, oldest first - what the window preloads above
+    the live conversation so a session doesn't start with amnesia about yesterday. `current` is
+    this session's own file, which is live and excluded; `limit` bounds the scrollback."""
+    directory = Path(directory)
+    if not directory.is_dir():
+        return []
+    lines = []
+    paths = sorted(path for path in directory.glob("*.log") if current is None or path != Path(current))
+    for path in paths[-3:]:  # the couple of most recent sessions carry plenty of context
+        try:
+            lines.extend(path.read_text(encoding="utf-8", errors="replace").splitlines())
+        except OSError:
+            continue
+    return lines[-limit:]

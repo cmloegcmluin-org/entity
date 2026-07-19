@@ -55,6 +55,7 @@ class Dictation:
         pause_frames=PAUSE_FRAMES,
         stop=None,
         interrupt=None,
+        recorder=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -69,6 +70,7 @@ class Dictation:
         self._pause_frames = pause_frames
         self._stop = stop
         self._interrupt = interrupt
+        self._recorder = recorder
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
         self._bark = None  # while the Entity speaks: an Event a stop bark should fire
 
@@ -124,6 +126,8 @@ class Dictation:
         silence = 0
         started = False
         for frame in self._mic.frames():
+            if self._recorder is not None:
+                self._recorder.write(frame)  # to disk first, so a crash can't lose what he said
             if self._stop is not None and self._stop.is_set():
                 return
             level = rms(frame)

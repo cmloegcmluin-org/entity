@@ -207,3 +207,21 @@ def test_catch_stop_hears_a_bark_and_keeps_it_out_of_the_draft():
 
     assert caught.get("stopped") is True  # the bark cut the voice
     assert ears.drafted == []  # and never became draft text
+
+
+def test_every_frame_reaches_the_recorder_even_while_muted():
+    # The crash-proof audio capture must not depend on the mic state - his words are only
+    # recoverable if they were written before anything else happened to them.
+    written = []
+
+    class FakeRecorder:
+        def write(self, frame):
+            written.append(frame)
+
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(""), FakeMic([_sil(), _sp(), _sil()]),
+                          pause_frames=3, muted=True, recorder=FakeRecorder(), **ears.kwargs())
+
+    dictation.pump()
+
+    assert len(written) == 3

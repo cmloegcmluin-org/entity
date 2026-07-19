@@ -54,3 +54,22 @@ def test_the_directory_is_created_if_it_is_not_there(tmp_path):
     Transcript(path).write("anything")
 
     assert path.exists()
+
+
+def test_recent_lines_hands_back_the_tail_of_earlier_sessions(tmp_path):
+    from entity.transcript import recent_lines
+
+    (tmp_path / "session-20260716-010000.log").write_text("old one\nold two\n", encoding="utf-8")
+    (tmp_path / "session-20260717-010000.log").write_text("mid one\nmid two\n", encoding="utf-8")
+    current = tmp_path / "session-20260718-010000.log"
+    current.write_text("live - must not appear\n", encoding="utf-8")
+
+    lines = recent_lines(tmp_path, current=current, limit=3)
+
+    assert lines == ["old two", "mid one", "mid two"]  # oldest first, bounded, current excluded
+
+
+def test_recent_lines_survives_an_empty_or_missing_directory(tmp_path):
+    from entity.transcript import recent_lines
+
+    assert recent_lines(tmp_path / "nowhere", current=None) == []

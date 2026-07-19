@@ -121,18 +121,12 @@ def _agent_protocol_note(roster, logs):
     )
 
 
-def _build_ears(text_mode, stop, interrupt, announce=print):
-    """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
-    `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
-    if text_mode:
-        return ConsoleSTT(), None, None
-    from datetime import datetime
-
+def _open_hearing(announce):
+    """The hardware half of hearing - transcriber, mic, recorder - shared by both voice modes."""
     import sounddevice as sd
 
     from entity.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
     from entity.recorder import AudioRecorder
-    from entity.stt_mic import MicSTT
     from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
     # Bias transcription toward his own vocabulary so "Notecraft" stops coming back as "high ideas".
@@ -158,6 +152,17 @@ def _build_ears(text_mode, stop, interrupt, announce=print):
     mic = BackgroundMicrophone(Microphone(device=device, gain=gain))
     recorder = AudioRecorder(RUNTIME_DIR / "audio" / f"session-{datetime.now():%Y%m%d-%H%M%S}.wav")
     announce(f"(saving your audio to {recorder.path} - nothing you say gets lost, even on a crash)")
+    return transcriber, mic, recorder
+
+
+def _build_ears(text_mode, stop, interrupt, announce=print):
+    """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
+    `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
+    if text_mode:
+        return ConsoleSTT(), None, None
+    from entity.stt_mic import MicSTT
+
+    transcriber, mic, recorder = _open_hearing(announce)
     cue = lambda: announce("  ✓ got it")  # visual "registered" the instant you say "over"
     stt = MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder, interrupt=interrupt)
     return stt, mic, recorder
@@ -211,7 +216,24 @@ def main(argv=None):
     # it to the Outbox, so word from an agent reaches him the moment it lands, not only when he asks.
     heartbeat = HeartbeatMonitor(sdk_brain, outbox)
     heartbeat.start()
-    stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived, announce)
+    dictation = None
+    if gui:
+        # The window's mic is a STATE, not a walkie-talkie: continuous dictation into the editable
+        # draft, controlled by voice ("hey entity" / "stop listening"), the mic button, and Submit.
+        from entity.dictation import Dictation
+
+        transcriber, mic, recorder = _open_hearing(announce)
+        dictation = Dictation(
+            transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
+            on_draft=lambda t: feed.push("draft", t),
+            on_state=lambda s: feed.push("state", s),
+            on_level=lambda v: feed.push("level", v),
+            on_submit_request=lambda: feed.push("submit", ""),
+        )
+        dictation.start()
+        stt = dictation
+    else:
+        stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived, announce)
 
     tts = NullTTS() if muted else SystemTTS(rate=2)
 
@@ -318,7 +340,18 @@ def main(argv=None):
         finally:
             done.set()
 
-    window = EntityWindow(feed, on_stop=barge_in.set, on_close=stop.set)
+    from entity.memory import DEFAULT_PROFILE_PATH
+    from entity.transcript import recent_lines
+
+    for line in recent_lines(TRANSCRIPTS, current=session_record.path):
+        feed.push("line", line)  # yesterday's sessions, above the divider - no more amnesia
+    feed.push("line", "─" * 34 + "  this session  " + "─" * 34)
+    window = EntityWindow(
+        feed, on_stop=barge_in.set, on_close=stop.set,
+        on_submit=dictation.submit, on_mic=dictation.set_recording,
+        profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS,
+        icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
+    )
     window.close_when(done)
     threading.Thread(target=worker, daemon=True).start()
     window.run()

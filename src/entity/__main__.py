@@ -294,11 +294,13 @@ def main(argv=None):
     session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
     announce(f"(this conversation is being written to {session_record.path})\n")
     if gui:
-        # The window plugs into the same Console seams the terminal uses - one source of truth for
-        # what a session looks like, whichever surface shows it.
-        console = Console(voice=True, record=session_record.write,
-                          echo=lambda t: feed.push("line", t),
-                          overwrite=lambda t: feed.push("overwrite", t))
+        # The window renders a conversation, so it takes the Console's who-said-what seam rather
+        # than its terminal lines - and no "(listening… say 'over')" notice, which is meaningless
+        # next to a mic button and a level meter.
+        console = Console(voice=True, record=session_record.write, listening_notice="",
+                          echo=lambda t: None,
+                          overwrite=lambda t: feed.push("overwrite", t),
+                          messages=lambda role, text: feed.push("message", (role, text)))
     else:
         console = Console(voice=not text_mode, record=session_record.write)
 
@@ -357,8 +359,8 @@ def main(argv=None):
     from entity.transcript import recent_lines
 
     for line in recent_lines(TRANSCRIPTS, current=session_record.path):
-        feed.push("line", line)  # yesterday's sessions, above the divider - no more amnesia
-    feed.push("line", "─" * 34 + "  this session  " + "─" * 34)
+        feed.push("history", line)  # yesterday's sessions, above the divider - no more amnesia
+    feed.push("line", "───────  this session  ───────")
     window = EntityWindow(
         feed, on_stop=barge_in.set, on_close=stop.set,
         on_submit=dictation.submit, on_mic=dictation.set_recording,

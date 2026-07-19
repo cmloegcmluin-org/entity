@@ -4,35 +4,64 @@ from entity.console import Console
 from entity.gui import TranscriptFeed, TranscriptModel
 
 
-def test_lines_accumulate_in_order():
-    model = TranscriptModel()
-
-    model.apply("line", "you said: hi")
-    model.apply("line", "entity> hello\n")
-
-    assert model.lines == ["you said: hi", "entity> hello", ""]  # the trailing blank line survives
+def _model():
+    return TranscriptModel(clock=lambda: "12:00:00")
 
 
-def test_an_overwrite_run_collapses_onto_one_line_like_the_terminal():
-    # The ignore counter rewrites itself in place with carriage returns; the window mirrors that.
-    model = TranscriptModel()
+def test_messages_become_entries_that_know_who_said_them():
+    model = _model()
 
-    model.apply("line", "entity> Resting. Say 'hey Entity' when you want me back.\n")
+    model.apply("message", ("you", "pick up the drive work"))
+    model.apply("message", ("entity", "on it"))
+
+    assert [(e["role"], e["text"], e["stamp"]) for e in model.entries] == [
+        ("you", "pick up the drive work", "12:00:00"),
+        ("entity", "on it", "12:00:00"),
+    ]
+
+
+def test_past_sessions_read_back_as_the_conversation_they_were():
+    model = _model()
+
+    model.apply("history", "[03:41:12] you said: how's the agent doing")
+    model.apply("history", "[03:41:20] entity> Gone quiet since yesterday.")
+    model.apply("history", "===== 2026-07-18 =====")  # a file header is not conversation
+
+    assert [(e["role"], e["stamp"], e["historical"]) for e in model.entries] == [
+        ("you", "03:41:12", True),
+        ("entity", "03:41:20", True),
+    ]
+
+
+def test_an_overwrite_run_collapses_onto_one_entry_like_the_terminal():
+    model = _model()
+
+    model.apply("message", ("entity", "Resting."))
     model.apply("overwrite", "\r(ignoring…)")
     model.apply("overwrite", "\r(ignoring… 2x)")
     model.apply("overwrite", "\r(ignoring… 3x)")
 
-    assert model.lines[-1] == "(ignoring… 3x)"  # one live line ticking up, not three lines
+    assert len(model.entries) == 2  # one live counter, not three lines
+    assert model.entries[-1]["text"] == "(ignoring… 3x)"
 
 
-def test_a_closed_overwrite_run_stays_and_new_lines_follow_it():
-    model = TranscriptModel()
+def test_a_closed_overwrite_run_stays_and_new_messages_follow_it():
+    model = _model()
 
     model.apply("overwrite", "\r(ignoring…)")
-    model.apply("overwrite", "\n")  # the Console closes the run before any real line
-    model.apply("line", "you said: hey Entity")
+    model.apply("overwrite", "\n")
+    model.apply("message", ("you", "hey Entity"))
 
-    assert model.lines == ["(ignoring…)", "you said: hey Entity"]
+    assert [e["text"] for e in model.entries] == ["(ignoring…)", "hey Entity"]
+
+
+def test_startup_narration_shows_as_status_and_blank_lines_are_dropped():
+    model = _model()
+
+    model.apply("line", "(listening on mic: Webcam 101)")
+    model.apply("line", "")
+
+    assert [(e["role"], e["text"]) for e in model.entries] == [("status", "(listening on mic: Webcam 101)")]
 
 
 def test_the_feed_carries_ops_across_threads_in_order():
@@ -40,7 +69,7 @@ def test_the_feed_carries_ops_across_threads_in_order():
 
     def push(start):
         for index in range(start, start + 50):
-            feed.push("line", f"line {index}")
+            feed.push("message", ("you", f"line {index}"))
 
     threads = [threading.Thread(target=push, args=(base,)) for base in (0, 100)]
     for thread in threads:
@@ -48,12 +77,34 @@ def test_the_feed_carries_ops_across_threads_in_order():
     for thread in threads:
         thread.join()
 
-    ops = feed.drain()
-    assert len(ops) == 100  # nothing lost
+    assert len(feed.drain()) == 100  # nothing lost
     assert feed.drain() == []  # and drained means drained
 
 
-def test_the_real_window_mirrors_everything_and_ends_itself_when_the_conversation_does(tmp_path):
+def test_the_console_drives_the_conversation_without_the_window_parsing_prefixes():
+    feed = TranscriptFeed()
+    console = Console(echo=lambda _: None, overwrite=lambda t: feed.push("overwrite", t),
+                      messages=lambda role, text: feed.push("message", (role, text)))
+
+    console.heard("what can you do")
+    console.reply("plenty")
+    console.ignored()
+    console.ignored()
+    console.heads_up("the fixer agent is done")
+
+    model = _model()
+    for op, payload in feed.drain():
+        model.apply(op, payload)
+
+    assert [(e["role"], e["text"]) for e in model.entries] == [
+        ("you", "what can you do"),
+        ("entity", "plenty"),
+        ("status", "(ignoring… 2x)"),
+        ("heads-up", "the fixer agent is done"),
+    ]
+
+
+def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversation(tmp_path):
     # ONE real-Tk pass, withdrawn so nothing flashes on screen, and a single Tk lifecycle for the
     # whole process - Tk tolerates create/destroy/create sequences poorly enough to flake.
     from entity.gui import EntityWindow
@@ -67,43 +118,48 @@ def test_the_real_window_mirrors_everything_and_ends_itself_when_the_conversatio
 
     feed = TranscriptFeed()
     done = threading.Event()
-    submitted = []
-    mic_flips = []
-    window = EntityWindow(feed, on_stop=lambda: None, on_close=lambda: None,
+    submitted, mic_flips, stops = [], [], []
+    window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
                           on_submit=submitted.append, on_mic=mic_flips.append,
-                          profile_path=profile, agent_logs_dir=logs)
+                          profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00")
     try:
         window.withdraw()
         window.close_when(done)
 
-        feed.push("line", "you said: hi")
-        feed.push("line", "entity> hello\n")
-        feed.push("overwrite", "\r(ignoring…)")
-        feed.push("overwrite", "\r(ignoring… 2x)")
+        feed.push("history", "[03:41:12] you said: how's the agent doing")
+        feed.push("message", ("you", "pick up the drive work"))
+        feed.push("message", ("entity", "Started 1 agent."))
         window._drain_once()
-        text = window.widget_text()
-        assert "you said: hi" in text and "entity> hello" in text
-        assert "(ignoring… 2x)" in text and "(ignoring…)\n" not in text  # collapsed, not stacked
+        shown = window.widget_text()
+        assert "You · 03:41:12" in shown and "how's the agent doing" in shown  # yesterday, in place
+        assert "You · 12:00:00" in shown and "Entity · 12:00:00" in shown  # names and times
+        assert window.justify_of("you") == "right" and window.justify_of("entity") == "left"
 
         feed.push("draft", "add eggs")
         feed.push("draft", "and milk")
-        feed.push("state", "muted")
-        feed.push("level", 0.03)
         window._drain_once()
         assert window.draft_text() == "add eggs and milk"  # dictation chunks joined readably
-
         feed.push("submit", "")
         window._drain_once()
-        assert submitted == ["add eggs and milk"]  # a spoken "over" submits the edited draft
-        assert window.draft_text() == ""  # and the box is ready for the next turn
+        assert submitted == ["add eggs and milk"] and window.draft_text() == ""
+
+        # One button: it IS the stop while Entity talks, and stopping leaves the mic off.
+        feed.push("state", "speaking")
+        window._drain_once()
+        assert "stop" in window.mic_button_text()
+        window.press_mic()
+        assert stops == [True] and mic_flips == [False]
 
         for _ in range(window.SLOW_POLL_EVERY):  # let the slow poll fire once
             window._drain_once()
-        labels = window.tab_labels()
-        assert "Conversation" in labels and "⚙ fixer" in labels
+        assert "⚙ fixer" in window.tab_labels()
         assert "fix the drive link" in window.agent_tab_text("fixer")
-        assert "- swim" in window.section_text("Goals")
-        assert "- better voice" in window.section_text("Enhancements")
+        assert window.section_text("Goals").strip() == "- swim"
+
+        window.set_section_text("Goals", "- swim, three times a week")
+        window.save_section_tab("Goals")
+        assert "- swim, three times a week" in profile.read_text(encoding="utf-8")
+        assert "- better voice" in profile.read_text(encoding="utf-8")  # other sections untouched
 
         assert not window.ended
         done.set()
@@ -111,27 +167,3 @@ def test_the_real_window_mirrors_everything_and_ends_itself_when_the_conversatio
         assert window.ended
     finally:
         window.destroy()  # idempotent, so the happy path ending first is fine
-
-
-def test_the_console_drives_the_feed_the_same_way_it_drives_a_terminal():
-    # The window plugs into the same Console seams as the terminal - one source of truth for what
-    # a session looks like, whichever surface shows it.
-    feed = TranscriptFeed()
-    console = Console(echo=lambda t: feed.push("line", t), overwrite=lambda t: feed.push("overwrite", t))
-
-    console.heard("what can you do")
-    console.thinking()
-    console.reply("plenty")
-    console.ignored()
-    console.ignored()
-    console.heads_up("the fixer agent is done")
-
-    model = TranscriptModel()
-    for op, text in feed.drain():
-        model.apply(op, text)
-
-    assert "you said: what can you do" in model.lines
-    assert "(thinking…)" in model.lines
-    assert "entity> plenty" in model.lines
-    assert "(ignoring… 2x)" in model.lines
-    assert any("heads-up" in line and "fixer" in line for line in model.lines)

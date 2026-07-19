@@ -188,11 +188,11 @@ def test_a_long_answer_is_offered_first_then_delivered_on_a_yes():
     first = convo.turn()
 
     assert first.said == convo.ready_question  # it asked instead of dumping the wall of text
-    assert VariableBrain.WALL not in tts.spoken  # nothing dumped yet
+    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # nothing dumped yet
 
     convo.turn()  # he says "yes"
 
-    assert VariableBrain.WALL in tts.spoken  # the yes released the full answer
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # the yes released the full answer
 
 
 def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
@@ -204,7 +204,7 @@ def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
     convo.turn()  # offers "ready?"
     convo.turn()  # "no thanks"
 
-    assert VariableBrain.WALL not in tts.spoken  # he declined, so it was never delivered
+    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # he declined, so it was never delivered
     assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
     assert brain.heard == ["tell me everything", "no thanks"]
 
@@ -224,7 +224,7 @@ def test_his_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
     convo.turn()  # offers "ready?"
     convo.turn()  # TV garbage + his real yes
 
-    assert VariableBrain.WALL in tts.spoken  # his yes won; the answer was finally delivered
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # his yes won; the answer was finally delivered
 
 
 def test_speech_that_answers_neither_way_leaves_the_offer_standing():
@@ -242,7 +242,7 @@ def test_speech_that_answers_neither_way_leaves_the_offer_standing():
     convo.turn()  # his real yes, one turn later
 
     assert "a short reply" in tts.spoken  # the garbage still got an ordinary answer
-    assert VariableBrain.WALL in tts.spoken  # and his okay still released the held answer
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # and his okay still released the held answer
 
 
 def test_gating_off_speaks_even_a_long_answer_straight_away():
@@ -254,7 +254,7 @@ def test_gating_off_speaks_even_a_long_answer_straight_away():
     turn = convo.turn()
 
     assert turn.said == VariableBrain.WALL  # gate disabled -> spoken as before
-    assert VariableBrain.WALL in tts.spoken
+    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)
 
 
 def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
@@ -1145,3 +1145,27 @@ def test_it_stays_quiet_while_his_mic_is_on():
     stt.on = False
     convo.turn()
     assert any("fixer" in line for line in tts.spoken)
+
+
+def test_a_long_reply_is_shown_whole_and_spoken_short():
+    # He is never asked "ready for it?" any more - the window shows him the words. What he HEARS
+    # is the first couple of sentences; sitting through a wall read aloud was the whole complaint.
+    lines = []
+    tts = FakeTTS()
+
+    class WordyBrain:
+        def respond(self, utterance):
+            return ("First, the short answer. Second, some detail he can read. " + "Padding. " * 60)
+
+    convo = Conversation(FakeSTT(["hi"]), WordyBrain(), tts, long_answer_chars=None,
+                         spoken_chars=80, console=Console(echo=lines.append))
+
+    convo.turn()
+
+    shown = "\n".join(lines)
+    assert "Padding." in shown  # all of it is on screen
+    spoken = [line for line in tts.spoken if "First," in line][0]
+    assert len(spoken) <= 100  # only the opening reaches the speaker
+    assert spoken.startswith("First, the short answer.")  # and it starts where the reply does
+    assert len(spoken) < len(shown) / 4  # the bulk of it he reads rather than sits through
+    assert convo.ready_question not in tts.spoken  # and he was never asked

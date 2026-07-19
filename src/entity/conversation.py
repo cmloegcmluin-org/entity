@@ -1,3 +1,4 @@
+import re
 import sys
 import threading
 import time
@@ -34,6 +35,11 @@ DEFAULT_READY_QUESTION = "I've got a longer answer for you - ready for it?"
 # gate. Kept a few sentences long, since the persona already pushes hard for brevity - only a
 # genuinely big reply should have to wait for a yes.
 DEFAULT_LONG_ANSWER_CHARS = 320
+
+# How much of a reply is SPOKEN. The rest is on screen for him to read - he has a window now, and
+# every reply being long enough to trigger "I've got a longer answer for you, ready for it?" was
+# worse than the wall it was guarding against. Roughly two sentences.
+DEFAULT_SPOKEN_CHARS = 260
 
 # Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).
 _AFFIRMATIVES = (
@@ -100,6 +106,22 @@ def _humanize_elapsed(seconds):
     if rest == 0:
         return f"about {minutes} {unit}"
     return f"about {minutes} {unit} and {rest} seconds"
+
+
+def _opening(text, limit):
+    """The first sentence or two of `text`, whole sentences only, or all of it if it's already
+    short. Never mid-word: a voice cut off mid-sentence sounds like a fault."""
+    said = " ".join(str(text).split())
+    if limit is None or len(said) <= limit:
+        return said
+    kept = ""
+    for sentence in re.split(r"(?<=[.!?])\s", said):
+        if kept and len(kept) + len(sentence) + 1 > limit:
+            break
+        kept = f"{kept} {sentence}".strip()
+    if not kept:  # one enormous sentence: stop at a word boundary rather than mid-word
+        kept = said[:limit].rsplit(" ", 1)[0] + "…"
+    return kept
 
 
 def _default_reassurance(seconds):
@@ -174,6 +196,7 @@ class Conversation:
         cancel_wait=DEFAULT_CANCEL_WAIT,
         detach_after=DEFAULT_DETACH_AFTER,
         long_answer_chars=DEFAULT_LONG_ANSWER_CHARS,
+        spoken_chars=DEFAULT_SPOKEN_CHARS,
         read_pause=DEFAULT_READ_PAUSE,
         console=None,
         sleep=time.sleep,
@@ -197,6 +220,7 @@ class Conversation:
         self.detach_replies = detach_replies
         self._detached_count = 0  # how many calls have gone to the background, to vary the wording
         self._long_answer_chars = long_answer_chars
+        self._spoken_chars = spoken_chars
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
         self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
@@ -246,11 +270,15 @@ class Conversation:
                 stop_watching()
 
     def _speak_reply(self, text):
-        """Print the line to the terminal, then speak it - so he can read the reply as it's said,
-        not only hear it go by. Used for whatever a turn returns as its `said`; the ack and check-ins
-        stay off the terminal, though the record keeps them."""
+        """Show him all of it, say the opening of it.
+
+        Everything the Entity says goes on screen in full - that is what the window is for - while
+        the voice reads only as much as anyone wants read aloud. Speaking every word of a long reply
+        is what made "I've got a longer answer for you, ready for it?" fire on nearly every turn,
+        and being asked that constantly was worse than the wall it guarded against.
+        """
         self._console.reply(text)
-        self._say(text, record=False)
+        self._say(_opening(text, self._spoken_chars), record=False)
 
     def _pause_to_read(self):
         """A short beat after a reply before the mic reopens, so he isn't rushed off it - skipped if

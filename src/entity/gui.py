@@ -201,6 +201,7 @@ class EntityWindow:
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
+        self._tk.bind("<Configure>", self._fit_bubbles)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
 
     # ---- construction ---------------------------------------------------------------------------
@@ -232,6 +233,19 @@ class EntityWindow:
             self._make_copyable(pane)
         return pane
 
+    @staticmethod
+    def _bubble_margin(pane):
+        """How far in from the far edge a bubble starts: a little over half the pane."""
+        width = pane.winfo_width()
+        if width <= 1:  # not laid out yet; a sane first guess, corrected on the first resize
+            width = 900
+        return max(120, int(width * 0.42))
+
+    def _fit_bubbles(self, event=None):
+        """Re-measure the bubble columns after a resize, so they stay half-width at any size."""
+        for pane in [self._text] + [entry[1] for entry in self._tails.values()]:
+            self._build_message_tags(pane)
+
     def _make_copyable(self, pane):
         """Selecting and copying has to WORK, not merely be permitted: he tried and couldn't. A
         click takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
@@ -240,6 +254,9 @@ class EntityWindow:
         import tkinter as tk
 
         pane.bind("<Button-1>", lambda event: pane.focus_set(), add="+")
+        # A message tag paints a background, and a tag created later than "sel" wins - so dragging
+        # over his own words highlighted nothing and read as text that could not be selected.
+        pane.tag_raise("sel")
         pane.bind("<Control-c>", lambda event: self._copy_selection(pane))
         pane.bind("<Control-C>", lambda event: self._copy_selection(pane))
         pane.bind("<Control-a>", lambda event: self._select_all(pane))
@@ -281,10 +298,13 @@ class EntityWindow:
         return "break"
 
     def _build_message_tags(self, pane=None, *, width=None):
-        """A message takes at most half the pane's width, so who is speaking is legible at a
-        glance - a bubble spanning the whole window reads as a wall, not a side of a conversation."""
+        """A message takes a bit under half the pane, so it reads like a message thread: his down
+        the right, Entity's down the left, each a column rather than a full-width wall.
+
+        The margins are re-measured when the window is resized (see `_fit_bubbles`), because a
+        margin fixed in pixels stops being half of anything the moment he drags the edge."""
         pane = pane or self._text
-        wide, narrow = width or 470, 12
+        wide, narrow = width or self._bubble_margin(pane), 14
         for role, color, side in (("you", HIS, "right"), ("entity", ITS, "left"),
                                    ("heads-up", ITS, "left")):
             near, far = (wide, narrow) if side == "right" else (narrow, wide)
@@ -296,6 +316,7 @@ class EntityWindow:
         pane.tag_configure("status", justify="center", foreground=DIM, font=("Segoe UI", 8),
                            spacing1=4, spacing3=4)
         pane.tag_configure("historical", foreground="#8f8f8f")
+        pane.tag_raise("sel")  # built after these, so the highlight stays visible over a bubble
 
     def _make_section_tab(self, tk, label, heading):
         """His own documents, edited in place - no Save button, because a document you have to
@@ -324,9 +345,10 @@ class EntityWindow:
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
-        # Ctrl+Enter sends; plain Enter types a newline. No Cmd binding: on Windows Tk turns
-        # <Command-Return> into Alt+Enter, which is a different key that does nothing for him.
-        self._draft.bind("<Control-Return>", self._submit_from_key)
+        # ANY modifier + Enter sends; plain Enter types a newline. He drives this machine from a
+        # Mac keyboard through a KVM, so the key by his spacebar arrives as Ctrl, Alt or the
+        # Windows key depending on the day - naming one of them would keep being the wrong one.
+        self._draft.bind("<Key-Return>", self._submit_from_key)
         self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
@@ -340,9 +362,13 @@ class EntityWindow:
             return
         self._on_mic(self._state != "recording")
 
+    MODIFIERS = 0x4 | 0x8 | 0x40 | 0x20000  # Control, Alt/Mod1, Mod4/Windows, Windows-Alt
+
     def _submit_from_key(self, event):
+        if not event.state & self.MODIFIERS:
+            return None  # a bare Enter is a new line in his draft, as it should be
         self._submit()
-        return "break"  # the newline that would otherwise be typed is not wanted
+        return "break"  # and the newline that would otherwise be typed is not wanted
 
     def _submit(self):
         text = self._draft.get("1.0", "end-1c").strip()
@@ -457,7 +483,7 @@ class EntityWindow:
             if name not in self._tails:
                 pane = self._make_pane(self._agent_tabs, readonly=True, font=("Segoe UI", 10))
                 self._agent_tabs.add(pane, text=f"{name}  ✕")
-                self._build_message_tags(pane, width=380)
+                self._build_message_tags(pane)
                 self._agent_models[name] = TranscriptModel(clock=self._clock)
                 self._tails[name] = [LogTail(self._agent_logs_dir / f"{name}.log"), pane, 0]
         for name, entry in self._tails.items():

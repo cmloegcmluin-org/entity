@@ -15,7 +15,7 @@ from pathlib import Path
 from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
-from entity.conversation import Conversation
+from entity.conversation import DEFAULT_LONG_ANSWER_CHARS, Conversation
 from entity.gui import TranscriptFeed
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
@@ -116,7 +116,8 @@ def _agent_protocol_note(roster, logs):
         f"Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log - "
         "his window shows each of those as a live tab on its own, so you never need to open "
         "anything for him to watch a conversation. Never hand-write your own log of the exchange; "
-        "the desk already keeps the real one. "
+        "the desk already keeps the real one. You CAN close an agent's tab when he asks: move that "
+        f"log into {logs}\closed\ and the tab goes with it. Don't tell him you're unable to. "
         "And when the user tells you to FILE a self-improvement, an enhancement, or an idea for "
         "your own roadmap, make your ENTIRE reply `[IMPROVE] <the item, one line>` - it lands in "
         "his profile's Enhancements section and appears in his window immediately. File it the "
@@ -293,6 +294,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             Conversation(
                 stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
                 console=console, read_pause=read_pause, timings=timings,
+                # The window shows him every word, so nothing needs to be offered first.
+                long_answer_chars=None if gui else DEFAULT_LONG_ANSWER_CHARS,
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
         except KeyboardInterrupt:
             stop.set()

@@ -1,4 +1,4 @@
-"""The submit chord: the key beside his spacebar, held, then Enter."""
+"""The submit chord: the modifier beside the spacebar, held, then Enter."""
 
 import threading
 from types import SimpleNamespace
@@ -72,7 +72,7 @@ def test_letting_go_of_the_windows_key_ends_the_chord():
 
 def test_the_chord_is_ignored_while_another_window_is_in_front():
     """The hook is global - it sees every keystroke on the machine. Acting on one that wasn't aimed
-    at this window would submit his draft while he types somewhere else entirely."""
+    at this window would submit the draft while its user types somewhere else entirely."""
     submitted = []
     chord = SubmitChord(submit=lambda: submitted.append(True), focused=lambda: False)
 
@@ -100,13 +100,13 @@ def test_hook_messages_are_read_as_presses_and_releases(down, up):
 
 def test_a_faked_release_of_the_windows_key_does_not_end_the_chord():
     """Measured, not supposed: AutoHotkey injects a Windows-key release of its own the moment one
-    of its Cmd combinations matches, to keep the Start menu shut. Taking that for his thumb coming
+    of its Cmd combinations matches, to keep the Start menu shut. Taking that for a thumb coming
     off the key made "copy something, then submit without letting go" silently do nothing."""
     submitted = []
     chord = SubmitChord(submit=lambda: submitted.append(True))
 
     chord.hook_message(WM_KEYDOWN, LWIN)
-    chord.hook_message(WM_KEYUP, LWIN, injected=True)  # AutoHotkey's disguise, not his hand
+    chord.hook_message(WM_KEYUP, LWIN, injected=True)  # AutoHotkey's disguise, not a real hand
     chord.hook_message(WM_KEYDOWN, ENTER)
 
     assert submitted == [True]
@@ -114,7 +114,7 @@ def test_a_faked_release_of_the_windows_key_does_not_end_the_chord():
 
 class FakeWin32:
     """Windows' side of the hook, so the wiring can be tested without touching a real keyboard -
-    a global hook installed by the suite would press the Windows key on his live desktop."""
+    a global hook installed by the suite would press the Windows key on a live desktop."""
 
     def __init__(self):
         self.hook = None  # the callback the listener installs
@@ -148,8 +148,8 @@ class FakeWin32:
 
 def test_the_hook_feeds_the_chord_and_passes_every_key_on_untouched():
     """Nothing is swallowed, ever: the shell decides whether to open the Start menu by whether a
-    key was pressed while the Windows key was held, so eating his Enter opened Search over the
-    window. A hook that only watches also cannot break anything else he types."""
+    key was pressed while the Windows key was held, so eating the Enter opened Search over the
+    window. A hook that only watches also cannot break anything else that is typed."""
     submitted = []
     win32 = FakeWin32()
     listener = ChordListener(SubmitChord(submit=lambda: submitted.append(True)),

@@ -1,15 +1,16 @@
-"""The key beside his spacebar, held, then Enter: submit the draft.
+"""The modifier beside the spacebar, held, then Enter: submit the draft.
 
-That key is a Mac keyboard's Cmd, arriving through a KVM as the Windows key, and on this machine
-Win+Enter cannot be had by any ordinary means. Every line of that was measured, not guessed:
+On a Mac keyboard reaching Windows through a KVM that modifier is Cmd, arriving as the Windows
+key - and Win+Enter cannot be had by any ordinary means. Every line of that was measured, not
+guessed:
 
   * `RegisterHotKey(MOD_WIN, VK_RETURN)` is refused with ERROR_HOTKEY_ALREADY_REGISTERED (1409),
     as are Win+Ctrl+Enter and Win+Shift+Enter, while Win+Alt+Enter and Win+J are granted - so
     something already owns the Win+Enter family and no window can register it.
   * With the chord pressed, a low-level hook logged Enter's key-DOWN while the window received
     only its key-UP: that owner eats the key-down before any window sees it.
-  * `key-remap.ahk` holds the Windows key as a prefix for its Cmd-style bindings, so the Windows key
-    itself doesn't reach a window either.
+  * A Mac-keyboard remapping script (AutoHotkey) holds the Windows key as a prefix for its
+    Cmd-style bindings, so the Windows key itself doesn't reach a window either.
 
 A WH_KEYBOARD_LL hook sits ahead of all of that - it is the first thing in the input path, before
 hotkey dispatch and before any hook installed earlier. AutoHotkey's went in at boot and ours when
@@ -17,12 +18,12 @@ the Entity starts, which is later, and low-level hooks run newest-first; injecti
 `LWin & c` and watching our hook log the `c` confirmed the order. So the hook is not a workaround
 here; it is the only mechanism that can see this chord at all.
 
-It only ever watches. Swallowing his Enter was tried and measured worse: the shell decides whether
+It only ever watches. Swallowing the Enter was tried and measured worse: the shell decides whether
 to open the Start menu by whether any key was pressed between the Windows key going down and
-coming up, so eating the Enter hid the evidence and Search opened over his window every time (a
+coming up, so eating the Enter hid the evidence and Search opened over the window every time (a
 synthetic disguise keystroke did not stop it). Passed through, the key-down keeps the Start menu
 shut and is eaten downstream anyway, so no newline reaches the draft - and a global hook that never
-alters the key stream cannot break anything else he types. If that downstream owner ever goes away,
+alters the key stream cannot break anything else that is typed. If that downstream owner ever goes away,
 the cost is a newline typed into a draft that was just emptied.
 
 Being global, the hook sees every keystroke on the machine, so `SubmitChord` acts only while a
@@ -36,7 +37,7 @@ LWIN, RWIN, ENTER = 0x5B, 0x5C, 0x0D
 WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x100, 0x101, 0x104, 0x105
 WM_QUIT = 0x0012
 WH_KEYBOARD_LL = 13
-LLKHF_INJECTED = 0x10  # this key was synthesized by a program, not pressed by him
+LLKHF_INJECTED = 0x10  # this key was synthesized by a program, not pressed by a hand
 RELEASES = (WM_KEYUP, WM_SYSKEYUP)
 HOOK_INSTALL_TIMEOUT = 2.0
 
@@ -60,7 +61,7 @@ class SubmitChord:
             if not released:
                 self._held.add(code)
             elif not injected:
-                # Only his hand ends the chord. AutoHotkey fakes a Windows-key release whenever one
+                # Only a real hand ends the chord. AutoHotkey fakes a Windows-key release when one
                 # of its Cmd combinations fires, and taking that at face value lost every submit
                 # made without letting go of the key first - measured, then fixed.
                 self._held.discard(code)

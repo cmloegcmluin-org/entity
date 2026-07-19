@@ -352,7 +352,7 @@ class EntityWindow:
 
     def _submit_from_key(self, event):
         if not event.state & self.MODIFIERS:
-            return None  # a bare Enter is a new line in his draft, as it should be
+            return None  # a bare Enter is a new line in the draft, as it should be
         self._submit()
         return "break"  # and the newline that would otherwise be typed is not wanted
 

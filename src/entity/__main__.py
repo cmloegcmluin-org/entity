@@ -387,7 +387,7 @@ def main(argv=None):
         profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS, persona=_persona(),
         learned_path=DEFAULT_LEARNED_PATH,
         icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
-        # The key beside his spacebar + Enter submits the draft. It reaches no window on this
+        # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
         # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
         chord=ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
                                         focused=foreground_is_ours)),

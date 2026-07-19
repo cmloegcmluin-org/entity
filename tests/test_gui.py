@@ -234,7 +234,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert "hates being read a wall" in learned.read_text(encoding="utf-8")
 
         # The submit chord listens for as long as the window is open, and no longer: a global
-        # keyboard hook outliving its window would keep eating his Win+Enter everywhere.
+        # keyboard hook outliving its window would keep eating Win+Enter everywhere.
         assert chord.started == 1 and chord.stopped == 0
 
         assert not window.ended

@@ -9,6 +9,8 @@ so it just works on Windows and can't corrupt the brain's own message stream.
 """
 
 import threading
+
+from entity.relay import notice
 import time
 from pathlib import Path
 
@@ -115,7 +117,9 @@ class InboxWatcher:
         report = "\n".join(lines).strip()
         if not report:
             return False
-        self._outbox.push(report)
+        # A notice, never the file's contents: an agent overwrote this with thirty lines of its
+        # own internals and every word of it was read out at him.
+        self._outbox.push(notice(path.stem, report))
         return True
 
     def run(self):

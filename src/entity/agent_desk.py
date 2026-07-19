@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 
+from entity.relay import notice
 from entity.transcript import Transcript
 
 
@@ -112,7 +113,8 @@ class AgentDesk:
             return
         self._log(entry, reply, prefix="AGENT> ")
         self._set_state(name, "idle", last_word=reply)
-        self._outbox.push(f"{name}: {reply}")
+        # A notice, never the agent's own words - the full reply is in the log its tab reads.
+        self._outbox.push(notice(name, reply))
 
     def _log(self, entry, text, *, prefix):
         if entry.log is not None:

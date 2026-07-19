@@ -161,7 +161,7 @@ class SdkBrain:
         self._baseline = None  # context size at the start of the current session's life
         self._recent = deque(maxlen=recent_turns_kept)  # last turns, carried across a compaction
         self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
-        self._respond_lock = threading.Lock()  # one ask at a time - a real turn and the heartbeat share the session
+        self._respond_lock = threading.Lock()  # one session, so one ask at a time
         self._session = self._new_session(_make_options(persona, model))
 
     def interrupt(self):
@@ -172,10 +172,10 @@ class SdkBrain:
         self._session.interrupt()
 
     def respond(self, utterance, *, remember=True):
-        """Ask the brain. `remember=False` (used by the background heartbeat) keeps the exchange out
+        """Ask the brain. `remember=False` keeps a background exchange out
         of the carried-forward recent-turns window, so its silent "any agent news?" polls don't
         crowd out the real conversation."""
-        with self._respond_lock:  # serialize the heartbeat and a real turn onto the one session
+        with self._respond_lock:  # everything shares the one session, so serialize onto it
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
                 self._compact()

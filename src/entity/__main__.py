@@ -17,7 +17,6 @@ from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import Conversation
 from entity.gui import TranscriptFeed
-from entity.heartbeat import HeartbeatMonitor
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.memory import (
     append_learned,
@@ -210,12 +209,6 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS)
     brain = SupervisingBrain(sdk_brain, desk)
-    # Heartbeat: on a quiet timer, ask the brain if any agent has news he doesn't have yet and queue
-    # it to the Outbox, so word from an agent reaches him the moment it lands, not only when he asks.
-    # Only ever asked about agents the desk really has - see heartbeat.py for what open-ended asking
-    # cost him.
-    heartbeat = HeartbeatMonitor(sdk_brain, outbox, roster=lambda: [name for name, _, _ in desk.roster()])
-    heartbeat.start()
     dictation = None
     if gui:
         # The window's mic is a STATE, not a walkie-talkie: continuous dictation into the editable
@@ -305,7 +298,6 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             stop.set()
         finally:
             inbox_watcher.stop()
-            heartbeat.stop()
             desk.close()
             if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
                 if not text_mode and not muted:

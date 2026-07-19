@@ -87,7 +87,11 @@ class InboxWatcher:
             self._monitor.tick()
 
     def _read_new_lines(self, path):
-        """Surface any complete new lines from `path` to the outbox; True if any were pushed."""
+        """Surface what an agent has newly written as ONE message; True if anything was pushed.
+
+        One message, not one per line: an agent overwrote its file with a thirty-line report and
+        every line became its own spoken heads-up, which the user had to stop one at a time.
+        """
         size = self._size(path)
         start = self._offsets.get(path, 0)
         if size < start:  # file was truncated or rewritten smaller - resync from the top
@@ -105,13 +109,14 @@ class InboxWatcher:
         if newline == -1:
             return False  # only a half-written line so far; wait for it to finish
         self._offsets[path] = start + newline + 1
-        pushed = False
-        for line in chunk[: newline + 1].decode("utf-8", "replace").splitlines():
-            line = line.strip()
-            if line:
-                self._outbox.push(line)
-                pushed = True
-        return pushed
+        # splitlines/join rather than a raw decode: an agent writing from Windows leaves
+        # carriage returns behind, and those have no business inside a spoken message.
+        lines = chunk[: newline + 1].decode("utf-8", "replace").splitlines()
+        report = "\n".join(lines).strip()
+        if not report:
+            return False
+        self._outbox.push(report)
+        return True
 
     def run(self):
         while not self._stop.is_set():

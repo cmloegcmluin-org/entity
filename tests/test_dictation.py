@@ -283,3 +283,37 @@ def test_starting_the_pump_announces_the_state_it_was_built_in():
     dictation.start().join(2.0)
 
     assert ears.states[0] == "muted"
+
+
+def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
+    # He spoke a whole sentence, then hit mic-off, and the words never appeared: the burst was
+    # still buffered, waiting for a pause that muting made irrelevant. Muting is not "forget the
+    # part you hadn't transcribed yet".
+    held = []
+
+    class MicHePressesMuteDuring:
+        """He is mid-sentence when he reaches for the button - the burst has started and no pause
+        has ended it yet."""
+
+        def frames(self):
+            for index, frame in enumerate([_sil()] * 2 + [_sp()] * 6):
+                if index == 5:
+                    held[0].set_recording(False)
+                yield frame
+
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("the whole sentence I just said"),
+                          MicHePressesMuteDuring(), pause_frames=3, **ears.kwargs())
+    held.append(dictation)
+
+    dictation.pump()
+
+    assert ears.drafted == ["the whole sentence I just said"]
+    assert ears.states[-1] == "muted"  # and it did go quiet, as he asked
+
+
+def test_it_knows_when_he_is_mid_utterance():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    assert dictation.is_busy() is False  # nothing said yet, nothing to interrupt

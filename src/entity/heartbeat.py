@@ -26,8 +26,16 @@ HEARTBEAT_PROMPT = (
 )
 
 
+_NOTHING_OPENERS = ("nothing", "no news", "no update")
+
+
 def _is_nothing(reply):
-    return reply.strip().strip(".!").lower() == "nothing"
+    """Is this the "don't bother him" answer, however it came out? Exact-matching "nothing" let
+    "Nothing new." through, and he heard it spoken at him out of nowhere. A reply that OPENS with
+    one of these and is barely longer is that same non-answer."""
+    said = reply.strip().strip(".!").lower()
+    return any(said == opener or (said.startswith(opener) and len(said) <= len(opener) + 14)
+               for opener in _NOTHING_OPENERS)
 
 
 class HeartbeatMonitor:

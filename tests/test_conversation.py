@@ -706,7 +706,7 @@ def test_several_queued_messages_are_all_delivered_in_order():
 
     convo.turn()
 
-    assert tts.spoken[:2] == ["first", "second"]
+    assert tts.spoken[0].index("first") < tts.spoken[0].index("second")  # in order, in one breath
 
 
 def test_without_an_outbox_the_loop_is_unchanged():
@@ -1063,3 +1063,57 @@ def test_a_voice_failure_is_noted_in_the_record_not_lost_to_stderr():
     convo.turn()  # must not crash the loop
 
     assert any("voice failed" in line and "powershell exploded" in line for line in recorded)
+
+
+def test_a_long_heads_up_is_offered_rather_than_read_out_in_full():
+    # An agent's thirty-line report was read at him line after line, verbatim, with no warning -
+    # the exact opposite of being insulated from the agent's internals.
+    outbox = Outbox()
+    outbox.push("WALL. " * 200)
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, long_answer_chars=100)
+
+    convo.turn()
+
+    assert convo.ready_question in tts.spoken  # asked first
+    assert not any(line.startswith("WALL.") for line in tts.spoken)  # nothing dumped
+
+
+def test_several_queued_messages_are_delivered_as_one_thing_to_stop():
+    outbox = Outbox()
+    outbox.push("first agent finished")
+    outbox.push("second agent finished")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, long_answer_chars=None)
+
+    convo.turn()
+
+    spoken = [line for line in tts.spoken if "agent finished" in line]
+    assert len(spoken) == 1  # one utterance, so one STOP silences all of it
+    assert "first agent finished" in spoken[0] and "second agent finished" in spoken[0]
+
+
+def test_nothing_is_said_over_him_while_he_is_recording():
+    # It broke in with an agent update WHILE he was mid-recording. Whatever it has to say waits
+    # until he isn't talking.
+    outbox = Outbox()
+    outbox.push("the fixer agent has news")
+    tts = FakeTTS()
+
+    class RecordingSTT(FakeSTT):
+        busy = True
+
+        def is_busy(self):
+            return self.busy
+
+    stt = RecordingSTT(["", "goodbye entity"])
+    convo = Conversation(stt, FakeBrain(), tts, outbox=outbox, long_answer_chars=None)
+
+    convo.turn()  # he's recording: the news must not be spoken over him
+    assert not any("fixer" in line for line in tts.spoken)
+
+    stt.busy = False
+    convo.turn()  # he's stopped; now it can speak
+    assert any("fixer" in line for line in tts.spoken)

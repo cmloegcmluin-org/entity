@@ -99,3 +99,13 @@ def test_the_poll_names_the_agents_actually_running():
     HeartbeatMonitor(brain, Outbox(), roster=lambda: ["fixer", "helper"]).poll_once()
 
     assert "fixer" in brain.asked[0] and "helper" in brain.asked[0]  # grounded in the real roster
+
+
+def test_a_nothing_reply_is_recognised_however_it_is_worded():
+    # "Nothing new." slipped through the exact-match check and was spoken to him, unprompted and
+    # meaningless, a minute after a question he hadn't answered yet.
+    for reply in ["nothing", "Nothing.", "Nothing new.", "nothing new to report",
+                  "Nothing to report.", "nothing yet"]:
+        outbox = FakeOutbox()
+        _monitor(FakeBrain(reply), outbox).poll_once()
+        assert outbox.pushed == [], reply

@@ -131,3 +131,16 @@ def test_files_present_before_startup_are_not_monitored(tmp_path):
     watcher.poll_once()
 
     assert monitor.check_ins == []
+
+
+def test_a_multi_line_report_arrives_as_one_message_not_one_per_line(tmp_path):
+    # An agent overwrote its inbox file with a 30-line report; every line became its own spoken
+    # heads-up, and he had to hit STOP for each one in turn.
+    outbox = Outbox()
+    watcher = InboxWatcher(tmp_path, outbox)
+    (tmp_path / "fixer.txt").write_text("IN PROGRESS - backfill\nfound a leaking test\nfixed it\n",
+                                        encoding="utf-8")
+
+    watcher.poll_once()
+
+    assert outbox.drain() == ["IN PROGRESS - backfill\nfound a leaking test\nfixed it"]

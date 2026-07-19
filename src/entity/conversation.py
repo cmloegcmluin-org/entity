@@ -282,15 +282,32 @@ class Conversation:
         return stop
 
     def _deliver_outbox(self):
-        """Speak anything the Entity has queued to say on its own (word from an agent). Called when
-        it's the Entity's turn to talk - at a lull, or right after he finishes - never mid-sentence,
-        because a `listen()` in progress only breaks off for this once he's paused, not while he's
-        speaking."""
-        if self._outbox is None:
+        """Say what the Entity has queued to say on its own - word from an agent.
+
+        Everything queued goes out as ONE utterance, so a single stop silences all of it; he had to
+        hit stop over and over while a report came at him line by line. It waits while he is
+        recording, because it once broke in mid-sentence while he was talking. And if it's long it
+        is OFFERED, not read out: a wall of an agent's own words is the thing he most wants to be
+        insulated from.
+        """
+        if self._outbox is None or self._offered is not None or self._busy_recording():
             return
-        for message in self._outbox.drain():
-            self._console.heads_up(message)  # to the terminal too, not only spoken
-            self._say(message, record=False)
+        messages = self._outbox.drain()
+        if not messages:
+            return
+        news = "\n\n".join(messages)
+        self._console.heads_up(news)  # shown in full, however it gets spoken
+        if self._long_answer_chars is not None and len(news) > self._long_answer_chars:
+            self._offered = news
+            self._say(self.ready_question, record=False)
+            return
+        self._say(news, record=False)
+
+    def _busy_recording(self):
+        """Is he mid-utterance right now? A mic that reports it (the window's) is asked; anything
+        else can't be interrupted mid-sentence anyway, because it only yields between turns."""
+        busy = getattr(self._stt, "is_busy", None)
+        return bool(busy and busy())
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first

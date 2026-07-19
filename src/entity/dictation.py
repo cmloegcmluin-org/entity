@@ -77,6 +77,8 @@ class Dictation:
         self._interrupt = interrupt
         self._recorder = recorder
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
+        self._mid_burst = False  # he is talking right now: a burst has started and not yet ended
+        self._finish_burst = False  # muted mid-sentence: take down what's still in the air
         self._bark = None  # while the Entity speaks: an Event a stop bark should fire
 
     # ---- the Conversation-facing half ----------------------------------------------------------
@@ -116,9 +118,21 @@ class Dictation:
     # ---- the window-facing half ----------------------------------------------------------------
 
     def set_recording(self, recording):
-        """The mic button (and the spoken phrases) - arms or disarms and tells the window."""
+        """The mic button (and the spoken phrases) - arms or disarms and tells the window.
+
+        Disarming mid-sentence keeps that sentence: he said a whole one, pressed mic-off, and the
+        words never arrived, because the burst was still buffered waiting for a pause. Turning the
+        mic off means "stop listening from here", not "throw away the part you hadn't written down".
+        """
+        if not recording and self._armed and self._mid_burst:
+            self._finish_burst = True
         self._armed = recording
         self._announce_state()
+
+    def is_busy(self):
+        """Is he mid-utterance? The loop asks before speaking up on its own - it broke in with an
+        agent update while he was in the middle of recording."""
+        return self._mid_burst
 
     def begin_speaking(self):
         """The Entity has started talking: stop taking dictation until it's done."""
@@ -163,13 +177,19 @@ class Dictation:
                 started = True
             chunk.append(frame)
             silence = 0 if speech else silence + 1
-            if silence >= self._pause_frames:  # a burst ended - transcribe just that burst
-                self._absorb(np.concatenate(chunk))
+            ended = silence >= self._pause_frames  # he paused: that burst is over
+            if ended or self._finish_burst:  # ...or he muted while still mid-sentence
+                self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
+                self._finish_burst = False
                 chunk, silence, started = [], 0, False
+            self._mid_burst = started
         if chunk:  # a finite source ran out mid-burst (a real mic never does)
-            self._absorb(np.concatenate(chunk))
+            self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
+            self._finish_burst = False
+        self._mid_burst = False
 
-    def _absorb(self, audio):
+    def _absorb(self, audio, *, armed=None):
+        armed = self._armed if armed is None else armed
         text = self._transcriber.transcribe(audio).strip()
         if not text:
             return
@@ -177,7 +197,7 @@ class Dictation:
             if self._bark is not None and _is_stop_bark(text, STOP_WORDS):
                 self._bark.set()
             return
-        if self._armed:
+        if armed:
             self._take_dictation(text)
         else:
             self._maybe_wake(text)

@@ -125,14 +125,16 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     ticks = [1000.0]
     window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
                           profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
+                          persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
                           now=lambda: ticks[0])
     try:
         window.withdraw()
         window.close_when(done)
         window.attach_mic(submit=submitted.append, set_recording=mic_flips.append)
 
-        assert window.tab_labels()[:5] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
-                                           "4 · Goals", "5 · Projects"]  # his own numbering
+        assert window.tab_labels()[:6] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
+                                           "4 · Goals", "5 · Projects", "6 · Persona"]
+        assert "BREVITY" in window.persona_text()  # what it has been told, in the words it reads
         assert "mic off" in window.mic_button_text()  # the mic starts off
 
         feed.push("history", "[03:41:12] you said: how's the agent doing")

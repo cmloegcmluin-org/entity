@@ -143,10 +143,11 @@ class EntityWindow:
         ("5 · Projects", "Projects"),
     )
     CONVERSATION_TAB = "1 · Conversation"
+    PERSONA_TAB = "6 · Persona"
 
     def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
-                 profile_path=None, agent_logs_dir=None, icon=None, title="Entity", clock=_clock,
-                 now=time.monotonic):
+                 profile_path=None, agent_logs_dir=None, persona=None, icon=None, title="Entity",
+                 clock=_clock, now=time.monotonic):
         import tkinter as tk
         from tkinter import ttk
 
@@ -189,6 +190,12 @@ class EntityWindow:
         self._build_message_tags()
         for label, heading in self.SECTION_TABS:
             self._tabs.add(self._make_section_tab(tk, label, heading), text=label)
+        # Everything it has been told about how to be - the standing rules, and every one added
+        # since, in the words it actually reads. Read-only: this is assembled at startup, not typed.
+        self._persona = self._make_pane(self._tabs, readonly=True, font=("Segoe UI", 10))
+        self._tabs.add(self._persona, text=self.PERSONA_TAB)
+        if persona:
+            self._persona.insert("end", persona)
         # One home for the agents, however many he ends up driving at once.
         self._agent_tabs = ttk.Notebook(self._tabs)
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
@@ -317,8 +324,9 @@ class EntityWindow:
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
-        for sequence in ("<Control-Return>", "<Command-Return>"):
-            self._draft.bind(sequence, self._submit_from_key)  # Ctrl+Enter sends, Enter newlines
+        # Ctrl+Enter sends; plain Enter types a newline. No Cmd binding: on Windows Tk turns
+        # <Command-Return> into Alt+Enter, which is a different key that does nothing for him.
+        self._draft.bind("<Control-Return>", self._submit_from_key)
         self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
@@ -545,6 +553,9 @@ class EntityWindow:
 
     def tab_labels(self):
         return [self._tabs.tab(tab_id, "text") for tab_id in self._tabs.tabs()]
+
+    def persona_text(self):
+        return self._persona.get("1.0", "end-1c")
 
     def section_text(self, label):
         return self._sections[label]["pane"].get("1.0", "end-1c")

@@ -159,6 +159,18 @@ def _open_hearing(announce):
     return transcriber, mic, recorder
 
 
+def _persona():
+    """Everything the Entity has been told about how to be - the standing rules, his own context,
+    and every instruction added since. Composed in one place because the window shows him this
+    exact text, and a second copy would drift from the one the brain reads."""
+    return (
+        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
+        + _agent_inbox_note(AGENT_INBOX)
+        + _fresh_worktree_note()
+        + _agent_protocol_note(ACTIVE_AGENTS, AGENT_LOGS)
+    )
+
+
 def _build_ears(text_mode, stop, interrupt, announce=print):
     """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
     `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
@@ -190,13 +202,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
-    persona = (
-        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
-        + _agent_inbox_note(AGENT_INBOX)
-        + _fresh_worktree_note()
-        + _agent_protocol_note(ACTIVE_AGENTS, AGENT_LOGS)
-    )
-    sdk_brain = SdkBrain(persona=persona)
+    sdk_brain = SdkBrain(persona=_persona())
     sdk_brain.warmup()
     # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
     # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
@@ -378,7 +384,7 @@ def main(argv=None):
     feed.push("line", "───────  this session  ───────")
     window = EntityWindow(
         feed, on_stop=barge_in.set, on_close=stop.set,
-        profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS,
+        profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS, persona=_persona(),
         icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
     )
     done = threading.Event()

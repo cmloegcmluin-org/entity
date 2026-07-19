@@ -73,9 +73,9 @@ def test_load_profile_returns_empty_when_missing(tmp_path):
 
 def test_load_profile_reads_the_file(tmp_path):
     path = tmp_path / "profile.md"
-    path.write_text("the user likes long walks.", encoding="utf-8")
+    path.write_text("Ada likes long walks.", encoding="utf-8")
 
-    assert load_profile(path) == "the user likes long walks."
+    assert load_profile(path) == "Ada likes long walks."
 
 
 def test_compose_persona_returns_base_when_nothing_to_add():
@@ -83,19 +83,19 @@ def test_compose_persona_returns_base_when_nothing_to_add():
 
 
 def test_compose_persona_folds_in_profile_and_learned_with_a_boundary_reminder():
-    out = compose_persona("BASE", "He is learning cello.", "He decided to try for a new role role.")
+    out = compose_persona("BASE", "They are learning the cello.", "They took the evening shift.")
 
     assert "BASE" in out
-    assert "He is learning cello." in out
-    assert "new role" in out
+    assert "They are learning the cello." in out
+    assert "evening shift" in out
     # the framing must remind the Entity not to turn the context into unprompted therapy
     assert "unprompted" in out.lower()
 
 
 def test_parse_facts_reads_bullets_and_ignores_prose():
-    text = "Here's what's new:\n- timeline is about 6 months\n* he chose the new role path"
+    text = "Here's what's new:\n- the move is booked for March\n* they picked the coastal route"
 
-    assert parse_facts(text) == ["timeline is about 6 months", "he chose the new role path"]
+    assert parse_facts(text) == ["the move is booked for March", "they picked the coastal route"]
 
 
 def test_parse_facts_returns_nothing_for_none():
@@ -106,12 +106,12 @@ def test_parse_facts_returns_nothing_for_none():
 def test_append_learned_writes_facts_and_is_cumulative(tmp_path):
     path = tmp_path / "learned.md"
 
-    append_learned(["he started the class again"], path=path)
-    append_learned(["timeline is 6 months"], path=path)
+    append_learned(["they took up the cello"], path=path)
+    append_learned(["the move is in March"], path=path)
 
     contents = load_learned(path)
-    assert "he started the class again" in contents
-    assert "timeline is 6 months" in contents
+    assert "they took up the cello" in contents
+    assert "the move is in March" in contents
     assert contents.count("- ") >= 2
 
 
@@ -166,7 +166,7 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
 
     path = tmp_path / "profile.md"
     path.write_text(
-        "## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n\n"
+        "## Goals\n- swim\n\n## Enhancements you want (roadmap, not now)\n- better voice\n\n"
         "## Something after\n- untouched\n",
         encoding="utf-8",
     )
@@ -174,8 +174,8 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
     append_enhancement("speaker enrollment", path=path)
 
     sections = profile_sections(path.read_text(encoding="utf-8"))
-    assert "- better voice" in sections["Enhancements he wants for you (roadmap, not now)"]
-    assert "- speaker enrollment" in sections["Enhancements he wants for you (roadmap, not now)"]
+    assert "- better voice" in sections["Enhancements you want (roadmap, not now)"]
+    assert "- speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
     assert sections["Something after"] == "- untouched"  # later sections undisturbed
 
 
@@ -205,7 +205,7 @@ def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
 
     path = tmp_path / "profile.md"
     path.write_text(
-        "# the user\nintro line\n\n## Goals\n- swim\n- cello\n\n## Projects (long-term)\n- the atlas\n",
+        "# Ada\nintro line\n\n## Goals\n- swim\n- cello\n\n## Projects (long-term)\n- the atlas\n",
         encoding="utf-8",
     )
 
@@ -215,7 +215,7 @@ def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
     sections = profile_sections(text)
     assert sections["Goals"] == "- swim, three times a week\n- cello"
     assert sections["Projects (long-term)"] == "- the atlas"
-    assert text.startswith("# the user\nintro line")  # the preamble survives too
+    assert text.startswith("# Ada\nintro line")  # the preamble survives too
 
 
 def test_saving_a_section_that_is_not_there_yet_adds_it(tmp_path):

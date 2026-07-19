@@ -115,11 +115,11 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     profile = tmp_path / "profile.md"
     profile.write_text(
         "## Life context (for awareness; do not raise unprompted)\n- new to the city\n\n"
-        "## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n",
+        "## Goals\n- learn to swim\n\n## Enhancements you want (roadmap, not now)\n- better voice\n",
         encoding="utf-8",
     )
     learned = tmp_path / "learned.md"
-    learned.write_text("- he prefers teal" + chr(10), encoding="utf-8")
+    learned.write_text("- prefers metric units" + chr(10), encoding="utf-8")
     logs = tmp_path / "agent-logs"
     logs.mkdir()
     (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix the drive link\n", encoding="utf-8")
@@ -194,8 +194,8 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
         for _ in range(window.SLOW_POLL_EVERY):  # let the slow poll fire once
             window._drain_once()
-        assert "Agents" in window.tab_labels()  # one home, however many he ends up driving
-        assert window.agent_tab_labels() == ["fixer  ✕"]  # closable, at his ask
+        assert "Agents" in window.tab_labels()  # one home, however many end up being driven
+        assert window.agent_tab_labels() == ["fixer  ✕"]  # closable, on request
         shown_log = window.agent_tab_text("fixer")
         assert "Entity · 10:00:00" in shown_log  # the agent exchange reads as a conversation too
         assert "fix the drive link" in shown_log
@@ -207,11 +207,11 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
         assert window.agent_tab_labels() == []  # and it doesn't come straight back
-        assert window.section_text("4 · Goals").strip() == "- swim"
-        assert window.section_text("3 · Context").strip() == "- new to the city"  # his category 3
+        assert window.section_text("4 · Goals").strip() == "- learn to swim"
+        assert window.section_text("3 · Context").strip() == "- new to the city"  # category 3
 
-        # Editing autosaves once he stops typing - there is no Save button to forget.
-        window.set_section_text("4 · Goals", "- swim, three times a week")
+        # Editing autosaves once the typing stops - there is no Save button to forget.
+        window.set_section_text("4 · Goals", "- learn to swim, three times a week")
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
         assert "three times a week" not in profile.read_text(encoding="utf-8")  # still typing
@@ -219,14 +219,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
         saved = profile.read_text(encoding="utf-8")
-        assert "- swim, three times a week" in saved
-        assert "- better voice" in saved and "- new to the city" in saved  # other sections untouched
+        assert "- learn to swim, three times a week" in saved
+        assert "- better voice" in saved and "- new to the city" in saved  # others untouched
 
-        # What it has learned is visible the moment it lands, and his edit of it sticks.
+        # What it has learned is visible the moment it lands, and an edit of it sticks.
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
-        assert "teal" in window.memory_text()
-        window.set_memory_text("- he prefers teal" + chr(10)
+        assert "metric units" in window.memory_text()
+        window.set_memory_text("- prefers metric units" + chr(10)
                                + "- and hates being read a wall of text")
         ticks[0] += window.AUTOSAVE_AFTER + 1
         for _ in range(window.SLOW_POLL_EVERY):

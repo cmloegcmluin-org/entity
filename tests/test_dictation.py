@@ -1,0 +1,209 @@
+import threading
+import time
+
+import numpy as np
+
+from entity.dictation import Dictation
+
+LOUD = 0.05
+QUIET = 0.001
+
+
+def _sp(level=LOUD):
+    return np.full(480, level, dtype=np.float32)
+
+
+def _sil():
+    return _sp(QUIET)
+
+
+class FakeMic:
+    def __init__(self, frames):
+        self._frames = list(frames)
+
+    def frames(self):
+        yield from self._frames
+
+
+class FakeTranscriber:
+    """Hands out the scripted texts, one per transcribed chunk."""
+
+    def __init__(self, *texts):
+        self._texts = list(texts)
+
+    def transcribe(self, audio):
+        return self._texts.pop(0) if self._texts else ""
+
+
+class Ears:
+    """Collects everything the dictation reports, the way the window would."""
+
+    def __init__(self):
+        self.drafted = []
+        self.states = []
+        self.levels = []
+        self.submits = 0
+
+    def kwargs(self):
+        return dict(
+            on_draft=self.drafted.append,
+            on_state=self.states.append,
+            on_level=self.levels.append,
+            on_submit_request=self._submit,
+        )
+
+    def _submit(self):
+        self.submits += 1
+
+
+def _burst_then_pause():
+    # Quiet first: the floor calibrates on the opening frame, so a stream that STARTS loud would
+    # set the bar at voice level and hear nothing at all.
+    return [_sil()] * 2 + [_sp()] * 4 + [_sil()] * 4
+
+
+def test_speech_while_recording_lands_in_the_draft():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("add eggs to the list"), FakeMic(_burst_then_pause()),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["add eggs to the list"]
+    assert ears.submits == 0  # nothing submitted - the draft just accumulates
+
+
+def test_stop_listening_mutes_and_keeps_the_words_before_it():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("add eggs, stop listening", "invisible while muted"),
+                          FakeMic(_burst_then_pause() * 2), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["add eggs"]  # the phrase (and its comma) never lands in the draft
+    assert ears.states[-1] == "muted"  # and the mic went off
+
+
+def test_muted_speech_is_dropped_until_hey_entity():
+    ears = Ears()
+    dictation = Dictation(
+        FakeTranscriber("just the TV talking", "hey entity add milk", "and bread"),
+        FakeMic(_burst_then_pause() * 3), pause_frames=3, muted=True, **ears.kwargs(),
+    )
+
+    dictation.pump()
+
+    assert ears.drafted == ["add milk", "and bread"]  # the wake phrase carried its first words
+    assert ears.states[-1] == "recording"
+
+
+def test_over_still_submits_for_the_old_muscle_memory():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("send the report over"),
+                          FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["send the report"]
+    assert ears.submits == 1
+
+
+def test_the_level_meter_sees_the_mic_only_while_recording():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(""), FakeMic([_sp(0.04), _sp(0.04)]),
+                          pause_frames=3, muted=True, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.levels == [0.0, 0.0]  # muted: the meter shows nothing, whatever the room does
+
+    ears2 = Ears()
+    Dictation(FakeTranscriber(""), FakeMic([_sp(0.04)]), pause_frames=3, **ears2.kwargs()).pump()
+
+    assert ears2.levels and ears2.levels[0] > 0.01  # recording: the real level
+
+
+def test_hallucinated_backchannel_chunks_stay_out_of_the_draft():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("Mm-hmm. Yeah."), FakeMic(_burst_then_pause()),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == []
+
+
+def test_the_button_toggle_flips_state_and_reports_it():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    dictation.set_recording(False)
+    dictation.set_recording(True)
+
+    assert ears.states == ["muted", "recording"]
+
+
+def test_listen_hands_back_what_the_window_submits():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+    heard = {}
+
+    def listener():
+        heard["text"] = dictation.listen()
+
+    thread = threading.Thread(target=listener)
+    thread.start()
+    dictation.submit("the edited draft, as he corrected it")
+    thread.join(2.0)
+
+    assert heard["text"] == "the edited draft, as he corrected it"
+
+
+def test_listen_yields_empty_when_interrupted_so_agent_news_can_speak():
+    interrupt = threading.Event()
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), interrupt=interrupt, **ears.kwargs())
+    heard = {}
+
+    def listener():
+        heard["text"] = dictation.listen()
+
+    thread = threading.Thread(target=listener)
+    thread.start()
+    interrupt.set()
+    thread.join(2.0)
+
+    assert heard["text"] == ""  # a lull broken for the outbox, not a real turn
+
+
+def test_a_stop_event_ends_the_pump_mid_stream():
+    stop = threading.Event()
+    stop.set()
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("never"), FakeMic([_sp()] * 50), stop=stop,
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()  # returns promptly instead of consuming the stream
+
+    assert ears.drafted == []
+
+
+def test_catch_stop_hears_a_bark_and_keeps_it_out_of_the_draft():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("stop"), FakeMic(_burst_then_pause() + [_sil()] * 20),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+
+    def watcher():
+        caught["stopped"] = dictation.catch_stop(lambda: caught.get("stopped") is None)
+
+    thread = threading.Thread(target=watcher, daemon=True)  # daemon: a hang can't wedge the suite
+    thread.start()
+    deadline = time.monotonic() + 2.0
+    while dictation._bark is None and time.monotonic() < deadline:
+        time.sleep(0.005)  # the pump must not outrun the watcher installing its bark event
+    dictation.pump()
+    thread.join(2.0)
+
+    assert caught.get("stopped") is True  # the bark cut the voice
+    assert ears.drafted == []  # and never became draft text

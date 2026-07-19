@@ -115,9 +115,13 @@ def _agent_protocol_note(roster, logs):
         "never talk to again, and you have already lost four agents that way. Never wait on an agent "
         "either - starting one comes straight back, and whatever it says reaches the user on its own. "
         f"Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log - "
-        "when the user wants to watch a conversation, open a Git Bash window tailing THAT file "
-        "(tail -f), AFTER dispatching. Never hand-write your own log of the exchange; the desk "
-        "already keeps the real one."
+        "his window shows each of those as a live tab on its own, so you never need to open "
+        "anything for him to watch a conversation. Never hand-write your own log of the exchange; "
+        "the desk already keeps the real one. "
+        "And when the user tells you to FILE a self-improvement, an enhancement, or an idea for "
+        "your own roadmap, make your ENTIRE reply `[IMPROVE] <the item, one line>` - it lands in "
+        "his profile's Enhancements section and appears in his window immediately. File it the "
+        "moment he says so; never just promise to remember it."
     )
 
 

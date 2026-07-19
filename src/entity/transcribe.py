@@ -1,11 +1,11 @@
-"""Local speech-to-text with NVIDIA Parakeet via onnx-asr (shares Notecraft' model cache).
+"""Local speech-to-text with NVIDIA Parakeet via onnx-asr (using onnx-asr's shared model cache).
 
 `recognize()` takes a float32 mono 16 kHz numpy array (straight from the mic) and returns
 the transcript text. The 2.4 GB model loads once, lazily, on first use (~3s).
 
-`CorrectingTranscriber` wraps any transcriber to bias its output toward the user's vocabulary - the
-names he coined and the domain terms of his fields (see `vocabulary`). Since Parakeet has no
-hotword hook, the bias is applied after recognition.
+`CorrectingTranscriber` wraps any transcriber to bias its output toward the user's own vocabulary -
+the names they coined and the domain terms of their fields (see `vocabulary`). Since Parakeet has
+no hotword hook, the bias is applied after recognition.
 """
 
 from entity.vocabulary import correct_terms
@@ -41,8 +41,8 @@ class ParakeetTranscriber:
 
 
 class CorrectingTranscriber:
-    """Wraps a transcriber and rewrites its output toward known terms, so Parakeet's "high ideas"
-    comes back as his "Notecraft" and "sagital notation" as "Bayesian notation". Transparent
+    """Wraps a transcriber and rewrites its output toward known terms, so Parakeet's "note craft"
+    comes back as "Notecraft" and "bayesan inference" as "Bayesian inference". Transparent
     otherwise: same `transcribe`/`warmup` surface, so it drops in wherever a plain transcriber goes."""
 
     def __init__(self, transcriber, terms, *, threshold=None):

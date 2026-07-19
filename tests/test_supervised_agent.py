@@ -28,25 +28,25 @@ def test_agent_runs_approval_gated_and_isolated_from_the_global_config():
     assert list(opts.setting_sources) == []
 
 
-def test_permission_handler_allows_when_the-user_approves():
+def test_permission_handler_allows_when_the_user_approves():
     seen = {}
 
     async def decide(name, tool, tool_input):
         seen["args"] = (name, tool, tool_input)
         return True
 
-    handler = _permission_handler("the-tracker-note", decide)
+    handler = _permission_handler("docs-sidebar", decide)
     result = asyncio.run(handler("Bash", {"command": "npm test"}, None))
 
     assert result.behavior == "allow"
-    assert seen["args"] == ("the-tracker-note", "Bash", {"command": "npm test"})
+    assert seen["args"] == ("docs-sidebar", "Bash", {"command": "npm test"})
 
 
-def test_permission_handler_denies_when_the-user_declines():
+def test_permission_handler_denies_when_the_user_declines():
     async def decide(name, tool, tool_input):
         return False
 
-    handler = _permission_handler("the-tracker-note", decide)
+    handler = _permission_handler("docs-sidebar", decide)
     result = asyncio.run(handler("Bash", {"command": "rm -rf"}, None))
 
     assert result.behavior == "deny"
@@ -56,9 +56,9 @@ def test_work_sends_the_message_and_returns_the_agents_report():
     async def decide(*a):
         return True
 
-    agent = SupervisedAgent("the-tracker-note-destination", "C:/wt", decide, session_factory=FakeSession)
+    agent = SupervisedAgent("docs-sidebar", "C:/wt", decide, session_factory=FakeSession)
 
     report = agent.work("continue your task")
 
     assert report == "report: did continue your task"
-    assert agent.name == "the-tracker-note-destination"
+    assert agent.name == "docs-sidebar"

@@ -1,14 +1,14 @@
-"""Custom vocabulary: bias transcription toward the words the user actually uses.
+"""Custom vocabulary: bias transcription toward the words this particular user actually uses.
 
-That's two kinds of word, and a general-purpose model knows neither: names he coined ("Notecraft",
-"WaveShaper", "Skylark") and the domain vocabulary of the fields he lives in - acoustic music and
-Bayesian notation, film, his health, the people he works with. Parakeet renders both as whatever
-ordinary words sound closest ("high ideas", "gina"). onnx-asr's Parakeet path exposes no hotword /
+That's two kinds of word, and a general-purpose model knows neither: the names they coined
+("Notecraft", "WaveShaper") and the domain vocabulary of the fields they work in - the terms of
+art, the proper nouns, the people they collaborate with. Parakeet renders both as whatever
+ordinary words sound closest ("note craft"). onnx-asr's Parakeet path exposes no hotword /
 contextual-biasing hook (its RecognizeOptions cover only Whisper/Canary language flags), so the
 bias happens AFTER transcription: `correct_terms` swaps any near-miss - a single word or a whole
 phrase - for the closest known term. The term list is pluggable: `scan_terms` reads project names
-off his filesystem and his lexicon supplies the rest, but tests inject a plain list, so none of
-this needs a real disk.
+off the filesystem and the user's lexicon supplies the rest, but tests inject a plain list, so
+none of this needs a real disk.
 """
 
 import difflib
@@ -30,8 +30,9 @@ DEFAULT_STOPWORDS = frozenset({
 
 
 def _normalize(name):
-    """The spoken/written form of a directory name: "wave_shaper" -> "WaveShaper", "notecraft" -> "Notecraft".
-    A name that already carries its own capitalization (ComfyUIApp) keeps it, minus separators."""
+    """The spoken/written form of a directory name: "wave_shaper" -> "WaveShaper", "notecraft" ->
+    "Notecraft". A name that already carries its own capitalization (OpenGLDemo) keeps it, minus
+    separators."""
     parts = [p for p in _SEPARATORS.split(name.strip()) if p]
     if any(c.isupper() for c in name):
         return "".join(parts)
@@ -62,9 +63,9 @@ def _closest(word, candidates, threshold):
 
 def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
     """Distinctive project names found as the immediate subdirectories of each root, each normalized
-    to its spoken form. This is the pluggable term source: point it at his workspace and it learns
-    "Notecraft", "WaveShaper" and the rest off disk. Anything too short, hidden (leading "." or "_"), or
-    in `stopwords` is dropped. A missing or unreadable root is skipped, not fatal."""
+    to its spoken form. This is the pluggable term source: point it at a workspace and it learns
+    "Notecraft", "WaveShaper" and the rest off disk. Anything too short, hidden (leading "." or
+    "_"), or in `stopwords` is dropped. A missing or unreadable root is skipped, not fatal."""
     terms = set()
     for root in roots:
         try:
@@ -82,7 +83,7 @@ def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
 
 def _match_at(tokens, start, run_together, by_length, longest, threshold):
     """The (window size, term) of the LONGEST run of words at `start` that matches a known term, or
-    None. Longest-first so "Bayesian notation" wins over a stray one-word match inside it.
+    None. Longest-first so "Bayesian inference" wins over a stray one-word match inside it.
 
     A run of words is only compared against terms of the same word count - two ordinary words are
     never glued into a coined name. A SINGLE token is the exception: it's compared against every
@@ -108,15 +109,15 @@ def _match_at(tokens, start, run_together, by_length, longest, threshold):
 def correct_terms(text, terms, *, threshold=0.82):
     """Rewrite `text`, replacing each near-miss with the closest known term above `threshold`.
 
-    A term can be one word or several - domain vocabulary usually is ("Bayesian notation"), so runs
+    A term can be one word or several - domain vocabulary usually is ("Bayesian inference"), so runs
     of words are matched as phrases, longest first, not one token at a time. Punctuation is peeled
     off before comparing so a trailing period can't drag the similarity down, then re-attached, and
     a phrase is never glued together across a sentence boundary.
 
-    The 0.82 default was set from his real recordings: below ~0.78 ordinary words start getting
-    corrupted - "are" -> "Harem", and (worst of all) the terminator "over" -> "Evolver", which would
-    stop his turns from ever ending. 0.82 sits clear of that cliff while still catching real
-    near-misses (his "hideas"/"notecraft" scores 0.86)."""
+    The 0.82 default was set from real recordings: below ~0.78 ordinary words start getting
+    corrupted - "are" -> a project called "Arena" (0.75), and worst of all the turn terminator
+    "over" -> "Overlay" (0.73), which would stop a turn from ever ending. 0.82 sits clear of that
+    cliff while still catching real near-misses ("notcraft"/"Notecraft" scores 0.94)."""
     if not text or not terms:
         return text
     # Both comparison forms, built once: phrases matched word-for-word, and every term with its

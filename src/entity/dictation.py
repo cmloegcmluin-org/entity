@@ -191,8 +191,8 @@ class Dictation:
 
     def _absorb(self, audio, *, armed=None):
         armed = self._armed if armed is None else armed
-        # The "um"s and "uh"s go before anything reads the text - the same rule Notecraft uses on
-        # his memos, so both hear him the same way.
+        # The "um"s and "uh"s go before anything reads the text, so no reader downstream has to
+        # know they were ever there.
         text = without_hesitations(self._transcriber.transcribe(audio).strip())
         if not text:
             return

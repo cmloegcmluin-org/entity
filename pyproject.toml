@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 # Text-to-speech is Windows' built-in System.Speech (via PowerShell, no package).
 dependencies = [
     "claude-agent-sdk>=0.2",     # persistent Claude session on the Max plan (the brain)
-    "onnx-asr[cpu,hub]>=0.11",   # local Parakeet speech-to-text (shares Notecraft' model cache)
+    "onnx-asr[cpu,hub]>=0.11",   # local Parakeet speech-to-text
     "sounddevice>=0.4",          # microphone capture
     "numpy>=1.26",               # audio frames + energy VAD
 ]

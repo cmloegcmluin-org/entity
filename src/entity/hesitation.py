@@ -1,12 +1,12 @@
-"""Leave out the sounds he made while he was thinking.
+"""Leave out the sounds a speaker made while they were thinking.
 
-He says "um" and "uh" while he finds the next word, and the model - a speech recognizer, doing its
-job - writes both down. Nothing about them is worth keeping: a turn is read back for what it says,
-and his transcripts are thick with them.
+People say "um" and "uh" while they find the next word, and the model - a speech recognizer, doing
+its job - writes both down. Nothing about them is worth keeping: a turn is read back for what it
+says, and a real transcript is thick with them.
 
-Same rule as Notecraft', so the two hear him the same way. Only these two sounds: the wordless ones
-("mm", "hmm") are already dropped as backchannel, and the filler made of real words ("like", "you
-know") can't be cut without cutting the sentences that use those words for their meaning.
+Only these two sounds: the wordless ones ("mm", "hmm") are already dropped as backchannel, and the
+filler made of real words ("like", "you know") can't be cut without cutting the sentences that use
+those words for their meaning.
 
 Dropping a word rather than relabelling one has one consequence worth handling: a sound that opened
 a sentence was carrying that sentence's capital, so the word left standing takes it.
@@ -14,7 +14,7 @@ a sentence was carrying that sentence's capital, so the word left standing takes
 
 import re
 
-# "um" and "uh", however long he held the sound - the model spells a held sound out at the length
+# "um" and "uh", however long the sound was held - the model spells a held sound out at the length
 # it was held. No English word is spelled from a u followed only by m and h.
 _HESITATION = re.compile(r"u[mh]+", re.IGNORECASE)
 _SENTENCE_END = (".", "!", "?")

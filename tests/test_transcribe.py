@@ -47,7 +47,7 @@ class FakeTranscriber:
 
 
 def test_correcting_transcriber_biases_output_toward_known_terms():
-    inner = FakeTranscriber("let's open hideas")
+    inner = FakeTranscriber("let's open notcraft")
     corrector = CorrectingTranscriber(inner, ["Notecraft"])
 
     assert corrector.transcribe("AUDIO") == "let's open Notecraft"

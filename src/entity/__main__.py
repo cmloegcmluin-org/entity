@@ -67,9 +67,9 @@ def _mic_gain():
 
 
 def _vocab_terms():
-    """The terms Parakeet is biased toward, so it stops hearing "Notecraft" as "high ideas". Two
-    sources: his project folder names (scanned off ~/workspace, plus any roots in vocab-roots.txt),
-    and his hand-kept lexicon.md - coined names and the domain vocabulary of his fields alike, the
+    """The terms Parakeet is biased toward, so a coined name like "Notecraft" stops coming back as
+    "note craft". Two sources: project folder names (scanned off the workspace root, plus any roots
+    in vocab-roots.txt), and the hand-kept lexicon - coined names and domain vocabulary alike, the
     same file the brain carries as standing context, so a term added in one place fixes both."""
     from entity.vocabulary import scan_terms
 
@@ -135,7 +135,7 @@ def _open_hearing(announce):
     from entity.recorder import AudioRecorder
     from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
-    # Bias transcription toward his own vocabulary so "Notecraft" stops coming back as "high ideas".
+    # Bias transcription toward the user's own vocabulary, so their coined names survive it.
     terms = _vocab_terms()
     if terms:
         announce(f"(custom vocabulary: {len(terms)} of your terms, e.g. {', '.join(sorted(terms)[:3])})")

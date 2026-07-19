@@ -2,19 +2,19 @@ from entity.vocabulary import correct_terms, scan_terms
 
 
 def test_a_near_miss_token_is_corrected_to_the_known_term():
-    # Parakeet misheard his coined word; the closest known term above the bar wins.
-    assert correct_terms("open high ideas", ["Notecraft"]) == "open high ideas"
-    assert correct_terms("open hideas", ["Notecraft"]) == "open Notecraft"
+    # Parakeet misheard a coined word; the closest known term above the bar wins.
+    assert correct_terms("open note craft", ["Notecraft"]) == "open note craft"
+    assert correct_terms("open notcraft", ["Notecraft"]) == "open Notecraft"
 
 
 def test_surrounding_punctuation_is_preserved_and_matched_on_the_bare_word():
     # the period must not drag the similarity down, and it must survive the swap.
-    assert correct_terms("go to hideas.", ["Notecraft"]) == "go to Notecraft."
+    assert correct_terms("go to notcraft.", ["Notecraft"]) == "go to Notecraft."
     assert correct_terms("(waveshaper)", ["WaveShaper"]) == "(WaveShaper)"
 
 
 def test_an_exact_word_is_recased_to_the_canonical_spelling():
-    # Parakeet got the sounds right but not his capitalisation; hand back his spelling.
+    # Parakeet got the sounds right but not the capitalisation; hand back the known spelling.
     assert correct_terms("open notecraft now", ["Notecraft"]) == "open Notecraft now"
     assert correct_terms("Notecraft", ["Notecraft"]) == "Notecraft"
 
@@ -28,28 +28,29 @@ def test_ordinary_words_are_left_alone():
 
 
 def test_nothing_is_corrected_without_a_term_list():
-    assert correct_terms("open hideas", []) == "open hideas"
+    assert correct_terms("open notcraft", []) == "open notcraft"
 
 
 def test_common_words_close_to_a_term_are_not_corrupted():
-    # from his real recordings: below the threshold these near-collisions creep in. The terminator
-    # "over" turning into "Evolver" would keep his turns from ever ending - guard it hard.
-    terms = ["Evolver", "Harem", "WaveShaper", "Notecraft", "Skylark"]
+    # from real recordings: below the threshold these near-collisions creep in. The terminator
+    # "over" turning into a project called "Overlay" (0.73) would keep a turn from ever ending,
+    # and "are" is just as close to "Arena" (0.75) - guard both hard.
+    terms = ["Overlay", "Arena", "WaveShaper", "Notecraft", "Skylark"]
     assert correct_terms("are you there over", terms) == "are you there over"
     assert correct_terms("tell me over", terms) == "tell me over"
 
 
 def test_the_nearest_of_several_terms_wins():
     terms = ["Notecraft", "WaveShaper", "Skylark"]
-    assert correct_terms("start funtim", terms) == "start WaveShaper"  # closest to WaveShaper, not the others
+    assert correct_terms("start waveshapr", terms) == "start WaveShaper"  # closest to WaveShaper
 
 
 def test_a_multi_word_domain_term_is_corrected_as_a_phrase():
-    # Domain vocabulary is often several words ("Bayesian notation", "Gray Area"), which a
+    # Domain vocabulary is often several words ("Bayesian inference", "Gray Scale"), which a
     # token-at-a-time pass can never fix - the phrase has to be matched as a whole.
-    terms = ["Bayesian notation", "Gray Area"]
-    assert correct_terms("i use sagital notation daily", terms) == "i use Bayesian notation daily"
-    assert correct_terms("his grey area residency", terms) == "his Gray Area residency"
+    terms = ["Bayesian inference", "Gray Scale"]
+    assert correct_terms("i use bayesan inference daily", terms) == "i use Bayesian inference daily"
+    assert correct_terms("a grey scale image", terms) == "a Gray Scale image"
 
 
 def test_a_two_word_term_run_together_into_one_token_is_still_corrected():
@@ -60,26 +61,26 @@ def test_a_two_word_term_run_together_into_one_token_is_still_corrected():
 
 
 def test_a_phrase_is_not_glued_across_a_sentence_boundary():
-    # "...the notation. Bayesian is..." must not collapse into one phrase.
-    assert correct_terms("about notation. Bayesian is his", ["notation bayesian"]) == "about notation. Bayesian is his"
+    # "...the inference. Bayesian is..." must not collapse into one phrase.
+    assert correct_terms("about inference. Bayesian is fine", ["inference bayesian"]) == "about inference. Bayesian is fine"
 
 
 def test_multi_word_terms_do_not_disturb_single_word_matching():
-    terms = ["Bayesian notation", "Notecraft"]
-    assert correct_terms("open hideas now", terms) == "open Notecraft now"
+    terms = ["Bayesian inference", "Notecraft"]
+    assert correct_terms("open notcraft now", terms) == "open Notecraft now"
     assert correct_terms("nothing to see here", terms) == "nothing to see here"
 
 
-def test_scan_turns_his_directory_names_into_spoken_terms(tmp_path):
-    for name in ["notecraft", "wave_shaper", "skylark", "osr2_broker"]:
+def test_scan_turns_directory_names_into_spoken_terms(tmp_path):
+    for name in ["notecraft", "wave_shaper", "skylark", "mp3_tagger"]:
         (tmp_path / name).mkdir()
-    assert scan_terms([tmp_path]) == {"Notecraft", "WaveShaper", "Skylark", "Osr2Broker"}
+    assert scan_terms([tmp_path]) == {"Notecraft", "WaveShaper", "Skylark", "Mp3Tagger"}
 
 
 def test_scan_keeps_a_names_own_capitalisation(tmp_path):
-    (tmp_path / "ComfyUIApp").mkdir()
-    (tmp_path / "FunGenApp").mkdir()
-    assert scan_terms([tmp_path]) == {"ComfyUIApp", "FunGenApp"}  # not "Comfyuiapp"
+    (tmp_path / "OpenGLDemo").mkdir()
+    (tmp_path / "PDFMerger").mkdir()
+    assert scan_terms([tmp_path]) == {"OpenGLDemo", "PDFMerger"}  # not "Opengldemo"
 
 
 def test_scan_ignores_files_hidden_and_scaffolding_dirs(tmp_path):
@@ -91,9 +92,9 @@ def test_scan_ignores_files_hidden_and_scaffolding_dirs(tmp_path):
 
 
 def test_scan_drops_short_and_generic_names(tmp_path):
-    for name in ["ab", "src", "vision", "harem"]:  # too short / infrastructure / common word ; keep harem
+    for name in ["ab", "src", "vision", "kestrel"]:  # too short / infrastructure / common word
         (tmp_path / name).mkdir()
-    assert scan_terms([tmp_path]) == {"Harem"}
+    assert scan_terms([tmp_path]) == {"Kestrel"}  # only the distinctive one survives
 
 
 def test_scan_survives_a_missing_root(tmp_path):

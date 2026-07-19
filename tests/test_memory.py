@@ -15,11 +15,11 @@ from entity.memory import (
 
 def test_lexicon_terms_takes_the_head_of_each_line_ignoring_glosses_and_comments():
     text = (
-        "# the user's lexicon\n"
+        "# lexicon\n"
         "\n"
-        "Notecraft — his audio-memo web app\n"
+        "Notecraft — the audio-memo app\n"
         "WaveShaper\n"
-        "- Skylark — German 'exactly', a project of his\n"
+        "- Skylark — a project of theirs\n"
     )
     assert lexicon_terms(text) == ["Notecraft", "WaveShaper", "Skylark"]
 
@@ -34,14 +34,15 @@ def test_load_lexicon_is_empty_when_missing(tmp_path):
 
 
 def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
-    out = compose_persona("BASE", "", "", lexicon="Notecraft — his audio-memo web app")
+    out = compose_persona("BASE", "", "", lexicon="Notecraft — the audio-memo app")
 
     assert "BASE" in out
     assert "Notecraft" in out
-    # the lexicon is his vocabulary, framed to be recognised - NOT under the life-context/therapy warning
+    # the lexicon is the user's vocabulary, framed to be recognised - NOT under the
+    # life-context/therapy warning
     assert "vocabulary" in out.lower()
-    # and it is NOT only his coined names: the domain terms of his fields belong here too, so the
-    # framing must invite those rather than reading as "words the user made up"
+    # and it is NOT only their coined names: the domain terms of their fields belong here too, so
+    # the framing must invite those rather than reading as "words the user made up"
     assert "domain" in out.lower()
 
 

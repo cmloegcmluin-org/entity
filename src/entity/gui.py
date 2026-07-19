@@ -185,6 +185,7 @@ class EntityWindow:
             except Exception:
                 pass  # a bad icon must never keep the window from opening
 
+        self._build_menu(tk)  # before any pane, since every pane posts this one menu
         self._style_tabs(ttk)
         self._tabs = ttk.Notebook(self._tk)
         self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 4))
@@ -256,14 +257,23 @@ class EntityWindow:
         widget.configure(insertwidth=0)  # reads as text rather than as a box to type in
         self._make_copyable(widget, whole=whole)
 
+    def _build_menu(self, tk):
+        """ONE right-click menu, for the window rather than per widget. A menu of its own on every
+        bubble ran Tk out of menu handles - "No more menus can be allocated" - once the scrollback
+        went back far enough, and the window then would not open at all. What was clicked, and what
+        "Copy all" means where it was clicked, are remembered at the click instead."""
+        self._clicked = None  # (widget, what "Copy all" yields there), set as the menu is posted
+        self._menu = tk.Menu(self._tk, tearoff=0, bg=PANEL, fg=FG, activebackground=SELECTION)
+        self._menu.add_command(label="Copy", command=lambda: self._copy_selection(self._clicked[0]))
+        self._menu.add_command(label="Copy all",
+                               command=lambda: self._to_clipboard(self._clicked[1]()))
+
     def _make_copyable(self, widget, *, whole=None):
         """Selecting and copying has to WORK, not merely be permitted - it did not. A click
         takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
         outright rather than left to the class bindings, and a right-click offers both in a
         menu for when hands aren't on the keyboard. `whole` is what "Copy all" should yield
         when this widget is one bubble of a longer conversation."""
-        import tkinter as tk
-
         widget.bind("<Button-1>", lambda event: widget.focus_set(), add="+")
         widget.tag_raise("sel")  # or a tag made later wins and the highlight is invisible
         widget.bind("<Control-c>", lambda event: self._copy_selection(widget))
@@ -271,10 +281,11 @@ class EntityWindow:
         widget.bind("<Control-a>", lambda event: self._select_all(widget))
         widget.bind("<Control-A>", lambda event: self._select_all(widget))
         everything = whole or (lambda: widget.get("1.0", "end-1c"))
-        menu = tk.Menu(widget, tearoff=0, bg=PANEL, fg=FG, activebackground=SELECTION)
-        menu.add_command(label="Copy", command=lambda: self._copy_selection(widget))
-        menu.add_command(label="Copy all", command=lambda: self._to_clipboard(everything()))
-        widget.bind("<Button-3>", lambda event: menu.tk_popup(event.x_root, event.y_root))
+        widget.bind("<Button-3>", lambda event: self._popup(widget, everything, event))
+
+    def _popup(self, widget, everything, event):
+        self._clicked = (widget, everything)
+        self._menu.tk_popup(event.x_root, event.y_root)
 
     def _copy_selection(self, widget):
         try:
@@ -443,8 +454,7 @@ class EntityWindow:
     def _render_new(self):
         """Append only what's new - a thread is written once and scrolls, so re-rendering all of it
         every poll would fight the scrollback and blink the window."""
-        for entry in self._model.entries[self._rendered:]:
-            self._thread.show(entry)
+        self._thread.show(self._model.entries[self._rendered:])
         self._thread.pane.see("end")
         self._rendered = len(self._model.entries)
 
@@ -468,8 +478,7 @@ class EntityWindow:
             tail, thread, model, rendered = entry
             for line in tail.poll().splitlines():
                 model.apply("history", line)
-            for message in model.entries[rendered:]:
-                thread.show(message)
+            thread.show(model.entries[rendered:])
             if len(model.entries) != rendered:
                 thread.pane.see("end")
             entry[3] = len(model.entries)
@@ -575,8 +584,34 @@ class EntityWindow:
         self._tk.update_idletasks()  # let the layout settle, or every box still reads as 1px
         return self._thread.geometry()
 
+    def waiting(self):
+        """How much of the past is loaded but not built - what scrolling back would still add."""
+        return self._thread.waiting()
+
+    def scroll_to_top(self):
+        """Drag the scrollbar to the top, as a reader would, and let what that pulls in settle."""
+        self._thread.pane.yview_moveto(0.0)
+        self._tk.update()
+
+    def menu_count(self):
+        """How many Tk menus the window holds - which must not grow with the conversation."""
+        def menus(widget):
+            return (widget.winfo_class() == "Menu") + sum(menus(kid)
+                                                          for kid in widget.winfo_children())
+
+        return menus(self._tk)
+
+    def bubble_text(self, index):
+        """The words actually sitting in one bubble, read off the widget."""
+        return self._thread.bodies()[index].get("1.0", "end-1c")
+
     def copy_from_bubble(self, index, start, end):
-        """Select part of one bubble and press Ctrl-C, the way a reader would, and read the clipboard."""
+        """Select part of one bubble and press Ctrl-C, the way a reader would, and read the
+        clipboard back.
+
+        Emptied first: whatever was last copied in another app is on that clipboard, and reading
+        it back would let a copy that never happened look exactly like one that did."""
+        self._tk.clipboard_clear()
         body = self._thread.bodies()[index]
         body.focus_set()
         body.tag_add("sel", start, end)

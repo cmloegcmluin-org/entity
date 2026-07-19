@@ -373,13 +373,13 @@ def main(argv=None):
     from entity.gui import EntityWindow
     from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_PROFILE_PATH
     from entity.no_console import silence_child_consoles
-    from entity.transcript import recent_lines
+    from entity.transcript import past_lines
 
     # With no console of its own to lend them, Windows gives each console child a new window: the
     # Claude CLI the brain runs was turning up as a second window on their desktop.
     silence_child_consoles(anyio)
 
-    for line in recent_lines(TRANSCRIPTS, current=None):
+    for line in past_lines(TRANSCRIPTS, current=None):
         feed.push("history", line)  # yesterday's sessions, above the divider - no more amnesia
     feed.push("line", "───────  this session  ───────")
     window = EntityWindow(

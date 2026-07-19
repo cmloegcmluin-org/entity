@@ -36,21 +36,25 @@ class Transcript:
                 handle.write(body)
 
 
-def recent_lines(directory, *, current, limit=150):
-    """The tail of the most recent past sessions, oldest first - what the window preloads above
-    the live conversation so a session doesn't start with amnesia about yesterday. `current` is
-    this session's own file, which is live and excluded; `limit` bounds the scrollback."""
+def past_lines(directory, *, current):
+    """Every session ever recorded, oldest first - the whole thread above the live conversation,
+    so scrolling back reaches the start rather than a cut with nothing on screen to explain it.
+    `current` is this session's own file, which is live and excluded.
+
+    Unbounded on purpose: the whole archive is a few hundred kilobytes of text, and the window
+    holds it rather than building it - see `bubbles.hold_back`.
+    The filenames sort chronologically, so sorting them is sorting the history."""
     directory = Path(directory)
     if not directory.is_dir():
         return []
     lines = []
-    paths = sorted(path for path in directory.glob("*.log") if current is None or path != Path(current))
-    for path in paths[-3:]:  # the couple of most recent sessions carry plenty of context
+    for path in sorted(path for path in directory.glob("*.log")
+                       if current is None or path != Path(current)):
         try:
             lines.extend(path.read_text(encoding="utf-8", errors="replace").splitlines())
         except OSError:
             continue
-    return lines[-limit:]
+    return lines
 
 
 # Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
@@ -64,6 +68,9 @@ _ROLE_PREFIXES = (
 )
 
 
+DAY_BREAK = "───────  {}  ───────"
+
+
 def parse_line(line):
     """Read one recorded line back as (role, time, text), or None if it isn't conversation.
 
@@ -71,6 +78,11 @@ def parse_line(line):
     sessions appear in the window as the conversation they were, not as log lines.
     """
     line = line.rstrip()
+    if line.startswith("===== ") and line.endswith(" ====="):
+        # The date each file writes once a day. Scrolling back through every session ever is a
+        # wall without them, so it comes back as the break it marks rather than as nothing.
+        day = line.strip("= ")
+        return "status", day, DAY_BREAK.format(day)
     if not line.startswith("[") or "] " not in line:
         return None
     stamp, _, body = line[1:].partition("] ")

@@ -1,4 +1,4 @@
-from entity.bubbles import size_bubble, wrap_to_pixels
+from entity.bubbles import hold_back, size_bubble, wrap_to_pixels
 
 
 def _measure(text):
@@ -34,3 +34,18 @@ def test_a_long_message_stops_at_its_share_of_the_pane_with_the_padding_inside_i
 
     assert width == 550  # 55% of a 1000px pane, padding counted in - never edge to edge
     assert len(lines) == 4 and height == 4 * 20 + 12
+
+
+def test_every_session_ever_is_held_and_only_its_newest_page_is_built():
+    # It opens on the live end of the thread; the rest is built as it is scrolled back to, because
+    # a bubble apiece for the whole archive costs a second a thousand and the archive only grows.
+    waiting, building = hold_back(list(range(100)), already=0, page=40)
+
+    assert building == list(range(60, 100))
+    assert waiting == list(range(60))
+
+
+def test_a_message_arriving_later_is_built_where_it_belongs_at_the_bottom():
+    # Only the opening batch is ever held back. A later one is newer than everything already up,
+    # so holding it would mean prepending it above messages it came after.
+    assert hold_back(list(range(100)), already=40, page=40) == ([], list(range(100)))

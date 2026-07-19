@@ -24,11 +24,12 @@ def test_messages_become_entries_that_know_who_said_them():
 def test_past_sessions_read_back_as_the_conversation_they_were():
     model = _model()
 
+    model.apply("history", "===== 2026-07-18 =====")  # the day, marking where these sessions start
     model.apply("history", "[03:41:12] you said: how's the agent doing")
     model.apply("history", "[03:41:20] entity> Gone quiet since yesterday.")
-    model.apply("history", "===== 2026-07-18 =====")  # a file header is not conversation
 
     assert [(e["role"], e["stamp"], e["historical"]) for e in model.entries] == [
+        ("status", "2026-07-18", True),
         ("you", "03:41:12", True),
         ("entity", "03:41:20", True),
     ]
@@ -145,6 +146,29 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert "BREVITY" in window.persona_text()  # what it has been told, in the words it reads
         assert "mic off" in window.mic_button_text()  # the mic starts off
 
+        # Every session ever recorded arrives in one batch as the window opens. Only the newest
+        # page is built: a bubble is two real widgets, a thousand of them cost a second, and the
+        # archive grows every day - so opening must not get slower every day with it.
+        for index in range(120):
+            feed.push("history", f"[03:{index // 60:02d}:{index % 60:02d}] you said: old {index}")
+        window._drain_once()
+        assert window.waiting() == 80 and len(window.bubble_geometry()) == 40
+        assert "old 0" in window.widget_text()  # held back, but still all of it to copy
+
+        # A message arriving now must not throw the held past away - it is the very next thing
+        # that happens when the window opens, and it would make the whole scrollback unreachable.
+        feed.push("message", ("entity", "still here"))
+        window._drain_once()
+        assert window.waiting() == 80 and len(window.bubble_geometry()) == 41
+
+        # Scrolling back to the top builds the page above it, in order, until there is no more.
+        window.scroll_to_top()
+        assert window.waiting() == 40 and len(window.bubble_geometry()) == 81
+        window.scroll_to_top()
+        assert window.waiting() == 0 and len(window.bubble_geometry()) == 121
+        assert window.bubble_text(0) == "old 0"  # the oldest, at the top, where it belongs
+        assert window.bubble_text(-1) == "still here"  # and the newest still last
+
         feed.push("history", "[03:41:12] you said: how's the agent doing")
         feed.push("message", ("you", "pick up the drive work"))
         feed.push("message", ("entity", "Started 1 agent."))
@@ -157,7 +181,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
         # Where the tinted boxes ACTUALLY landed in a real 980x760 window - measured off the
         # widgets, because what a bubble was configured to be is not what the eye receives.
-        pane, placed = window.pane_width(), window.bubble_geometry()
+        pane, placed = window.pane_width(), window.bubble_geometry()[-4:]
         assert [role for role, _, _ in placed] == ["you", "you", "entity", "entity"]
         assert max(width for _, _, width in placed) <= pane * 0.56  # each at most about half
         assert placed[-1][2] >= pane * 0.45  # and a long one does fill its column
@@ -166,13 +190,18 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
         # And the words can still be got back out: dragging inside a bubble and hitting Ctrl-C
         # copies that message - the bubbles are where the conversation's text lives now.
-        assert window.copy_from_bubble(1, "1.0", "1.4") == "pick"
+        assert window.copy_from_bubble(-3, "1.0", "1.4") == "pick"
+
+        # One right-click menu for the whole window, however many messages it holds. A menu per
+        # bubble runs Tk out of menu handles once the scrollback goes back far enough, and then
+        # the window refuses to open at all - which is what loading every session ever exposed.
+        assert window.menu_count() == 1
 
         # Dragging the window narrower re-measures every box, because a width fixed in pixels
         # stops being half of anything the moment the pane changes size.
         window._tk.geometry("620x760")
         window._tk.update()  # the real <Configure>, which is what re-fits them
-        narrow, pane = window.bubble_geometry(), window.pane_width()
+        narrow, pane = window.bubble_geometry()[-4:], window.pane_width()
         assert pane < 640 and max(width for _, _, width in narrow) <= pane * 0.56
         assert all(x + width >= pane - 14 for role, x, width in narrow if role == "you")
         assert all(x <= 14 for role, x, _ in narrow if role == "entity")

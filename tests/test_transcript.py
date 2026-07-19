@@ -56,23 +56,27 @@ def test_the_directory_is_created_if_it_is_not_there(tmp_path):
     assert path.exists()
 
 
-def test_recent_lines_hands_back_the_tail_of_earlier_sessions(tmp_path):
-    from entity.transcript import recent_lines
+def test_past_lines_hands_back_every_session_ever_recorded(tmp_path):
+    from entity.transcript import past_lines
 
-    (tmp_path / "session-20260716-010000.log").write_text("old one\nold two\n", encoding="utf-8")
-    (tmp_path / "session-20260717-010000.log").write_text("mid one\nmid two\n", encoding="utf-8")
+    for day in range(10, 16):  # more sessions than any window would have kept
+        (tmp_path / f"session-202607{day}-010000.log").write_text(
+            f"day {day} one\nday {day} two\n", encoding="utf-8")
     current = tmp_path / "session-20260718-010000.log"
     current.write_text("live - must not appear\n", encoding="utf-8")
 
-    lines = recent_lines(tmp_path, current=current, limit=3)
+    lines = past_lines(tmp_path, current=current)
 
-    assert lines == ["old two", "mid one", "mid two"]  # oldest first, bounded, current excluded
+    assert lines[:2] == ["day 10 one", "day 10 two"]  # scrolls back to the start of time
+    assert lines[-1] == "day 15 two"
+    assert len(lines) == 12  # every line of every session, nothing dropped off the top
+    assert "live - must not appear" not in lines
 
 
-def test_recent_lines_survives_an_empty_or_missing_directory(tmp_path):
-    from entity.transcript import recent_lines
+def test_past_lines_survives_an_empty_or_missing_directory(tmp_path):
+    from entity.transcript import past_lines
 
-    assert recent_lines(tmp_path / "nowhere", current=None) == []
+    assert past_lines(tmp_path / "nowhere", current=None) == []
 
 
 def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
@@ -84,9 +88,17 @@ def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
     assert parse_line("[03:41:18] (thinking…)") == ("status", "03:41:18", "(thinking…)")
 
 
+def test_a_day_header_reads_back_as_a_break_he_can_see():
+    from entity.transcript import parse_line
+
+    role, _, text = parse_line("===== 2026-07-18 =====")
+
+    # Scrolling back through every session is unreadable without a mark where one day ends.
+    assert role == "status" and "2026-07-18" in text
+
+
 def test_lines_that_are_not_conversation_read_back_as_nothing():
     from entity.transcript import parse_line
 
-    assert parse_line("===== 2026-07-18 =====") is None
     assert parse_line("") is None
     assert parse_line("[03:41:12] ") is None

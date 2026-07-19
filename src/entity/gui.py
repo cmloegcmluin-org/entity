@@ -226,7 +226,7 @@ class EntityWindow:
         style.map("TNotebook.Tab", background=[("selected", "#333333")], foreground=[("selected", FG)],
                   expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
-    def _make_pane(self, parent, *, readonly, font=("Consolas", 11), whole=None):
+    def _make_pane(self, parent, *, readonly, font=("Consolas", 11)):
         """A pane that can always be selected and copied from. Read-only panes stay in the
         NORMAL state and refuse edits key by key instead - a disabled Text widget takes no
         focus, so Ctrl-C never reaches it and the conversation cannot be got out of the
@@ -238,53 +238,44 @@ class EntityWindow:
             borderwidth=0, padx=10, pady=8, insertbackground=ACCENT,
         )
         if readonly:
-            self._make_readonly(pane, whole)
+            self._make_readonly(pane)
         return pane
 
     def _make_thread(self, parent, names, *, font):
-        """A pane that reads as a message thread: bubbles, not lines. "Copy all" from any of them
-        yields the whole conversation, since the bubbles - not the pane - hold the words now."""
-        def everything():
-            return thread.text()  # by the time a menu can ask, the thread below exists
+        """A pane that reads as a message thread: bubbles, not lines."""
+        pane = self._make_pane(parent, readonly=True, font=font)
+        return Thread(pane, names, prepare=self._make_readonly)
 
-        pane = self._make_pane(parent, readonly=True, font=font, whole=everything)
-        thread = Thread(pane, names, prepare=lambda body: self._make_readonly(body, everything))
-        return thread
-
-    def _make_readonly(self, widget, whole=None):
+    def _make_readonly(self, widget):
         """No caret and no typing, but every bit of selecting and copying still works."""
         widget.bind("<Key>", self._refuse_edit)
         widget.configure(insertwidth=0)  # reads as text rather than as a box to type in
-        self._make_copyable(widget, whole=whole)
+        self._make_copyable(widget)
 
     def _build_menu(self, tk):
         """ONE right-click menu, for the window rather than per widget. A menu of its own on every
         bubble ran Tk out of menu handles - "No more menus can be allocated" - once the scrollback
-        went back far enough, and the window then would not open at all. What was clicked, and what
-        "Copy all" means where it was clicked, are remembered at the click instead."""
-        self._clicked = None  # (widget, what "Copy all" yields there), set as the menu is posted
+        went back far enough, and the window then would not open at all. Which widget was clicked
+        is remembered as the menu is posted instead."""
+        self._clicked = None  # the widget the menu was posted over
         self._menu = tk.Menu(self._tk, tearoff=0, bg=PANEL, fg=FG, activebackground=SELECTION)
-        self._menu.add_command(label="Copy", command=lambda: self._copy_selection(self._clicked[0]))
-        self._menu.add_command(label="Copy all",
-                               command=lambda: self._to_clipboard(self._clicked[1]()))
+        self._menu.add_command(label="Copy", command=lambda: self._copy_selection(self._clicked))
 
-    def _make_copyable(self, widget, *, whole=None):
+    def _make_copyable(self, widget):
         """Selecting and copying has to WORK, not merely be permitted - it did not. A click
         takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
-        outright rather than left to the class bindings, and a right-click offers both in a
-        menu for when hands aren't on the keyboard. `whole` is what "Copy all" should yield
-        when this widget is one bubble of a longer conversation."""
+        outright rather than left to the class bindings, and a right-click offers Copy for when
+        hands aren't on the keyboard."""
         widget.bind("<Button-1>", lambda event: widget.focus_set(), add="+")
         widget.tag_raise("sel")  # or a tag made later wins and the highlight is invisible
         widget.bind("<Control-c>", lambda event: self._copy_selection(widget))
         widget.bind("<Control-C>", lambda event: self._copy_selection(widget))
         widget.bind("<Control-a>", lambda event: self._select_all(widget))
         widget.bind("<Control-A>", lambda event: self._select_all(widget))
-        everything = whole or (lambda: widget.get("1.0", "end-1c"))
-        widget.bind("<Button-3>", lambda event: self._popup(widget, everything, event))
+        widget.bind("<Button-3>", lambda event: self._popup(widget, event))
 
-    def _popup(self, widget, everything, event):
-        self._clicked = (widget, everything)
+    def _popup(self, widget, event):
+        self._clicked = widget
         self._menu.tk_popup(event.x_root, event.y_root)
 
     def _copy_selection(self, widget):
@@ -331,13 +322,16 @@ class EntityWindow:
         left.pack(side="left", fill="y", padx=(0, 8))
         self._mic_button = tk.Button(left, text="", width=13, command=self._press_mic, relief="flat",
                                      cursor="hand2", bg=PANEL, activebackground=PANEL)
-        self._mic_button.pack(anchor="w")
-        self._level = tk.Canvas(left, width=110, height=10, bg=PANEL, highlightthickness=0)
-        self._level.pack(anchor="w", pady=(6, 0))
+        self._mic_button.pack(fill="x")
+        # Height only: the width comes from the column, which the buttons above and below size in
+        # characters. Fixed at 110px the meter stopped visibly short of both of them.
+        self._level = tk.Canvas(left, height=10, bg=PANEL, highlightthickness=0)
+        self._level.pack(fill="x", pady=(6, 0))
         self._level_bar = self._level.create_rectangle(0, 0, 0, 10, fill=ACCENT, width=0)
-        tk.Button(left, text="Submit", width=13, relief="flat", cursor="hand2", command=self._submit,
-                  bg="#2a4d00", fg=ACCENT, activebackground="#2a4d00",
-                  activeforeground=ACCENT).pack(anchor="w", pady=(6, 0))
+        self._submit = tk.Button(left, text="Submit", width=13, relief="flat", cursor="hand2",
+                                 command=self._submit_draft, bg="#2a4d00", fg=ACCENT,
+                                 activebackground="#2a4d00", activeforeground=ACCENT)
+        self._submit.pack(fill="x", pady=(6, 0))
         self._draft = tk.Text(row, height=4, wrap="word", font=("Segoe UI", 11), bg=PANEL, fg=FG,
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
@@ -364,10 +358,10 @@ class EntityWindow:
     def _submit_from_key(self, event):
         if not event.state & self.MODIFIERS:
             return None  # a bare Enter is a new line in the draft, as it should be
-        self._submit()
+        self._submit_draft()
         return "break"  # and the newline that would otherwise be typed is not wanted
 
-    def _submit(self):
+    def _submit_draft(self):
         text = self._draft.get("1.0", "end-1c").strip()
         self._draft.delete("1.0", "end")
         if text:
@@ -416,7 +410,8 @@ class EntityWindow:
             self._level.coords(self._level_bar, 0, 0, 0, 10)
 
     def _show_level(self, level):
-        self._level.coords(self._level_bar, 0, 0, int(min(1.0, level / LEVEL_FULL) * 110), 10)
+        span = self._level.winfo_width()  # the column's width, not a number fixed at build time
+        self._level.coords(self._level_bar, 0, 0, int(min(1.0, level / LEVEL_FULL) * span), 10)
 
     def _append_draft(self, text):
         current = self._draft.get("1.0", "end-1c")
@@ -435,7 +430,7 @@ class EntityWindow:
             elif op == "draft":
                 self._append_draft(payload)
             elif op == "submit":
-                self._submit()
+                self._submit_draft()
             else:
                 self._model.apply(op, payload)
         if level is not None and self._state == "recording":
@@ -592,6 +587,16 @@ class EntityWindow:
         """Drag the scrollbar to the top, as a reader would, and let what that pulls in settle."""
         self._thread.pane.yview_moveto(0.0)
         self._tk.update()
+
+    def control_widths(self):
+        """The mic button, the level meter and Submit, as they actually laid out."""
+        self._tk.update_idletasks()
+        return (self._mic_button.winfo_width(), self._level.winfo_width(),
+                self._submit.winfo_width())
+
+    def menu_labels(self):
+        """What the right-click menu offers."""
+        return [self._menu.entrycget(index, "label") for index in range(self._menu.index("end") + 1)]
 
     def menu_count(self):
         """How many Tk menus the window holds - which must not grow with the conversation."""

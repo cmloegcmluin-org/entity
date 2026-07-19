@@ -123,7 +123,8 @@ def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():
 
     # Telling the two apart is the whole point: a dated rule wearing a different word between the
     # dashes still reads as another date, which is what looked like a glitch in the first place.
-    assert role == "status"
+    # The role says what it is, so nothing downstream has to recognise it by its own display text.
+    assert role == "session"
     assert text != DAY_BREAK.format("session")
     assert not any(character.isdigit() for character in text)
 

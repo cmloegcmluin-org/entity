@@ -109,7 +109,9 @@ def parse_line(line):
     """
     line = line.rstrip()
     if line == SESSION_MARK:
-        return "status", "", SESSION_BREAK
+        # Its own role, not "status": the window offers to copy a whole session from this line,
+        # and recognising it by its display text would be reading the label to find the thing.
+        return "session", "", SESSION_BREAK
     day = day_of(line)
     if day is not None:
         # The date each file writes once a day. Scrolling back through every session ever is a

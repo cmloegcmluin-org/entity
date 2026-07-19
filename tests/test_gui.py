@@ -196,6 +196,12 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         # bubble runs Tk out of menu handles once the scrollback goes back far enough, and then
         # the window refuses to open at all - which is what loading every session ever exposed.
         assert window.menu_count() == 1
+        assert window.menu_labels() == ["Copy"]  # and it offers only that
+
+        # The level meter spans its column. Fixed at 110px it stopped short of the buttons above
+        # and below it, which are sized in characters and come out wider.
+        mic, meter, submit = window.control_widths()
+        assert meter == mic == submit
 
         # Dragging the window narrower re-measures every box, because a width fixed in pixels
         # stops being half of anything the moment the pane changes size.

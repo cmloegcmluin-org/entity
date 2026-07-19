@@ -127,3 +127,35 @@ def test_a_later_ignore_starts_a_fresh_count():
     console.ignored()
 
     assert lines[-1] == "\r(ignoring…)"  # not "2x" - that run ended when he was answered
+
+
+def test_messages_are_reported_with_who_said_them():
+    # The window renders a conversation, not a log: it needs to know who spoke, not to re-parse
+    # the prefixes this module just wrote.
+    said = []
+    console = Console(echo=lambda _: None, messages=lambda role, text: said.append((role, text)))
+
+    console.heard("pick up the drive work")
+    console.reply("on it")
+    console.spoke("Message received.")
+    console.heads_up("the fixer agent is done")
+    console.thinking()
+
+    assert said == [
+        ("you", "pick up the drive work"),
+        ("entity", "on it"),
+        ("entity", "Message received."),
+        ("heads-up", "the fixer agent is done"),
+        ("status", "(thinking…)"),
+    ]
+
+
+def test_an_empty_listening_notice_says_nothing_at_all():
+    # In the window there is a mic button and a level meter; "(listening… say 'over' when you're
+    # done)" is both wrong and noise there.
+    lines, recorded = [], []
+    console = Console(echo=lines.append, record=recorded.append, listening_notice="")
+
+    console.listening()
+
+    assert lines == [] and recorded == []

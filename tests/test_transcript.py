@@ -73,3 +73,20 @@ def test_recent_lines_survives_an_empty_or_missing_directory(tmp_path):
     from entity.transcript import recent_lines
 
     assert recent_lines(tmp_path / "nowhere", current=None) == []
+
+
+def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
+    from entity.transcript import parse_line
+
+    assert parse_line("[03:41:12] you said: pick up the drive work") == ("you", "03:41:12", "pick up the drive work")
+    assert parse_line("[03:41:20] entity> Started 1 agent.") == ("entity", "03:41:20", "Started 1 agent.")
+    assert parse_line("[03:43:03] entity (heads-up)> the fixer is done") == ("heads-up", "03:43:03", "the fixer is done")
+    assert parse_line("[03:41:18] (thinking…)") == ("status", "03:41:18", "(thinking…)")
+
+
+def test_lines_that_are_not_conversation_read_back_as_nothing():
+    from entity.transcript import parse_line
+
+    assert parse_line("===== 2026-07-18 =====") is None
+    assert parse_line("") is None
+    assert parse_line("[03:41:12] ") is None

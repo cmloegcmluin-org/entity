@@ -136,3 +136,34 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
     assert "- better voice" in sections["Enhancements he wants for you (roadmap, not now)"]
     assert "- speaker enrollment" in sections["Enhancements he wants for you (roadmap, not now)"]
     assert sections["Something after"] == "- untouched"  # later sections undisturbed
+
+
+def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
+    # The window's Goals/Projects/Enhancements panes are editable; saving one writes that section
+    # back into the profile without disturbing a word of the others.
+    from entity.memory import profile_sections, save_section
+
+    path = tmp_path / "profile.md"
+    path.write_text(
+        "# the user\nintro line\n\n## Goals\n- swim\n- cello\n\n## Projects (long-term)\n- the atlas\n",
+        encoding="utf-8",
+    )
+
+    save_section(path, "Goals", "- swim, three times a week\n- cello")
+
+    text = path.read_text(encoding="utf-8")
+    sections = profile_sections(text)
+    assert sections["Goals"] == "- swim, three times a week\n- cello"
+    assert sections["Projects (long-term)"] == "- the atlas"
+    assert text.startswith("# the user\nintro line")  # the preamble survives too
+
+
+def test_saving_a_section_that_is_not_there_yet_adds_it(tmp_path):
+    from entity.memory import profile_sections, save_section
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Goals\n- swim\n", encoding="utf-8")
+
+    save_section(path, "Enhancements", "- dark mode")
+
+    assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == "- dark mode"

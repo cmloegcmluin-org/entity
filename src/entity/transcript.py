@@ -51,3 +51,29 @@ def recent_lines(directory, *, current, limit=150):
         except OSError:
             continue
     return lines[-limit:]
+
+
+_ROLE_PREFIXES = (
+    ("you said: ", "you"),
+    ("entity (heads-up)> ", "heads-up"),
+    ("entity> ", "entity"),
+)
+
+
+def parse_line(line):
+    """Read one recorded line back as (role, time, text), or None if it isn't conversation.
+
+    The prefixes are the ones Console writes; reading its own archive back is what lets past
+    sessions appear in the window as the conversation they were, not as log lines.
+    """
+    line = line.rstrip()
+    if not line.startswith("[") or "] " not in line:
+        return None
+    stamp, _, body = line[1:].partition("] ")
+    body = body.strip()
+    if not body:
+        return None
+    for prefix, role in _ROLE_PREFIXES:
+        if body.startswith(prefix):
+            return role, stamp, body[len(prefix):]
+    return "status", stamp, body

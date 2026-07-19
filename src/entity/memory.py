@@ -170,3 +170,31 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
     lines.insert(insert_at, f"- {item}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def save_section(path, heading, body):
+    """Replace one "## heading" section's body, leaving every other line of the file untouched.
+
+    This is his own profile - the same file the brain loads as standing context - so an edit made
+    in the window has to be surgical: rewriting the whole file from parsed sections would quietly
+    drop the preamble and reflow everything he didn't touch.
+    """
+    path = Path(path)
+    lines = _read(path).splitlines()
+    start = end = None
+    for index, line in enumerate(lines):
+        if not line.startswith("## "):
+            continue
+        if start is None and line[3:].strip() == heading:
+            start = index + 1
+        elif start is not None:
+            end = index
+            break
+    body_lines = body.rstrip().splitlines()
+    if start is None:  # no such section yet - start one at the end
+        lines += ["", f"## {heading}"] + body_lines
+    else:
+        tail = lines[end:] if end is not None else []
+        lines = lines[:start] + body_lines + ([""] if tail else []) + tail
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

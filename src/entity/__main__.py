@@ -216,9 +216,17 @@ def main(argv=None):
     )
     sdk_brain = SdkBrain(persona=persona)
     sdk_brain.warmup()
+    # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
+    # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
+    # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
+    # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS)
+    brain = SupervisingBrain(sdk_brain, desk)
     # Heartbeat: on a quiet timer, ask the brain if any agent has news he doesn't have yet and queue
     # it to the Outbox, so word from an agent reaches him the moment it lands, not only when he asks.
-    heartbeat = HeartbeatMonitor(sdk_brain, outbox)
+    # Only ever asked about agents the desk really has - see heartbeat.py for what open-ended asking
+    # cost him.
+    heartbeat = HeartbeatMonitor(sdk_brain, outbox, roster=lambda: [name for name, _, _ in desk.roster()])
     heartbeat.start()
     dictation = None
     if gui:
@@ -240,13 +248,6 @@ def main(argv=None):
         stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived, announce)
 
     tts = NullTTS() if muted else SystemTTS(rate=2)
-
-    # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
-    # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
-    # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
-    # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
-    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS)
-    brain = SupervisingBrain(sdk_brain, desk)
 
     def watch_keys():
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up

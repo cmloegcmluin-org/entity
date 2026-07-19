@@ -47,11 +47,12 @@ _NEGATIVES = ("no", "nope", "nah", "not", "dont", "later", "wait", "hold", "stop
 # came out as awkward TTS - "Mm-hm." read aloud as "m m").
 DEFAULT_ACK = "Message received."
 
-# A long reply must never feel like a crash. The first "still working" comes after DEFAULT_PATIENCE;
-# after that it repeats at least every DEFAULT_CHECK_IN, each time saying how long it's been (the
-# model gives no real progress percentage to report, so elapsed time is the honest stand-in).
-DEFAULT_PATIENCE = 6.0
-DEFAULT_CHECK_IN = 30.0
+# Waiting is answered ONCE, by handing the question to the background (see DEFAULT_DETACH_AFTER) -
+# not by a stream of "still working" updates, which he found annoying rather than reassuring. These
+# stay for a caller that wants the old cadence; both sit past the detach, so neither fires by
+# default: a wait ends by getting an answer or by being told he'll be got back to.
+DEFAULT_PATIENCE = 60.0
+DEFAULT_CHECK_IN = 60.0
 
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
 # instant rather than waiting out the next check-in.
@@ -64,14 +65,15 @@ DEFAULT_CANCEL_WAIT = 10.0
 # it, the call runs on in the background, and the finished answer is offered later. None disables
 # detaching (a slow think just blocks with check-ins, as before). Well past the check-in cadence so
 # only a genuinely long call detaches.
-DEFAULT_DETACH_AFTER = 45.0
+DEFAULT_DETACH_AFTER = 5.0
 # Said in turn, never the same one twice running: he heard one canned sentence four times in a
-# single session and told us it was unnatural and disconcerting.
+# single session and told us it was unnatural and disconcerting. Short, because this is the whole
+# of what he wants to hear while he waits - "I'll get back to you on that".
 DEFAULT_DETACH_REPLIES = (
-    "This one'll take me a while - I'll keep at it and let you know when it's ready.",
-    "Still a big one. I'll break in the moment I have something for you.",
-    "That's another slow one. I'm on it - carry on, and I'll speak up when it lands.",
-    "Long again, sorry. I'll come straight to you with it.",
+    "I'll get back to you on that.",
+    "Let me look into that - I'll come back to you.",
+    "That one needs a minute. I'll bring it to you.",
+    "On it - I'll get back to you.",
 )
 
 # After a reply, wait this long before listening again, so he gets a beat to read it rather than the

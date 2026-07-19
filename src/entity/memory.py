@@ -37,7 +37,7 @@ _PREAMBLE = (
 _LEXICON_INTRO = (
     "This is the user's working vocabulary - not only names he coined, but the domain terms, proper "
     "nouns and terms of art of the fields he lives in (his projects, acoustic music and notation, "
-    "film, his health, the people he works with). Recognise them when he uses them, and get them "
+    "film, his health, the people he works with). Recognize them when he uses them, and get them "
     "right when you use them back - his speech-to-text is biased toward this same list. Don't force "
     "them into the conversation:"
 )
@@ -91,7 +91,7 @@ def lexicon_terms(text):
 
 def compose_persona(base_persona, profile, learned="", lexicon=""):
     """Fold his standing context into the brain's system prompt: life context (profile + learned)
-    under a do-not-play-therapist warning, and his lexicon under its own recognise-these framing."""
+    under a do-not-play-therapist warning, and his lexicon under its own recognize-these framing."""
     life = "\n\n".join(section.strip() for section in (profile, learned) if section.strip())
     sections = [base_persona]
     if life:

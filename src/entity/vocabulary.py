@@ -31,7 +31,7 @@ DEFAULT_STOPWORDS = frozenset({
 
 def _normalize(name):
     """The spoken/written form of a directory name: "wave_shaper" -> "WaveShaper", "notecraft" -> "Notecraft".
-    A name that already carries its own capitalisation (ComfyUIApp) keeps it, minus separators."""
+    A name that already carries its own capitalization (ComfyUIApp) keeps it, minus separators."""
     parts = [p for p in _SEPARATORS.split(name.strip()) if p]
     if any(c.isupper() for c in name):
         return "".join(parts)

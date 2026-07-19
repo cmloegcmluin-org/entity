@@ -191,6 +191,7 @@ class EntityWindow:
             self._tabs.add(self._make_section_tab(tk, label, heading), text=label)
         # One home for the agents, however many he ends up driving at once.
         self._agent_tabs = ttk.Notebook(self._tabs)
+        self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
@@ -202,7 +203,7 @@ class EntityWindow:
         style.theme_use("clam")
         style.configure("TNotebook", background=BG, borderwidth=0)
         style.configure("TNotebook.Tab", background=PANEL, foreground=DIM, padding=(12, 6))
-        # Told apart by its lighter panel and plain bright text - no colour, and no resizing: clam
+        # Told apart by its lighter panel and plain bright text - no color, and no resizing: clam
         # grows/shrinks the selected tab by default, which left the active one a different height
         # from its neighbours.
         style.map("TNotebook.Tab", background=[("selected", "#333333")], foreground=[("selected", FG)],
@@ -221,24 +222,66 @@ class EntityWindow:
         if readonly:
             pane.bind("<Key>", self._refuse_edit)
             pane.configure(insertwidth=0)  # no caret, so it reads as text rather than a box to type in
+            self._make_copyable(pane)
         return pane
+
+    def _make_copyable(self, pane):
+        """Selecting and copying has to WORK, not merely be permitted: he tried and couldn't. A
+        click takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
+        outright rather than left to the class bindings, and a right-click offers both in a menu
+        for when his hands aren't on the keyboard."""
+        import tkinter as tk
+
+        pane.bind("<Button-1>", lambda event: pane.focus_set(), add="+")
+        pane.bind("<Control-c>", lambda event: self._copy_selection(pane))
+        pane.bind("<Control-C>", lambda event: self._copy_selection(pane))
+        pane.bind("<Control-a>", lambda event: self._select_all(pane))
+        pane.bind("<Control-A>", lambda event: self._select_all(pane))
+        menu = tk.Menu(pane, tearoff=0, bg=PANEL, fg=FG, activebackground="#3a5f00")
+        menu.add_command(label="Copy", command=lambda: self._copy_selection(pane))
+        menu.add_command(label="Copy all", command=lambda: self._copy_all(pane))
+        pane.bind("<Button-3>", lambda event: menu.tk_popup(event.x_root, event.y_root))
+
+    def _copy_selection(self, pane):
+        try:
+            selected = pane.get("sel.first", "sel.last")
+        except Exception:
+            return "break"  # nothing selected; copying nothing would only clear his clipboard
+        self._to_clipboard(selected)
+        return "break"
+
+    def _copy_all(self, pane):
+        self._to_clipboard(pane.get("1.0", "end-1c"))
+
+    def _to_clipboard(self, text):
+        if not text:
+            return
+        self._tk.clipboard_clear()
+        self._tk.clipboard_append(text)
+
+    @staticmethod
+    def _select_all(pane):
+        pane.tag_add("sel", "1.0", "end-1c")
+        return "break"
 
     @staticmethod
     def _refuse_edit(event):
         """Swallow anything that would type into a read-only pane, while leaving selection,
         scrolling and copying alone."""
         allowed = {"Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next"}
-        if event.keysym in allowed or (event.state & 0x4 and event.keysym.lower() in {"c", "a"}):
+        if event.keysym in allowed or event.state & 0x4:  # 0x4 is Control: copy, select-all
             return None
         return "break"
 
-    def _build_message_tags(self, pane=None):
+    def _build_message_tags(self, pane=None, *, width=None):
+        """A message takes at most half the pane's width, so who is speaking is legible at a
+        glance - a bubble spanning the whole window reads as a wall, not a side of a conversation."""
         pane = pane or self._text
-        wide, narrow = 190, 12
-        for role, colour, side in (("you", HIS, "right"), ("entity", ITS, "left"),
+        wide, narrow = width or 470, 12
+        for role, color, side in (("you", HIS, "right"), ("entity", ITS, "left"),
                                    ("heads-up", ITS, "left")):
             near, far = (wide, narrow) if side == "right" else (narrow, wide)
-            pane.tag_configure(role, justify=side, background=colour, foreground=FG,
+            pane.tag_configure(role, justify=side, background=color, foreground=FG,
                                lmargin1=near, lmargin2=near, rmargin=far, spacing1=2, spacing3=6)
             pane.tag_configure(f"{role}:name", justify=side, foreground=DIM,
                                font=("Segoe UI", 8), lmargin1=near, lmargin2=near,
@@ -330,12 +373,12 @@ class EntityWindow:
 
     def _show_state(self, state):
         self._state = state
-        text, colour = {
+        text, color = {
             "recording": ("● listening", ACCENT),
             "muted": ("○ mic off", DIM),
             "speaking": ("◼ stop", "#ff9b9b"),
         }[state]
-        self._mic_button.configure(text=text, fg=colour, activeforeground=colour)
+        self._mic_button.configure(text=text, fg=color, activeforeground=color)
         if state != "recording":
             self._level.coords(self._level_bar, 0, 0, 0, 10)
 
@@ -399,11 +442,14 @@ class EntityWindow:
         and when - rather than as a wall of log lines."""
         if self._agent_logs_dir is None:
             return
+        for name in list(self._tails):
+            if name not in discover(self._agent_logs_dir):
+                self.close_agent_tab(name)  # its log is gone, so neither he nor Entity wants the tab
         for name in discover(self._agent_logs_dir):
             if name not in self._tails:
                 pane = self._make_pane(self._agent_tabs, readonly=True, font=("Segoe UI", 10))
-                self._agent_tabs.add(pane, text=name)
-                self._build_message_tags(pane)
+                self._agent_tabs.add(pane, text=f"{name}  ✕")
+                self._build_message_tags(pane, width=380)
                 self._agent_models[name] = TranscriptModel(clock=self._clock)
                 self._tails[name] = [LogTail(self._agent_logs_dir / f"{name}.log"), pane, 0]
         for name, entry in self._tails.items():
@@ -447,6 +493,32 @@ class EntityWindow:
         opened - the window comes up first now, so he sees it while the model is still loading."""
         self._on_submit = submit
         self._on_mic = set_recording
+
+    def close_agent_tab(self, name):
+        """Take an agent's tab away and archive its log, so it stays closed. He asked how to close
+        these; Entity can close one the same way, by moving the log aside."""
+        entry = self._tails.pop(name, None)
+        self._agent_models.pop(name, None)
+        if entry is not None:
+            self._agent_tabs.forget(entry[1])
+        if self._agent_logs_dir is not None:
+            log = self._agent_logs_dir / f"{name}.log"
+            if log.exists():
+                closed = self._agent_logs_dir / "closed"
+                closed.mkdir(parents=True, exist_ok=True)
+                log.replace(closed / log.name)
+
+    def _clicked_agent_tabs(self, event):
+        """A click on a tab's ✕ closes it."""
+        try:
+            index = self._agent_tabs.index(f"@{event.x},{event.y}")
+        except Exception:
+            return
+        label = self._agent_tabs.tab(index, "text")
+        if label.endswith("✕") and event.x > self._agent_tabs.winfo_x():
+            name = label.rsplit("  ", 1)[0]
+            if name in self._tails:
+                self.close_agent_tab(name)
 
     def close_when(self, done):
         """Once `done` (a threading.Event) fires, the window shuts itself on its own thread."""

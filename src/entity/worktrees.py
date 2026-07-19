@@ -20,7 +20,7 @@ def is_worktree(path):
 
 
 def find_worktrees(directory):
-    """The worktrees directly inside `directory` - only real ones, recognised by their .git. A
+    """The worktrees directly inside `directory` - only real ones, recognized by their .git. A
     worktree's OWN subdirectories (.venv, docs, src...) have no .git and must never count: treating
     them as worktrees once put a separate agent to work inside each folder of a single worktree."""
     path = Path(directory).expanduser()

@@ -162,10 +162,18 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         for _ in range(window.SLOW_POLL_EVERY):  # let the slow poll fire once
             window._drain_once()
         assert "Agents" in window.tab_labels()  # one home, however many he ends up driving
-        assert window.agent_tab_labels() == ["fixer"]
+        assert window.agent_tab_labels() == ["fixer  ✕"]  # closable, at his ask
         shown_log = window.agent_tab_text("fixer")
         assert "Entity · 10:00:00" in shown_log  # the agent exchange reads as a conversation too
         assert "fix the drive link" in shown_log
+
+        # Closing one takes the tab away and archives its log, so it stays closed.
+        window.close_agent_tab("fixer")
+        assert window.agent_tab_labels() == []
+        assert not (logs / "fixer.log").exists() and (logs / "closed" / "fixer.log").exists()
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert window.agent_tab_labels() == []  # and it doesn't come straight back
         assert window.section_text("4 · Goals").strip() == "- swim"
         assert window.section_text("3 · Context").strip() == "- new to the city"  # his category 3
 

@@ -1,4 +1,5 @@
 import threading
+from types import SimpleNamespace
 
 from entity.console import Console
 from entity.gui import TranscriptFeed, TranscriptModel
@@ -127,10 +128,13 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     done = threading.Event()
     submitted, mic_flips, stops = [], [], []
     ticks = [1000.0]
+    chord = SimpleNamespace(started=0, stopped=0)
+    chord.start = lambda: setattr(chord, "started", chord.started + 1)
+    chord.stop = lambda: setattr(chord, "stopped", chord.stopped + 1)
     window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
                           profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
                           persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
-                          learned_path=learned, now=lambda: ticks[0])
+                          learned_path=learned, now=lambda: ticks[0], chord=chord)
     try:
         window.hide()
         window.close_when(done)
@@ -229,9 +233,15 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
             window._drain_once()
         assert "hates being read a wall" in learned.read_text(encoding="utf-8")
 
+        # The submit chord listens for as long as the window is open, and no longer: a global
+        # keyboard hook outliving its window would keep eating his Win+Enter everywhere.
+        assert chord.started == 1 and chord.stopped == 0
+
         assert not window.ended
         done.set()
         window._drain_once()  # the conversation has wound down - the window ends itself
         assert window.ended
+        assert chord.stopped == 1
     finally:
         window.destroy()  # idempotent, so the happy path ending first is fine
+    assert chord.stopped == 1  # and destroying twice doesn't double-stop it

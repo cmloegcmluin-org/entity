@@ -77,21 +77,20 @@ thread-safe feed into Tk; anything that can be wrong lives outside Tk and is tes
 display. `bubbles.py` is one tinted box per message — a real widget, because a Tk tag's background
 paints the whole line box. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets) and streams its steps into its log. `brain_sdk.py` holds the
-persona and the session.
-`memory.py` is his profile and what Entity has learned. Tk touches only the main thread; the
-conversation and the dictation pump run on workers.
+persona and the session. `memory.py` is his profile and what Entity has learned. `chord.py` hears
+the key beside his spacebar + Enter, which no window on this machine can be given — read its
+docstring before touching it; every claim in there was measured and several obvious designs are
+wrong. Tk touches only the main thread; the conversation, the dictation pump and the keyboard hook
+run on workers.
 
 ## Open work
 
-Two tasks are running or queued as their own sessions — check with him before starting either:
+One task is running or queued as its own session — check with him before starting it:
 
 1. **Sanitization for a public repo.** Nothing under `runtime/` is tracked or has ever been
    committed, but the source is written about him by name, with his projects, hardware, and profile
    fragments in test fixtures. Blocks moving this to the `example-org` GitHub organization and
    adopting the PR/merge-queue process used by `sample-lib`, `bayesian-main` and `notecraft`.
-2. **Windows key + Enter to submit.** `RegisterHotKey(MOD_WIN, VK_RETURN)` returns 1409 —
-   something already owns that chord — and a key probe recorded zero events, so nothing reaches the
-   app. Narrator was ruled out. Find the holder.
 
 Also outstanding, not yet assigned: hearing only his voice (speaker enrollment, and loopback gating
 so audio this PC is playing is discounted), and a live word-by-word transcription display with a

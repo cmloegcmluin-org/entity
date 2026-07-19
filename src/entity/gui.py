@@ -144,7 +144,7 @@ class EntityWindow:
 
     def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
                  profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
-                 icon=None, title="Entity", clock=_clock, now=time.monotonic):
+                 icon=None, title="Entity", clock=_clock, now=time.monotonic, chord=None):
         import tkinter as tk
         from tkinter import ttk
 
@@ -169,7 +169,10 @@ class EntityWindow:
         self._polls = 0
         self._clock = clock
         self._speaker_names = {"you": "You", "entity": "Entity"}
-        self._windows_key_down = False  # the key by his spacebar, held while he reaches for Enter
+        # The key by his spacebar + Enter can only be heard by a keyboard hook on this machine
+        # (see entity.chord); it never reaches Tk, so the window is handed a listener rather than
+        # binding a key sequence for it.
+        self._chord = chord
 
         set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
         self._tk = tk.Tk()
@@ -205,10 +208,9 @@ class EntityWindow:
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
-        for key in self.WINDOWS_KEYS:  # watch it go down and up; Tk may not report it as a modifier
-            self._tk.bind(f"<KeyPress-{key}>", lambda event: setattr(self, "_windows_key_down", True))
-            self._tk.bind(f"<KeyRelease-{key}>", lambda event: setattr(self, "_windows_key_down", False))
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
+        if self._chord is not None:
+            self._chord.start()
 
     # ---- construction ---------------------------------------------------------------------------
 
@@ -328,15 +330,7 @@ class EntityWindow:
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
-        # The key by his spacebar - a Mac keyboard through a KVM, so it arrives as the Windows
-        # key. Every spelling of it is bound because Tk reports that key differently depending on
-        # the layout, and every modifier is accepted besides, since a KVM may map it to any of
-        # them. Plain Enter still types a newline.
-        for sequence in ("<Key-Return>", "<Mod4-Return>", "<Super-Return>", "<Win-Return>"):
-            try:
-                self._draft.bind(sequence, self._submit_from_key)
-            except Exception:
-                pass  # this Tk doesn't know that spelling; the others still cover the key
+        self._draft.bind("<Key-Return>", self._submit_from_key)
         self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
@@ -350,16 +344,14 @@ class EntityWindow:
             return
         self._on_mic(self._state != "recording")
 
-    # Every modifier bit Tk on Windows sets for Ctrl, Alt and the Windows key. The Windows key is
-    # the one he actually presses; it does not always arrive as a modifier at all, which is why the
-    # keysym is checked too.
-    MODIFIERS = 0x4 | 0x8 | 0x40 | 0x80 | 0x20000 | 0x40000
-    WINDOWS_KEYS = ("Super_L", "Super_R", "Win_L", "Win_R", "Meta_L", "Meta_R")
+    # The modifier bits Tk on Windows sets for Ctrl and Alt, measured rather than assumed. The
+    # Windows key sets none of them - it never reaches Tk here at all - so that chord is the
+    # keyboard hook's job (entity.chord), not this binding's.
+    MODIFIERS = 0x4 | 0x20000
 
     def _submit_from_key(self, event):
-        if not (event.state & self.MODIFIERS or self._windows_key_down):
+        if not event.state & self.MODIFIERS:
             return None  # a bare Enter is a new line in his draft, as it should be
-        self._windows_key_down = False
         self._submit()
         return "break"  # and the newline that would otherwise be typed is not wanted
 
@@ -642,4 +634,6 @@ class EntityWindow:
     def destroy(self):
         if not self.ended:  # idempotent - the poll loop and a test teardown may both get here
             self.ended = True
+            if self._chord is not None:
+                self._chord.stop()  # a global keyboard hook must not outlive the window it serves
             self._tk.destroy()

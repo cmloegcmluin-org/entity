@@ -6,12 +6,12 @@ feed into the Tk thread. What can be wrong - the message model, the feed, sectio
 tailing - lives outside Tk and is tested without a display; the tkinter layer mirrors state and
 forwards buttons.
 
-Layout: the conversation reads like a text thread - his messages in tinted boxes down the right,
-Entity's down the left, each with a name and a time, past sessions above a divider. The boxes
-themselves are `bubbles.py`. Everything to do with him talking sits together along the bottom: mic
-button, level meter, the editable draft his speech types into, and Submit. Beside the conversation
-are tabs - one per agent log, tailed live, and his Goals, Projects and Enhancements, editable and
-saved straight back into the profile the brain reads.
+Layout: the conversation reads like a text thread - the user's messages in tinted boxes down the
+right, Entity's down the left, each with a name and a time, past sessions above a divider. The
+boxes themselves are `bubbles.py`. Everything to do with talking sits together along the bottom:
+mic button, level meter, the editable draft speech types into, and Submit. Beside the conversation
+are tabs - one per agent log, tailed live, and the profile's Goals, Projects and Enhancements,
+editable and saved straight back into the file the brain reads.
 
 Threads: the conversation loop and the dictation pump run on workers and push into the feed;
 tkinter runs the main thread and polls with `after`, so no Tk call ever happens off the Tk thread.
@@ -27,12 +27,12 @@ from entity.tailing import LogTail, discover
 from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
 
-LEVEL_FULL = 0.06  # the meter tops out around his loud speech, so ordinary talk visibly moves it
+LEVEL_FULL = 0.06  # the meter tops out around loud speech, so ordinary talk visibly moves it
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
-# identity of whatever other python-hosted app already owns a button: the Entity window turned up
-# under his SidebarTool icon, wearing SidebarTool's icon. Declaring one gives it its own.
-APP_ID = "the user.Entity"
+# identity of whatever other python-hosted app already owns a button - the Entity window turned up
+# under an unrelated app's icon, wearing that app's icon. Declaring one gives it its own.
+APP_ID = "Entity.VoiceCompanion"
 
 
 def _set_app_id_via_shell32(app_id):
@@ -129,9 +129,9 @@ class EntityWindow:
     POLL_MS = 80
     SLOW_POLL_EVERY = 12  # agent logs and the profile re-check ~once a second, not every 80ms
     AUTOSAVE_AFTER = 1.5  # seconds of not typing before an edited section is written back
-    # His own five categories, in his numbering. Slot 1 was "Entity construction", which is
-    # sufficiently done, so the conversation itself takes that number. The heading each tab reads
-    # is explicit, since his profile calls category 3 "Life context (for awareness; ...)".
+    # The profile's own categories, in its own numbering. Slot 1 was "Entity construction", which
+    # is sufficiently done, so the conversation itself takes that number. Each tab names only the
+    # stem of its heading, because a profile glosses its headings however it likes.
     SECTION_TABS = (
         ("2 · Enhancements", "Enhancements"),
         ("3 · Context", "Life context"),
@@ -156,7 +156,7 @@ class EntityWindow:
         self._on_stop = on_stop
         self._on_submit = on_submit or (lambda text: None)
         self._on_mic = on_mic or (lambda recording: None)
-        self._state = "muted"  # the mic starts off; nothing is heard until he turns it on
+        self._state = "muted"  # the mic starts off; nothing is heard until it is turned on
         self._now = now
         self._profile_path = Path(profile_path) if profile_path else None
         self._learned_path = Path(learned_path) if learned_path else None
@@ -169,9 +169,9 @@ class EntityWindow:
         self._polls = 0
         self._clock = clock
         self._speaker_names = {"you": "You", "entity": "Entity"}
-        # The key by his spacebar + Enter can only be heard by a keyboard hook on this machine
-        # (see entity.chord); it never reaches Tk, so the window is handed a listener rather than
-        # binding a key sequence for it.
+        # The modifier beside the spacebar + Enter can only be heard by a keyboard hook on this
+        # machine (see entity.chord); it never reaches Tk, so the window is handed a listener
+        # rather than binding a key sequence for it.
         self._chord = chord
 
         set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
@@ -198,12 +198,12 @@ class EntityWindow:
         self._tabs.add(self._persona, text=self.PERSONA_TAB)
         if persona:
             self._persona.insert("end", persona)
-        # What it has learned about him, as it learns it - the one place a self-improvement he is
-        # told about actually lands, so he can read it the moment it lands and cross it out.
+        # What it has learned about the user, as it learns it - the one place a self-improvement
+        # it is told about actually lands, so it can be read the moment it lands and crossed out.
         self._learned = self._make_pane(self._tabs, readonly=False, font=("Segoe UI", 10))
         self._learned.bind("<KeyRelease>", lambda event: setattr(self, "_learned_edited", self._now()))
         self._tabs.add(self._learned, text=self.MEMORY_TAB)
-        # One home for the agents, however many he ends up driving at once.
+        # One home for the agents, however many end up being driven at once.
         self._agent_tabs = ttk.Notebook(self._tabs)
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
@@ -226,9 +226,10 @@ class EntityWindow:
                   expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
     def _make_pane(self, parent, *, readonly, font=("Consolas", 11), whole=None):
-        """A pane he can always select and copy from. Read-only panes stay in the NORMAL state and
-        refuse edits key by key instead - a disabled Text widget takes no focus, so Ctrl-C never
-        reaches it and he cannot get his own conversation out of the window."""
+        """A pane that can always be selected and copied from. Read-only panes stay in the
+        NORMAL state and refuse edits key by key instead - a disabled Text widget takes no
+        focus, so Ctrl-C never reaches it and the conversation cannot be got out of the
+        window."""
         from tkinter import scrolledtext
 
         pane = scrolledtext.ScrolledText(
@@ -256,11 +257,11 @@ class EntityWindow:
         self._make_copyable(widget, whole=whole)
 
     def _make_copyable(self, widget, *, whole=None):
-        """Selecting and copying has to WORK, not merely be permitted: he tried and couldn't. A
-        click takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
-        outright rather than left to the class bindings, and a right-click offers both in a menu
-        for when his hands aren't on the keyboard. `whole` is what "Copy all" should yield when
-        this widget is one bubble of a longer conversation."""
+        """Selecting and copying has to WORK, not merely be permitted - it did not. A click
+        takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
+        outright rather than left to the class bindings, and a right-click offers both in a
+        menu for when hands aren't on the keyboard. `whole` is what "Copy all" should yield
+        when this widget is one bubble of a longer conversation."""
         import tkinter as tk
 
         widget.bind("<Button-1>", lambda event: widget.focus_set(), add="+")
@@ -279,7 +280,7 @@ class EntityWindow:
         try:
             selected = widget.get("sel.first", "sel.last")
         except Exception:
-            return "break"  # nothing selected; copying nothing would only clear his clipboard
+            return "break"  # nothing selected; copying nothing would only clear the clipboard
         self._to_clipboard(selected)
         return "break"
 
@@ -304,7 +305,7 @@ class EntityWindow:
         return "break"
 
     def _make_section_tab(self, tk, label, heading):
-        """His own documents, edited in place - no Save button, because a document you have to
+        """The user's own documents, edited in place - no Save button, because a document you have to
         remember to save is one you lose."""
         pane = self._make_pane(self._tabs, readonly=False)
         pane.bind("<KeyRelease>", lambda event, name=label: self._mark_dirty(name))
@@ -312,7 +313,7 @@ class EntityWindow:
         return pane
 
     def _build_controls(self, tk):
-        """Everything to do with him talking, together in one row along the bottom."""
+        """Everything to do with talking, together in one row along the bottom."""
         row = tk.Frame(self._tk, bg=BG)
         row.pack(fill="x", padx=8, pady=(0, 8))
         left = tk.Frame(row, bg=BG)
@@ -337,7 +338,7 @@ class EntityWindow:
 
     def _press_mic(self):
         """One button. While the Entity is talking it IS the stop - and stopping leaves the mic
-        off, because a stop should not turn straight around and record his next breath."""
+        off, because a stop should not turn straight around and record the next breath."""
         if self._state == "speaking":
             self._on_stop()
             self._on_mic(False)
@@ -365,7 +366,7 @@ class EntityWindow:
         self._sections[label]["edited"] = self._now()
 
     def _autosave(self):
-        """Write back a section he has stopped typing in. Debounced so a save isn't attempted on
+        """Write back a section that is no longer being typed in. Debounced so a save isn't attempted on
         every keystroke, and so the pane isn't re-read out from under a sentence in progress."""
         if self._profile_path is None:
             return
@@ -441,20 +442,20 @@ class EntityWindow:
 
     def _render_new(self):
         """Append only what's new - a thread is written once and scrolls, so re-rendering all of it
-        every poll would fight his scrollback and blink the window."""
+        every poll would fight the scrollback and blink the window."""
         for entry in self._model.entries[self._rendered:]:
             self._thread.show(entry)
         self._thread.pane.see("end")
         self._rendered = len(self._model.entries)
 
     def _refresh_agent_tabs(self):
-        """Each agent's exchange, read back the same way his own conversation is - who said what,
+        """Each agent's exchange, read back the same way the conversation is - who said what,
         and when - rather than as a wall of log lines."""
         if self._agent_logs_dir is None:
             return
         for name in list(self._tails):
             if name not in discover(self._agent_logs_dir):
-                self.close_agent_tab(name)  # its log is gone, so neither he nor Entity wants the tab
+                self.close_agent_tab(name)  # its log is gone, so nobody wants the tab
         for name in discover(self._agent_logs_dir):
             if name not in self._tails:
                 # In an agent's tab the Entity is the one asking and the agent answers.
@@ -474,7 +475,7 @@ class EntityWindow:
             entry[3] = len(model.entries)
 
     def _refresh_learned(self):
-        """Re-read what it has learned, unless he is in the middle of editing it."""
+        """Re-read what it has learned, unless it is in the middle of being edited."""
         if self._learned_path is None or self._learned_edited is not None:
             return
         try:
@@ -502,23 +503,23 @@ class EntityWindow:
         sections = profile_sections(self._profile_path.read_text(encoding="utf-8"))
         for label, section in self._sections.items():
             if section["edited"] is not None:
-                continue  # he's mid-edit; never overwrite what he's typing
+                continue  # mid-edit; never overwrite what is being typed
             body = sections.get(find_heading(sections, section["heading"]), "")
             if body != section["pane"].get("1.0", "end-1c").rstrip():
                 section["pane"].delete("1.0", "end")
                 section["pane"].insert("end", body)
-            section["loaded"] = body  # what he started from, so a save can tell his edit from theirs
+            section["loaded"] = body  # what the edit started from, so a save can tell it from Entity's
 
     # ---- lifecycle ------------------------------------------------------------------------------
 
     def attach_mic(self, *, submit, set_recording):
         """Wire the draft box and the mic button to a Dictation that didn't exist when the window
-        opened - the window comes up first now, so he sees it while the model is still loading."""
+        opened - the window comes up first now, so it is visible while the model is still loading."""
         self._on_submit = submit
         self._on_mic = set_recording
 
     def close_agent_tab(self, name):
-        """Take an agent's tab away and archive its log, so it stays closed. He asked how to close
+        """Take an agent's tab away and archive its log, so it stays closed. Asked how to close
         these; Entity can close one the same way, by moving the log aside."""
         entry = self._tails.pop(name, None)
         if entry is not None:

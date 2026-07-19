@@ -59,10 +59,10 @@ def test_a_closed_overwrite_run_stays_and_new_messages_follow_it():
 def test_startup_narration_shows_as_status_and_blank_lines_are_dropped():
     model = _model()
 
-    model.apply("line", "(listening on mic: Webcam 101)")
+    model.apply("line", "(listening on mic: Onboard 101)")
     model.apply("line", "")
 
-    assert [(e["role"], e["text"]) for e in model.entries] == [("status", "(listening on mic: Webcam 101)")]
+    assert [(e["role"], e["text"]) for e in model.entries] == [("status", "(listening on mic: Onboard 101)")]
 
 
 def test_the_feed_carries_ops_across_threads_in_order():

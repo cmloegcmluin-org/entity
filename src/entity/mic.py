@@ -1,6 +1,6 @@
 """The real microphone: a 16 kHz mono float32 input stream, read in fixed-size frames.
 
-Picking the RIGHT input device matters: Windows often defaults to a dead virtual mic (a VR
+Picking the RIGHT input device matters: Windows often defaults to a dead virtual mic (an idle
 headset's silent input, "Sound Mapper", etc.), which hands back pure silence - so the Entity hears
 nothing and just sits there. `choose_input_device` avoids that by taking the liveliest real input,
 or an explicit override. Hardware I/O only; the segmentation/transcription it feeds is tested
@@ -8,7 +8,7 @@ without a mic.
 
 `BackgroundMicrophone` wraps a mic to drain it on its own thread, so the stream keeps being read
 even while the main thread is stuck transcribing - the gap where PortAudio used to overflow and
-silently drop whatever he said mid-transcription.
+silently drop whatever was said mid-transcription.
 """
 
 import math
@@ -114,7 +114,7 @@ def choose_input_device(devices, probe, *, override=None, hostapi=None):
     the OS default uses. With `override` (a device-name substring), take the first such input whose
     name contains it. Otherwise probe each distinct input's live level via `probe(index) -> rms` and
     take the LIVELIEST - a real mic's self-noise always beats a disconnected virtual device's ~0, so
-    this reliably avoids a dead default (a VR-headset mic) even in a silent room, where an
+    this reliably avoids a dead default (an idle headset, a virtual device) even in a silent room, where an
     absolute-threshold check would find nothing and fall back to that very dead default. Returns
     (index, name), or (None, None) only when there's no input device we could probe at all.
     """

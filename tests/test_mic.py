@@ -66,7 +66,7 @@ def test_close_stops_the_capture_thread_and_closes_the_source():
 
 
 def test_override_name_substring_wins_and_skips_probing():
-    devices = [_dev("Microphone (Headset AirLink)"), _dev("Microphone (Onboard(R) Audio)")]
+    devices = [_dev("Microphone (Headset Adapter)"), _dev("Microphone (Onboard(R) Audio)")]
     probed = []
 
     idx, name = choose_input_device(devices, lambda i: probed.append(i) or 1.0, override="onboard")
@@ -76,8 +76,8 @@ def test_override_name_substring_wins_and_skips_probing():
 
 
 def test_the_liveliest_input_is_chosen():
-    devices = [_dev("Dead VR mic"), _dev("Real Mic", in_ch=1), _dev("Speakers", in_ch=0)]
-    levels = {0: 0.00001, 1: 0.02}  # VR silent, real mic hears the room
+    devices = [_dev("Dead headset mic"), _dev("Real Mic", in_ch=1), _dev("Speakers", in_ch=0)]
+    levels = {0: 0.00001, 1: 0.02}  # headset silent, real mic hears the room
 
     idx, name = choose_input_device(devices, lambda i: levels[i])
 
@@ -86,9 +86,9 @@ def test_the_liveliest_input_is_chosen():
 
 def test_the_liveliest_is_taken_even_when_the_whole_room_is_quiet():
     # The bug this guards: an absolute threshold found NOTHING in a quiet room, returned None, and
-    # the app fell back to the dead OS default (a VR mic) - all-zero audio. A real mic's self-noise
+    # the app fell back to the dead OS default (an idle headset) - all-zero audio. A real mic's self-noise
     # still beats a disconnected virtual device, so we always take the liveliest rather than default.
-    devices = [_dev("Dead VR mic"), _dev("Real Mic", in_ch=1)]
+    devices = [_dev("Dead headset mic"), _dev("Real Mic", in_ch=1)]
     levels = {0: 0.00001, 1: 0.0003}  # both quiet, but the real mic is measurably alive
 
     idx, name = choose_input_device(devices, lambda i: levels[i])

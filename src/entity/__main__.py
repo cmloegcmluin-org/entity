@@ -41,8 +41,8 @@ AGENT_LOGS = RUNTIME_DIR / "agent-logs"  # one timestamped exchange log per agen
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
-VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for his project names
-WORKSPACE = Path.home() / "workspace"  # his main project tree; its folder names seed the custom vocabulary
+VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
+WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entity flags it to the user
 
 
@@ -58,8 +58,9 @@ def _fresh_worktree_note():
 
 
 def _mic_gain():
-    """How much to amplify the mic. A quiet input (his onboard mic peaks ~0.009, under the 0.01
-    speech threshold) needs a boost or nothing registers as speech; loud mics leave this at 1."""
+    """How much to amplify the mic. A quiet input - an onboard mic can peak around 0.009, under
+    the 0.01 speech threshold - needs a boost or nothing registers as speech; loud mics leave
+    this at 1."""
     try:
         return float(MIC_GAIN.read_text(encoding="utf-8").strip()) if MIC_GAIN.exists() else 1.0
     except ValueError:
@@ -142,9 +143,10 @@ def _open_hearing(announce):
     transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms)
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
 
-    # Don't trust the OS default input - on this machine it's a dead VR-headset mic. Pick the input
-    # that's actually hearing the room (or an override the user drops in mic.txt), staying on the
-    # default's host API so the stream can actually be opened, and say which mic won.
+    # Don't trust the OS default input - it is often an idle headset or a virtual device that
+    # hands back silence. Pick the input that's actually hearing the room (or an override the user
+    # drops in mic.txt), staying on the default's host API so the stream can actually be opened,
+    # and say which mic won.
     override = MIC_OVERRIDE.read_text(encoding="utf-8").strip() if MIC_OVERRIDE.exists() else None
     default_input = sd.default.device[0]
     hostapi = sd.query_devices(default_input)["hostapi"] if default_input is not None else None

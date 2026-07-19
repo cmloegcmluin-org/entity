@@ -558,7 +558,7 @@ class EntityWindow:
 
     def hide(self):
         """Lay the window out for real without showing it, so a test can measure what it built and
-        still flash nothing on his screen. Withdrawing is not enough: an unmapped window reports
+        still flash nothing on screen. Withdrawing is not enough: an unmapped window reports
         every width as 1, and a bubble's whole point is the width it ends up."""
         self._tk.attributes("-alpha", 0.0)
         self._tk.deiconify()
@@ -576,7 +576,7 @@ class EntityWindow:
         return self._thread.geometry()
 
     def copy_from_bubble(self, index, start, end):
-        """Select part of one bubble and press Ctrl-C, the way he would, and read the clipboard."""
+        """Select part of one bubble and press Ctrl-C, the way a reader would, and read the clipboard."""
         body = self._thread.bodies()[index]
         body.focus_set()
         body.tag_add("sel", start, end)

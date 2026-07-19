@@ -164,7 +164,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert all(x + width >= pane - 14 for role, x, width in placed if role == "you")
         assert all(x <= 14 for role, x, _ in placed if role == "entity")
 
-        # And he can still get his words back out: dragging inside a bubble and hitting Ctrl-C
+        # And the words can still be got back out: dragging inside a bubble and hitting Ctrl-C
         # copies that message - the bubbles are where the conversation's text lives now.
         assert window.copy_from_bubble(1, "1.0", "1.4") == "pick"
 

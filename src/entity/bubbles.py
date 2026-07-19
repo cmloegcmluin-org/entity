@@ -4,14 +4,14 @@ Why a widget per message and not a text tag: a Tk text tag paints its background
 line box, edge to edge, however the margins are set - so tagging could wrap the WORDS into a
 column while the tint stayed a stripe the width of the window. A bubble has to be a box whose
 width is its own, which means a real widget. Each one is a `Frame` of measured size holding a
-`Text` he can still select and copy from, embedded in the pane and pushed to its side by the
-line's justify.
+`Text` that can still be selected and copied from, embedded in the pane and pushed to its side
+by the line's justify.
 
 The measuring is pure and lives at the top of this file, so what decides a bubble's width can be
 tested without a display; the Tk half below only builds what those numbers describe.
 """
 
-from entity.theme import DIM, FG, HIS, ITS, PAST, SELECTION
+from entity.theme import DIM, FG, ITS, MINE, PAST, SELECTION
 
 SHARE = 0.55  # of the pane a bubble may take - about half, the way a message thread reads
 PAD_X = 10
@@ -20,7 +20,7 @@ NAME_FONT = ("Segoe UI", 8)
 
 # Who sits where, and in what tint. A heads-up is Entity talking out of turn, so it takes Entity's
 # side and color and says so in the name.
-SIDES = {"you": ("right", HIS), "entity": ("left", ITS), "heads-up": ("left", ITS)}
+SIDES = {"you": ("right", MINE), "entity": ("left", ITS), "heads-up": ("left", ITS)}
 
 
 def size_bubble(text, pane_width, measure, line_height):
@@ -49,7 +49,7 @@ def wrap_to_pixels(text, limit, measure):
             else:
                 lines.extend(_break_word(word, limit, measure))
         if len(lines) == started:
-            lines.append("")  # a blank line he typed is a blank line
+            lines.append("")  # a blank line that was typed is a blank line
     return lines
 
 
@@ -90,7 +90,7 @@ class Thread:
         pane.tag_configure("status", justify="center", foreground=DIM, font=NAME_FONT,
                            spacing1=4, spacing3=4)
         pane.tag_configure("historical", foreground=PAST)
-        # Its own pane, not the window: a tab he has not opened yet is sized only when it appears,
+        # Its own pane, not the window: a tab not yet opened is sized only when it appears,
         # and the window sends no resize of its own for that.
         pane.bind("<Configure>", lambda event: self.refit())
 
@@ -117,7 +117,7 @@ class Thread:
         body.pack(fill="both", expand=True)
         self._prepare(body)
         # The pointer rests over a bubble nearly all the time and a Text swallows the wheel, so
-        # hand it up to the pane - or the conversation stops scrolling wherever his mouse is.
+        # hand it up to the pane - or the conversation stops scrolling wherever the pointer is.
         body.bind("<MouseWheel>", self._wheel)
         start = self._pane.index("end-1c")
         self._pane.window_create("end", window=holder, pady=1)
@@ -128,14 +128,14 @@ class Thread:
 
     def refit(self):
         """Re-measure every bubble for the pane's width. A box fixed in pixels stops being half of
-        anything the moment he drags the window's edge."""
+        anything the moment the window's edge is dragged."""
         if self._width() != self._fitted:
             for shown in self._shown:
                 if shown[1] is not None:
                     self._fill(shown)
 
     def text(self):
-        """The conversation as he'd want it pasted - his own words, not the wrapped lines."""
+        """The conversation as it would want to be pasted - the words as said, not the wrapped lines."""
         return "".join(f"{self._name_line(entry)}\n{entry['text']}\n" if holder is not None
                        else f"{entry['text']}\n" for entry, holder, _ in self._shown)
 

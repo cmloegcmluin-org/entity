@@ -123,3 +123,50 @@ def append_learned(facts, path=DEFAULT_LEARNED_PATH):
     body = existing + "\n" + "\n".join(f"- {fact}" for fact in facts) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
+
+
+def profile_sections(text):
+    """The profile split by its "## " headings - what the window's Goals/Projects/Enhancements tabs
+    render. {heading: body}; text before the first heading is dropped (it's the file's preamble)."""
+    sections = {}
+    heading = None
+    lines = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if heading is not None:
+                sections[heading] = "\n".join(lines).strip()
+            heading = line[3:].strip()
+            lines = []
+        elif heading is not None:
+            lines.append(line)
+    if heading is not None:
+        sections[heading] = "\n".join(lines).strip()
+    return sections
+
+
+ENHANCEMENTS_HEADING = "Enhancements he wants for you (roadmap, not now)"
+
+
+def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+    """File one enhancement bullet INSIDE its section, so the window's tab (which re-reads this
+    file) shows it the moment it lands - not at the end of the file under some other heading."""
+    path = Path(path)
+    lines = _read(path).splitlines()
+    insert_at = None
+    inside = False
+    for index, line in enumerate(lines):
+        if line.startswith("## "):
+            if inside:  # the section ended - the bullet goes just before this next heading
+                insert_at = index
+                break
+            inside = line[3:].strip() == heading
+    if inside and insert_at is None:  # the section runs to the end of the file
+        insert_at = len(lines)
+    if insert_at is None:  # no such section yet - start it at the end
+        lines += ["", f"## {heading}"]
+        insert_at = len(lines)
+    while insert_at > 0 and not lines[insert_at - 1].strip():
+        insert_at -= 1  # tuck the bullet against the section's last line, not after its blank gap
+    lines.insert(insert_at, f"- {item}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

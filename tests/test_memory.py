@@ -106,3 +106,33 @@ def test_the_lexicon_is_the_same_file_notecraft_reads():
     # state folder it syncs between them (NOTECRAFT_STATE_DIR) — never in this repo's
     # runtime dir, which no other machine can see.
     assert DEFAULT_LEXICON_PATH == Path.home() / "Notecraft" / "state" / "lexicon.md"
+
+
+def test_profile_sections_split_on_headings():
+    from entity.memory import profile_sections
+
+    text = "# Title\nintro\n\n## Goals\n- swim\n- cello\n\n## Projects (long-term)\n- the atlas\n"
+    sections = profile_sections(text)
+
+    assert sections["Goals"] == "- swim\n- cello"
+    assert sections["Projects (long-term)"] == "- the atlas"
+
+
+def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
+    # Filed by voice mid-session; the window re-reads the file, so the bullet must land INSIDE the
+    # section it belongs to, not at the end of the file under some other heading.
+    from entity.memory import append_enhancement, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text(
+        "## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n\n"
+        "## Something after\n- untouched\n",
+        encoding="utf-8",
+    )
+
+    append_enhancement("speaker enrollment", path=path)
+
+    sections = profile_sections(path.read_text(encoding="utf-8"))
+    assert "- better voice" in sections["Enhancements he wants for you (roadmap, not now)"]
+    assert "- speaker enrollment" in sections["Enhancements he wants for you (roadmap, not now)"]
+    assert sections["Something after"] == "- untouched"  # later sections undisturbed

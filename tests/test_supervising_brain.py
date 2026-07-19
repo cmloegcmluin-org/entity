@@ -172,6 +172,16 @@ def test_a_worktree_that_does_not_exist_yet_is_cut_fresh_first():
     assert prepared == ["/definitely/not/here"]  # new work means a new worktree, cut before the agent
 
 
+def test_an_improve_directive_files_the_enhancement_and_says_so():
+    filed = []
+    brain = _brain(FakeInner("[IMPROVE] level meter should show clipping"), FakeDesk(), file_enhancement=filed.append)
+
+    said = brain.respond("file a self-improvement: the level meter should show clipping")
+
+    assert filed == ["level meter should show clipping"]
+    assert "Filed" in said
+
+
 def test_a_tell_directive_reaches_an_agent_already_running():
     desk = FakeDesk(knows={"fixer"})
     brain = _brain(FakeInner("[TELL] fixer: folder level, not file level"), desk)

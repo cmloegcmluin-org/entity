@@ -7,6 +7,8 @@ the user gets a short answer instead of the raw marker.
   [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
   <the task, any length>     following lines is the task that agent is given
   [TELL] <name>: <message>   say something more to an agent already running
+  [IMPROVE] <one line>       file a self-improvement the user asked to file - it lands in the
+                             profile's Enhancements section, which the window shows live
 
 The task travels WITH the directive on purpose. Without it the brain had no way to pass on what
 the user actually asked for, so it would go and work the request out for itself first - forty-five
@@ -22,6 +24,7 @@ import os.path
 import re
 from pathlib import Path
 
+from entity.memory import append_enhancement
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
 DEFAULT_TASK = (
@@ -32,6 +35,15 @@ DEFAULT_TASK = (
 
 _SUPERVISE = "[SUPERVISE]"
 _TELL = "[TELL]"
+_IMPROVE = "[IMPROVE]"
+
+
+def parse_improve(reply):
+    """Pull the enhancement out of an `[IMPROVE] <one line>` reply, or None."""
+    if _IMPROVE not in reply:
+        return None
+    line = reply.split(_IMPROVE, 1)[1].strip().split("\n", 1)[0].strip()
+    return line or None
 
 
 def parse_supervise(reply):
@@ -77,15 +89,21 @@ def _resolve(target):
 
 
 class SupervisingBrain:
-    def __init__(self, inner, desk, *, task=DEFAULT_TASK, resolve=_resolve, prepare=prepare_worktree_for):
+    def __init__(self, inner, desk, *, task=DEFAULT_TASK, resolve=_resolve, prepare=prepare_worktree_for,
+                 file_enhancement=append_enhancement):
         self._inner = inner
         self._desk = desk
         self._task = task
         self._resolve = resolve
         self._prepare = prepare
+        self._file_enhancement = file_enhancement
 
     def respond(self, utterance):
         reply = self._inner.respond(utterance)
+        improvement = parse_improve(reply)
+        if improvement is not None:
+            self._file_enhancement(improvement)
+            return "Filed."
         told = parse_tell(reply)
         if told is not None:
             name, message = told

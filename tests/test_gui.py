@@ -105,8 +105,10 @@ def test_the_console_drives_the_conversation_without_the_window_parsing_prefixes
 
 
 def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversation(tmp_path):
-    # ONE real-Tk pass, withdrawn so nothing flashes on screen, and a single Tk lifecycle for the
-    # whole process - Tk tolerates create/destroy/create sequences poorly enough to flake.
+    # ONE real-Tk pass, laid out for real but fully transparent so nothing shows on screen, and a
+    # single Tk lifecycle for the whole process - Tk tolerates create/destroy/create sequences
+    # poorly enough to flake. Laid out for real because a withdrawn window reports every width as
+    # 1, and the bubbles can only be checked where they actually landed.
     from entity.gui import EntityWindow
 
     profile = tmp_path / "profile.md"
@@ -130,7 +132,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
                           persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
                           learned_path=learned, now=lambda: ticks[0])
     try:
-        window.withdraw()
+        window.hide()
         window.close_when(done)
         window.attach_mic(submit=submitted.append, set_recording=mic_flips.append)
 
@@ -142,11 +144,34 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         feed.push("history", "[03:41:12] you said: how's the agent doing")
         feed.push("message", ("you", "pick up the drive work"))
         feed.push("message", ("entity", "Started 1 agent."))
+        feed.push("message", ("entity", "It is reading the log now, and I will say the moment it "
+                                        "has anything worth showing you."))
         window._drain_once()
         shown = window.widget_text()
         assert "You · 03:41:12" in shown and "how's the agent doing" in shown  # yesterday, in place
         assert "You · 12:00:00" in shown and "Entity · 12:00:00" in shown  # names and times
-        assert window.justify_of("you") == "right" and window.justify_of("entity") == "left"
+
+        # Where the tinted boxes ACTUALLY landed in a real 980x760 window - measured off the
+        # widgets, because what a bubble was configured to be is not what the eye receives.
+        pane, placed = window.pane_width(), window.bubble_geometry()
+        assert [role for role, _, _ in placed] == ["you", "you", "entity", "entity"]
+        assert max(width for _, _, width in placed) <= pane * 0.56  # each at most about half
+        assert placed[-1][2] >= pane * 0.45  # and a long one does fill its column
+        assert all(x + width >= pane - 14 for role, x, width in placed if role == "you")
+        assert all(x <= 14 for role, x, _ in placed if role == "entity")
+
+        # And he can still get his words back out: dragging inside a bubble and hitting Ctrl-C
+        # copies that message - the bubbles are where the conversation's text lives now.
+        assert window.copy_from_bubble(1, "1.0", "1.4") == "pick"
+
+        # Dragging the window narrower re-measures every box, because a width fixed in pixels
+        # stops being half of anything the moment the pane changes size.
+        window._tk.geometry("620x760")
+        window._tk.update()  # the real <Configure>, which is what re-fits them
+        narrow, pane = window.bubble_geometry(), window.pane_width()
+        assert pane < 640 and max(width for _, _, width in narrow) <= pane * 0.56
+        assert all(x + width >= pane - 14 for role, x, width in narrow if role == "you")
+        assert all(x <= 14 for role, x, _ in narrow if role == "entity")
 
         feed.push("draft", "add eggs")
         feed.push("draft", "and milk")

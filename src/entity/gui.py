@@ -6,32 +6,27 @@ feed into the Tk thread. What can be wrong - the message model, the feed, sectio
 tailing - lives outside Tk and is tested without a display; the tkinter layer mirrors state and
 forwards buttons.
 
-Layout: the conversation reads like a text thread - his messages on the right, Entity's on the
-left, each with a name and a time, past sessions above a divider. Everything to do with him talking
-sits together along the bottom: mic button, level meter, the editable draft his speech types into,
-and Submit. Beside the conversation are tabs - one per agent log, tailed live, and his Goals,
-Projects and Enhancements, editable and saved straight back into the profile the brain reads.
+Layout: the conversation reads like a text thread - his messages in tinted boxes down the right,
+Entity's down the left, each with a name and a time, past sessions above a divider. The boxes
+themselves are `bubbles.py`. Everything to do with him talking sits together along the bottom: mic
+button, level meter, the editable draft his speech types into, and Submit. Beside the conversation
+are tabs - one per agent log, tailed live, and his Goals, Projects and Enhancements, editable and
+saved straight back into the profile the brain reads.
 
 Threads: the conversation loop and the dictation pump run on workers and push into the feed;
 tkinter runs the main thread and polls with `after`, so no Tk call ever happens off the Tk thread.
 """
 
 import queue
-import textwrap
 import time
 from pathlib import Path
 
+from entity.bubbles import Thread
 from entity.memory import profile_sections, save_learned, save_section
 from entity.tailing import LogTail, discover
+from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
 
-BG = "#161616"
-PANEL = "#1f1f1f"
-FG = "#d6d6d6"
-DIM = "#7a7a7a"
-HIS = "#2b3a1a"  # his messages, right - a warm dark green
-ITS = "#22262b"  # Entity's, left - a cool dark slate
-ACCENT = "#7fff00"  # teal
 LEVEL_FULL = 0.06  # the meter tops out around his loud speech, so ordinary talk visibly moves it
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
@@ -169,8 +164,7 @@ class EntityWindow:
         self._learned_edited = None
         self._profile_stamp = None
         self._agent_logs_dir = Path(agent_logs_dir) if agent_logs_dir else None
-        self._tails = {}  # agent name -> (LogTail, pane, rendered-entry count)
-        self._agent_models = {}  # agent name -> TranscriptModel of that exchange
+        self._tails = {}  # agent name -> [LogTail, Thread, TranscriptModel, rendered-entry count]
         self._sections = {}  # tab label -> {"pane": Text, "heading": str, "edited": float|None}
         self._polls = 0
         self._clock = clock
@@ -191,9 +185,8 @@ class EntityWindow:
         self._style_tabs(ttk)
         self._tabs = ttk.Notebook(self._tk)
         self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 4))
-        self._text = self._make_pane(self._tabs, readonly=True, font=("Segoe UI", 11))
-        self._tabs.add(self._text, text=self.CONVERSATION_TAB)
-        self._build_message_tags()
+        self._thread = self._make_thread(self._tabs, self._speaker_names, font=("Segoe UI", 11))
+        self._tabs.add(self._thread.pane, text=self.CONVERSATION_TAB)
         for label, heading in self.SECTION_TABS:
             self._tabs.add(self._make_section_tab(tk, label, heading), text=label)
         # Everything it has been told about how to be - the standing rules, and every one added
@@ -215,7 +208,6 @@ class EntityWindow:
         for key in self.WINDOWS_KEYS:  # watch it go down and up; Tk may not report it as a modifier
             self._tk.bind(f"<KeyPress-{key}>", lambda event: setattr(self, "_windows_key_down", True))
             self._tk.bind(f"<KeyRelease-{key}>", lambda event: setattr(self, "_windows_key_down", False))
-        self._tk.bind("<Configure>", self._fit_bubbles)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
 
     # ---- construction ---------------------------------------------------------------------------
@@ -231,82 +223,63 @@ class EntityWindow:
         style.map("TNotebook.Tab", background=[("selected", "#333333")], foreground=[("selected", FG)],
                   expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
-    def _make_pane(self, parent, *, readonly, font=("Consolas", 11)):
+    def _make_pane(self, parent, *, readonly, font=("Consolas", 11), whole=None):
         """A pane he can always select and copy from. Read-only panes stay in the NORMAL state and
         refuse edits key by key instead - a disabled Text widget takes no focus, so Ctrl-C never
         reaches it and he cannot get his own conversation out of the window."""
         from tkinter import scrolledtext
 
         pane = scrolledtext.ScrolledText(
-            parent, wrap="word", font=font, bg=PANEL, fg=FG, selectbackground="#3a5f00",
+            parent, wrap="word", font=font, bg=PANEL, fg=FG, selectbackground=SELECTION,
             borderwidth=0, padx=10, pady=8, insertbackground=ACCENT,
         )
         if readonly:
-            pane.bind("<Key>", self._refuse_edit)
-            pane.configure(insertwidth=0)  # no caret, so it reads as text rather than a box to type in
-            self._make_copyable(pane)
+            self._make_readonly(pane, whole)
         return pane
 
-    BUBBLE_SHARE = 0.55  # of the pane's width - a column, the way a message thread reads
+    def _make_thread(self, parent, names, *, font):
+        """A pane that reads as a message thread: bubbles, not lines. "Copy all" from any of them
+        yields the whole conversation, since the bubbles - not the pane - hold the words now."""
+        def everything():
+            return thread.text()  # by the time a menu can ask, the thread below exists
 
-    @staticmethod
-    def _bubble_margin(pane):
-        """How far in from the far edge a bubble starts, leaving it BUBBLE_SHARE of the pane."""
-        width = pane.winfo_width()
-        if width <= 1:  # not laid out yet; a sane first guess, corrected on the first resize
-            width = 900
-        return max(120, int(width * (1 - EntityWindow.BUBBLE_SHARE)))
+        pane = self._make_pane(parent, readonly=True, font=font, whole=everything)
+        thread = Thread(pane, names, prepare=lambda body: self._make_readonly(body, everything))
+        return thread
 
-    @staticmethod
-    def _wrap_width(pane):
-        """How many characters fit in a bubble - measured in this pane's own font, because Tk
-        honors a left margin and ignores a right one, so the wrap has to be ours."""
-        from tkinter import font as tkfont
+    def _make_readonly(self, widget, whole=None):
+        """No caret and no typing, but every bit of selecting and copying still works."""
+        widget.bind("<Key>", self._refuse_edit)
+        widget.configure(insertwidth=0)  # reads as text rather than as a box to type in
+        self._make_copyable(widget, whole=whole)
 
-        width = pane.winfo_width()
-        if width <= 1:
-            width = 900
-        try:
-            per_char = tkfont.Font(font=pane.cget("font")).measure("n") or 8
-        except Exception:
-            per_char = 8
-        return max(24, int(width * EntityWindow.BUBBLE_SHARE / per_char))
-
-    def _fit_bubbles(self, event=None):
-        """Re-measure the bubble columns after a resize, so they stay a column at any size."""
-        for pane in [self._text] + [entry[1] for entry in self._tails.values()]:
-            self._build_message_tags(pane)
-
-    def _make_copyable(self, pane):
+    def _make_copyable(self, widget, *, whole=None):
         """Selecting and copying has to WORK, not merely be permitted: he tried and couldn't. A
         click takes focus (so the keystroke has somewhere to land), Ctrl-C and Ctrl-A are bound
         outright rather than left to the class bindings, and a right-click offers both in a menu
-        for when his hands aren't on the keyboard."""
+        for when his hands aren't on the keyboard. `whole` is what "Copy all" should yield when
+        this widget is one bubble of a longer conversation."""
         import tkinter as tk
 
-        pane.bind("<Button-1>", lambda event: pane.focus_set(), add="+")
-        # A message tag paints a background, and a tag created later than "sel" wins - so dragging
-        # over his own words highlighted nothing and read as text that could not be selected.
-        pane.tag_raise("sel")
-        pane.bind("<Control-c>", lambda event: self._copy_selection(pane))
-        pane.bind("<Control-C>", lambda event: self._copy_selection(pane))
-        pane.bind("<Control-a>", lambda event: self._select_all(pane))
-        pane.bind("<Control-A>", lambda event: self._select_all(pane))
-        menu = tk.Menu(pane, tearoff=0, bg=PANEL, fg=FG, activebackground="#3a5f00")
-        menu.add_command(label="Copy", command=lambda: self._copy_selection(pane))
-        menu.add_command(label="Copy all", command=lambda: self._copy_all(pane))
-        pane.bind("<Button-3>", lambda event: menu.tk_popup(event.x_root, event.y_root))
+        widget.bind("<Button-1>", lambda event: widget.focus_set(), add="+")
+        widget.tag_raise("sel")  # or a tag made later wins and the highlight is invisible
+        widget.bind("<Control-c>", lambda event: self._copy_selection(widget))
+        widget.bind("<Control-C>", lambda event: self._copy_selection(widget))
+        widget.bind("<Control-a>", lambda event: self._select_all(widget))
+        widget.bind("<Control-A>", lambda event: self._select_all(widget))
+        everything = whole or (lambda: widget.get("1.0", "end-1c"))
+        menu = tk.Menu(widget, tearoff=0, bg=PANEL, fg=FG, activebackground=SELECTION)
+        menu.add_command(label="Copy", command=lambda: self._copy_selection(widget))
+        menu.add_command(label="Copy all", command=lambda: self._to_clipboard(everything()))
+        widget.bind("<Button-3>", lambda event: menu.tk_popup(event.x_root, event.y_root))
 
-    def _copy_selection(self, pane):
+    def _copy_selection(self, widget):
         try:
-            selected = pane.get("sel.first", "sel.last")
+            selected = widget.get("sel.first", "sel.last")
         except Exception:
             return "break"  # nothing selected; copying nothing would only clear his clipboard
         self._to_clipboard(selected)
         return "break"
-
-    def _copy_all(self, pane):
-        self._to_clipboard(pane.get("1.0", "end-1c"))
 
     def _to_clipboard(self, text):
         if not text:
@@ -315,8 +288,8 @@ class EntityWindow:
         self._tk.clipboard_append(text)
 
     @staticmethod
-    def _select_all(pane):
-        pane.tag_add("sel", "1.0", "end-1c")
+    def _select_all(widget):
+        widget.tag_add("sel", "1.0", "end-1c")
         return "break"
 
     @staticmethod
@@ -327,27 +300,6 @@ class EntityWindow:
         if event.keysym in allowed or event.state & 0x4:  # 0x4 is Control: copy, select-all
             return None
         return "break"
-
-    def _build_message_tags(self, pane=None, *, width=None):
-        """A message takes a bit under half the pane, so it reads like a message thread: his down
-        the right, Entity's down the left, each a column rather than a full-width wall.
-
-        The margins are re-measured when the window is resized (see `_fit_bubbles`), because a
-        margin fixed in pixels stops being half of anything the moment he drags the edge."""
-        pane = pane or self._text
-        wide, narrow = width or self._bubble_margin(pane), 14
-        for role, color, side in (("you", HIS, "right"), ("entity", ITS, "left"),
-                                   ("heads-up", ITS, "left")):
-            near, far = (wide, narrow) if side == "right" else (narrow, wide)
-            pane.tag_configure(role, justify=side, background=color, foreground=FG,
-                               lmargin1=near, lmargin2=near, rmargin=far, spacing1=2, spacing3=6)
-            pane.tag_configure(f"{role}:name", justify=side, foreground=DIM,
-                               font=("Segoe UI", 8), lmargin1=near, lmargin2=near,
-                               rmargin=far, spacing1=8)
-        pane.tag_configure("status", justify="center", foreground=DIM, font=("Segoe UI", 8),
-                           spacing1=4, spacing3=4)
-        pane.tag_configure("historical", foreground="#8f8f8f")
-        pane.tag_raise("sel")  # built after these, so the highlight stays visible over a bubble
 
     def _make_section_tab(self, tk, label, heading):
         """His own documents, edited in place - no Save button, because a document you have to
@@ -502,23 +454,9 @@ class EntityWindow:
         """Append only what's new - a thread is written once and scrolls, so re-rendering all of it
         every poll would fight his scrollback and blink the window."""
         for entry in self._model.entries[self._rendered:]:
-            self._write_entry(entry)
-        self._text.see("end")
+            self._thread.show(entry)
+        self._thread.pane.see("end")
         self._rendered = len(self._model.entries)
-
-    def _write_entry(self, entry, *, pane=None, names=None):
-        pane = pane or self._text
-        names = names or self._speaker_names
-        role = entry["role"]
-        extra = ("historical",) if entry["historical"] else ()
-        if role == "status":
-            pane.insert("end", entry["text"] + "\n", ("status",) + extra)
-            return
-        name = names.get(role, "Entity · heads-up")
-        body = textwrap.fill(entry["text"], width=self._wrap_width(pane),
-                             replace_whitespace=False, drop_whitespace=True)
-        pane.insert("end", f"{name} · {entry['stamp']}\n", (f"{role}:name",) + extra)
-        pane.insert("end", body + "\n", (role,) + extra)
 
     def _refresh_agent_tabs(self):
         """Each agent's exchange, read back the same way his own conversation is - who said what,
@@ -530,23 +468,21 @@ class EntityWindow:
                 self.close_agent_tab(name)  # its log is gone, so neither he nor Entity wants the tab
         for name in discover(self._agent_logs_dir):
             if name not in self._tails:
-                pane = self._make_pane(self._agent_tabs, readonly=True, font=("Segoe UI", 10))
-                self._agent_tabs.add(pane, text=f"{name}  ✕")
-                self._build_message_tags(pane)
-                self._agent_models[name] = TranscriptModel(clock=self._clock)
-                self._tails[name] = [LogTail(self._agent_logs_dir / f"{name}.log"), pane, 0]
-        for name, entry in self._tails.items():
-            tail, pane, rendered = entry
-            new = tail.poll()
-            model = self._agent_models[name]
-            for line in new.splitlines():
+                # In an agent's tab the Entity is the one asking and the agent answers.
+                thread = self._make_thread(self._agent_tabs, {"you": "Entity", "entity": name},
+                                           font=("Segoe UI", 10))
+                self._agent_tabs.add(thread.pane, text=f"{name}  ✕")
+                self._tails[name] = [LogTail(self._agent_logs_dir / f"{name}.log"), thread,
+                                     TranscriptModel(clock=self._clock), 0]
+        for entry in self._tails.values():
+            tail, thread, model, rendered = entry
+            for line in tail.poll().splitlines():
                 model.apply("history", line)
             for message in model.entries[rendered:]:
-                # In an agent's tab the Entity is the one asking and the agent answers.
-                self._write_entry(message, pane=pane, names={"you": "Entity", "entity": name})
+                thread.show(message)
             if len(model.entries) != rendered:
-                pane.see("end")
-            entry[2] = len(model.entries)
+                thread.pane.see("end")
+            entry[3] = len(model.entries)
 
     def _refresh_learned(self):
         """Re-read what it has learned, unless he is in the middle of editing it."""
@@ -598,9 +534,8 @@ class EntityWindow:
         """Take an agent's tab away and archive its log, so it stays closed. He asked how to close
         these; Entity can close one the same way, by moving the log aside."""
         entry = self._tails.pop(name, None)
-        self._agent_models.pop(name, None)
         if entry is not None:
-            self._agent_tabs.forget(entry[1])
+            self._agent_tabs.forget(entry[1].pane)
         if self._agent_logs_dir is not None:
             log = self._agent_logs_dir / f"{name}.log"
             if log.exists():
@@ -633,12 +568,32 @@ class EntityWindow:
         self._poll()
         self._tk.mainloop()
 
-    def withdraw(self):
-        """Hide the window (tests render into it without flashing anything on screen)."""
-        self._tk.withdraw()
+    def hide(self):
+        """Lay the window out for real without showing it, so a test can measure what it built and
+        still flash nothing on his screen. Withdrawing is not enough: an unmapped window reports
+        every width as 1, and a bubble's whole point is the width it ends up."""
+        self._tk.attributes("-alpha", 0.0)
+        self._tk.deiconify()
+        self._tk.update()  # the map event, so the panes have their real widths from here on
 
     def widget_text(self):
-        return self._text.get("1.0", "end-1c")
+        return self._thread.text()
+
+    def pane_width(self):
+        return self._thread.pane.winfo_width()
+
+    def bubble_geometry(self):
+        """Where each bubble actually landed: (role, x, width), measured off the real widgets."""
+        self._tk.update_idletasks()  # let the layout settle, or every box still reads as 1px
+        return self._thread.geometry()
+
+    def copy_from_bubble(self, index, start, end):
+        """Select part of one bubble and press Ctrl-C, the way he would, and read the clipboard."""
+        body = self._thread.bodies()[index]
+        body.focus_set()
+        body.tag_add("sel", start, end)
+        body.event_generate("<Control-c>")
+        return self._tk.clipboard_get()
 
     def draft_text(self):
         return self._draft.get("1.0", "end-1c")
@@ -673,13 +628,10 @@ class EntityWindow:
         self._mark_dirty(label)
 
     def agent_tab_text(self, name):
-        return self._tails[name][1].get("1.0", "end-1c")
+        return self._tails[name][1].text()
 
     def agent_tab_labels(self):
         return [self._agent_tabs.tab(tab_id, "text") for tab_id in self._agent_tabs.tabs()]
-
-    def justify_of(self, role):
-        return str(self._text.tag_cget(role, "justify"))
 
     def mic_button_text(self):
         return self._mic_button.cget("text")

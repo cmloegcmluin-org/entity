@@ -16,3 +16,8 @@ $link.IconLocation = $icon
 $link.Description = "Entity - voice companion"
 $link.Save()
 Write-Output "installed $shortcut"
+
+# Stamp the shortcut with the same AppUserModelID the app declares, so pinning it and running it
+# are the SAME taskbar button - without this a pin sits inert while the running window lights up
+# somewhere else. Recreating the shortcut drops the id, which is why this runs right here.
+& (Join-Path $repo ".venv\Scripts\python.exe") (Join-Path $PSScriptRoot "stamp-shortcut-appid.py") $shortcut

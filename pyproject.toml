@@ -13,6 +13,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Only tools/install-start-menu.ps1 needs this, to stamp the shortcut's AppUserModelID so a
+# taskbar pin and the running window are one button. The app itself never imports it.
+setup = ["pywin32>=306"]
 
 [build-system]
 requires = ["setuptools>=68"]

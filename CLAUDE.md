@@ -56,7 +56,9 @@ weakness rather than a solution.
 - **A mechanism nobody perceives.** Truncation that the model never sees teaches it nothing; a layout
   "capped at half width" is worthless if the framework ignores the property. Before calling such a
   change done, name the recipient and state how the signal reaches them. Tests that assert the
-  mechanism fired are not evidence anything received it.
+  mechanism fired are not evidence anything received it. The chat bubbles took four attempts for
+  exactly this reason — the wrap was measured and correct while the tint still painted edge to edge,
+  and only screenshotting the pane and reading the pixels back showed it.
 - **Latched flags.** `Outbox.arrived` is cleared only by draining. Any path that decides not to
   deliver must still drain, or the window's mic yields empty turns forever and his submissions are
   never read. That froze a whole session.
@@ -72,24 +74,22 @@ weakness rather than a solution.
 transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, and it
 reports whether it is recording so nothing speaks over him. `gui.py` mirrors everything through one
 thread-safe feed into Tk; anything that can be wrong lives outside Tk and is tested without a
-display. `agent_desk.py` holds each agent as a live session in-process (handles used to be lost to
-context resets) and streams its steps into its log. `brain_sdk.py` holds the persona and the session.
+display. `bubbles.py` is one tinted box per message — a real widget, because a Tk tag's background
+paints the whole line box. `agent_desk.py` holds each agent as a live session in-process (handles
+used to be lost to context resets) and streams its steps into its log. `brain_sdk.py` holds the
+persona and the session.
 `memory.py` is his profile and what Entity has learned. Tk touches only the main thread; the
 conversation and the dictation pump run on workers.
 
 ## Open work
 
-Three tasks are running or queued as their own sessions — check with him before starting any of them:
+Two tasks are running or queued as their own sessions — check with him before starting either:
 
 1. **Sanitization for a public repo.** Nothing under `runtime/` is tracked or has ever been
    committed, but the source is written about him by name, with his projects, hardware, and profile
    fragments in test fixtures. Blocks moving this to the `example-org` GitHub organization and
    adopting the PR/merge-queue process used by `sample-lib`, `bayesian-main` and `notecraft`.
-2. **Real chat bubbles.** The tinted message areas still span the full window. Tk honors a tag's
-   left margin and ignores its right one; the text wrapping is fixed, so what remains is the tag's
-   background painting the whole line box. Needs a real widget per message, not a tag. Four attempts
-   have failed; verify what is *painted*, not what is configured.
-3. **Windows key + Enter to submit.** `RegisterHotKey(MOD_WIN, VK_RETURN)` returns 1409 —
+2. **Windows key + Enter to submit.** `RegisterHotKey(MOD_WIN, VK_RETURN)` returns 1409 —
    something already owns that chord — and a key probe recorded zero events, so nothing reaches the
    app. Narrator was ruled out. Find the holder.
 

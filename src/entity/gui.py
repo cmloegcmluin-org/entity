@@ -163,9 +163,12 @@ class EntityWindow:
         self._profile_path = Path(profile_path) if profile_path else None
         self._profile_stamp = None
         self._agent_logs_dir = Path(agent_logs_dir) if agent_logs_dir else None
-        self._tails = {}  # agent name -> (LogTail, text widget)
+        self._tails = {}  # agent name -> (LogTail, pane, rendered-entry count)
+        self._agent_models = {}  # agent name -> TranscriptModel of that exchange
         self._sections = {}  # tab label -> {"pane": Text, "heading": str, "edited": float|None}
         self._polls = 0
+        self._clock = clock
+        self._speaker_names = {"you": "You", "entity": "Entity"}
 
         set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
         self._tk = tk.Tk()
@@ -186,6 +189,9 @@ class EntityWindow:
         self._build_message_tags()
         for label, heading in self.SECTION_TABS:
             self._tabs.add(self._make_section_tab(tk, label, heading), text=label)
+        # One home for the agents, however many he ends up driving at once.
+        self._agent_tabs = ttk.Notebook(self._tabs)
+        self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -203,28 +209,43 @@ class EntityWindow:
                   expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
     def _make_pane(self, parent, *, readonly, font=("Consolas", 11)):
+        """A pane he can always select and copy from. Read-only panes stay in the NORMAL state and
+        refuse edits key by key instead - a disabled Text widget takes no focus, so Ctrl-C never
+        reaches it and he cannot get his own conversation out of the window."""
         from tkinter import scrolledtext
 
-        return scrolledtext.ScrolledText(
+        pane = scrolledtext.ScrolledText(
             parent, wrap="word", font=font, bg=PANEL, fg=FG, selectbackground="#3a5f00",
             borderwidth=0, padx=10, pady=8, insertbackground=ACCENT,
-            state="disabled" if readonly else "normal",
         )
+        if readonly:
+            pane.bind("<Key>", self._refuse_edit)
+            pane.configure(insertwidth=0)  # no caret, so it reads as text rather than a box to type in
+        return pane
 
-    def _build_message_tags(self):
+    @staticmethod
+    def _refuse_edit(event):
+        """Swallow anything that would type into a read-only pane, while leaving selection,
+        scrolling and copying alone."""
+        allowed = {"Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next"}
+        if event.keysym in allowed or (event.state & 0x4 and event.keysym.lower() in {"c", "a"}):
+            return None
+        return "break"
+
+    def _build_message_tags(self, pane=None):
+        pane = pane or self._text
         wide, narrow = 190, 12
         for role, colour, side in (("you", HIS, "right"), ("entity", ITS, "left"),
                                    ("heads-up", ITS, "left")):
             near, far = (wide, narrow) if side == "right" else (narrow, wide)
-            self._text.tag_configure(role, justify=side, background=colour, foreground=FG,
-                                     lmargin1=near, lmargin2=near, rmargin=far,
-                                     spacing1=2, spacing3=6)
-            self._text.tag_configure(f"{role}:name", justify=side, foreground=DIM,
-                                     font=("Segoe UI", 8), lmargin1=near, lmargin2=near,
-                                     rmargin=far, spacing1=8)
-        self._text.tag_configure("status", justify="center", foreground=DIM, font=("Segoe UI", 8),
-                                 spacing1=4, spacing3=4)
-        self._text.tag_configure("historical", foreground="#8f8f8f")
+            pane.tag_configure(role, justify=side, background=colour, foreground=FG,
+                               lmargin1=near, lmargin2=near, rmargin=far, spacing1=2, spacing3=6)
+            pane.tag_configure(f"{role}:name", justify=side, foreground=DIM,
+                               font=("Segoe UI", 8), lmargin1=near, lmargin2=near,
+                               rmargin=far, spacing1=8)
+        pane.tag_configure("status", justify="center", foreground=DIM, font=("Segoe UI", 8),
+                           spacing1=4, spacing3=4)
+        pane.tag_configure("historical", foreground="#8f8f8f")
 
     def _make_section_tab(self, tk, label, heading):
         """His own documents, edited in place - no Save button, because a document you have to
@@ -253,6 +274,8 @@ class EntityWindow:
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
+        for sequence in ("<Control-Return>", "<Command-Return>"):
+            self._draft.bind(sequence, self._submit_from_key)  # Ctrl+Enter sends, Enter newlines
         self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
@@ -265,6 +288,10 @@ class EntityWindow:
             self._on_mic(False)
             return
         self._on_mic(self._state != "recording")
+
+    def _submit_from_key(self, event):
+        self._submit()
+        return "break"  # the newline that would otherwise be typed is not wanted
 
     def _submit(self):
         text = self._draft.get("1.0", "end-1c").strip()
@@ -350,38 +377,47 @@ class EntityWindow:
     def _render_new(self):
         """Append only what's new - a thread is written once and scrolls, so re-rendering all of it
         every poll would fight his scrollback and blink the window."""
-        self._text.configure(state="normal")
         for entry in self._model.entries[self._rendered:]:
             self._write_entry(entry)
-        self._text.configure(state="disabled")
         self._text.see("end")
         self._rendered = len(self._model.entries)
 
-    def _write_entry(self, entry):
+    def _write_entry(self, entry, *, pane=None, names=None):
+        pane = pane or self._text
+        names = names or self._speaker_names
         role = entry["role"]
         extra = ("historical",) if entry["historical"] else ()
         if role == "status":
-            self._text.insert("end", entry["text"] + "\n", ("status",) + extra)
+            pane.insert("end", entry["text"] + "\n", ("status",) + extra)
             return
-        name = {"you": "You", "entity": "Entity"}.get(role, "Entity · heads-up")
-        self._text.insert("end", f"{name} · {entry['stamp']}\n", (f"{role}:name",) + extra)
-        self._text.insert("end", entry["text"] + "\n", (role,) + extra)
+        name = names.get(role, "Entity · heads-up")
+        pane.insert("end", f"{name} · {entry['stamp']}\n", (f"{role}:name",) + extra)
+        pane.insert("end", entry["text"] + "\n", (role,) + extra)
 
     def _refresh_agent_tabs(self):
+        """Each agent's exchange, read back the same way his own conversation is - who said what,
+        and when - rather than as a wall of log lines."""
         if self._agent_logs_dir is None:
             return
         for name in discover(self._agent_logs_dir):
             if name not in self._tails:
-                pane = self._make_pane(self._tabs, readonly=True, font=("Consolas", 10))
-                self._tabs.add(pane, text=f"⚙ {name}")
-                self._tails[name] = (LogTail(self._agent_logs_dir / f"{name}.log"), pane)
-        for tail, pane in self._tails.values():
+                pane = self._make_pane(self._agent_tabs, readonly=True, font=("Segoe UI", 10))
+                self._agent_tabs.add(pane, text=name)
+                self._build_message_tags(pane)
+                self._agent_models[name] = TranscriptModel(clock=self._clock)
+                self._tails[name] = [LogTail(self._agent_logs_dir / f"{name}.log"), pane, 0]
+        for name, entry in self._tails.items():
+            tail, pane, rendered = entry
             new = tail.poll()
-            if new:
-                pane.configure(state="normal")
-                pane.insert("end", new)
-                pane.configure(state="disabled")
+            model = self._agent_models[name]
+            for line in new.splitlines():
+                model.apply("history", line)
+            for message in model.entries[rendered:]:
+                # In an agent's tab the Entity is the one asking and the agent answers.
+                self._write_entry(message, pane=pane, names={"you": "Entity", "entity": name})
+            if len(model.entries) != rendered:
                 pane.see("end")
+            entry[2] = len(model.entries)
 
     def _refresh_profile_tabs(self):
         if self._profile_path is None:
@@ -455,6 +491,9 @@ class EntityWindow:
 
     def agent_tab_text(self, name):
         return self._tails[name][1].get("1.0", "end-1c")
+
+    def agent_tab_labels(self):
+        return [self._agent_tabs.tab(tab_id, "text") for tab_id in self._agent_tabs.tabs()]
 
     def justify_of(self, role):
         return str(self._text.tag_cget(role, "justify"))

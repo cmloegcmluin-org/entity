@@ -53,10 +53,14 @@ def recent_lines(directory, *, current, limit=150):
     return lines[-limit:]
 
 
+# Both archives this reads: his own conversation (Console's prefixes) and an agent exchange (the
+# desk's). "you" is whoever opened the exchange - him in his own thread, the Entity in an agent's.
 _ROLE_PREFIXES = (
     ("you said: ", "you"),
     ("entity (heads-up)> ", "heads-up"),
     ("entity> ", "entity"),
+    ("ENTITY> ", "you"),
+    ("AGENT> ", "entity"),
 )
 
 

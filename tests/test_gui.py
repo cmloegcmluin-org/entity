@@ -167,3 +167,25 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert window.ended
     finally:
         window.destroy()  # idempotent, so the happy path ending first is fine
+
+
+def test_the_app_announces_its_own_taskbar_identity():
+    # With no AppUserModelID of its own, Windows groups a pythonw window under whatever other
+    # python-hosted app already owns a taskbar button - his Entity window appeared under
+    # SidebarTool's icon, wearing SidebarTool's icon.
+    from entity.gui import APP_ID, set_app_id
+
+    announced = []
+    set_app_id(APP_ID, api=announced.append)
+
+    assert announced == [APP_ID]
+    assert "." in APP_ID  # Windows wants a dotted Company.Product identifier
+
+
+def test_a_platform_without_that_api_is_not_a_crash():
+    from entity.gui import APP_ID, set_app_id
+
+    def missing(_):
+        raise OSError("no shell32 here")
+
+    set_app_id(APP_ID, api=missing)  # a cosmetic nicety must never keep the window from opening

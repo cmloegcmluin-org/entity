@@ -33,6 +33,26 @@ ITS = "#22262b"  # Entity's, left - a cool dark slate
 ACCENT = "#7fff00"  # teal
 LEVEL_FULL = 0.06  # the meter tops out around his loud speech, so ordinary talk visibly moves it
 
+# Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
+# identity of whatever other python-hosted app already owns a button: the Entity window turned up
+# under his SidebarTool icon, wearing SidebarTool's icon. Declaring one gives it its own.
+APP_ID = "the user.Entity"
+
+
+def _set_app_id_via_shell32(app_id):
+    import ctypes
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+
+
+def set_app_id(app_id, api=_set_app_id_via_shell32):
+    """Claim a taskbar identity. Must happen before the window exists, and a platform without the
+    API just doesn't get one - a cosmetic nicety must never keep the window from opening."""
+    try:
+        api(app_id)
+    except Exception:
+        pass
+
 
 def _clock():
     return time.strftime("%H:%M:%S")
@@ -135,6 +155,7 @@ class EntityWindow:
         self._sections = {}  # tab label -> {"pane": Text, "dirty": bool}
         self._polls = 0
 
+        set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
         self._tk = tk.Tk()
         self._tk.title(title)
         self._tk.geometry("980x760")

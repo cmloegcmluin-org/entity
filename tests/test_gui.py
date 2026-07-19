@@ -53,31 +53,61 @@ def test_the_feed_carries_ops_across_threads_in_order():
     assert feed.drain() == []  # and drained means drained
 
 
-def test_the_real_window_mirrors_the_feed_and_ends_itself_when_the_conversation_does():
+def test_the_real_window_mirrors_everything_and_ends_itself_when_the_conversation_does(tmp_path):
     # ONE real-Tk pass, withdrawn so nothing flashes on screen, and a single Tk lifecycle for the
     # whole process - Tk tolerates create/destroy/create sequences poorly enough to flake.
     from entity.gui import EntityWindow
 
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n",
+                       encoding="utf-8")
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix the drive link\n", encoding="utf-8")
+
     feed = TranscriptFeed()
     done = threading.Event()
-    window = EntityWindow(feed, on_stop=lambda: None, on_close=lambda: None)
+    submitted = []
+    mic_flips = []
+    window = EntityWindow(feed, on_stop=lambda: None, on_close=lambda: None,
+                          on_submit=submitted.append, on_mic=mic_flips.append,
+                          profile_path=profile, agent_logs_dir=logs)
     try:
         window.withdraw()
         window.close_when(done)
+
         feed.push("line", "you said: hi")
         feed.push("line", "entity> hello\n")
         feed.push("overwrite", "\r(ignoring…)")
         feed.push("overwrite", "\r(ignoring… 2x)")
         window._drain_once()
-
         text = window.widget_text()
         assert "you said: hi" in text and "entity> hello" in text
         assert "(ignoring… 2x)" in text and "(ignoring…)\n" not in text  # collapsed, not stacked
-        assert not window.ended  # conversation still going - the window stays
 
+        feed.push("draft", "add eggs")
+        feed.push("draft", "and milk")
+        feed.push("state", "muted")
+        feed.push("level", 0.03)
+        window._drain_once()
+        assert window.draft_text() == "add eggs and milk"  # dictation chunks joined readably
+
+        feed.push("submit", "")
+        window._drain_once()
+        assert submitted == ["add eggs and milk"]  # a spoken "over" submits the edited draft
+        assert window.draft_text() == ""  # and the box is ready for the next turn
+
+        for _ in range(window.SLOW_POLL_EVERY):  # let the slow poll fire once
+            window._drain_once()
+        labels = window.tab_labels()
+        assert "Conversation" in labels and "⚙ fixer" in labels
+        assert "fix the drive link" in window.agent_tab_text("fixer")
+        assert "- swim" in window.section_text("Goals")
+        assert "- better voice" in window.section_text("Enhancements")
+
+        assert not window.ended
         done.set()
         window._drain_once()  # the conversation has wound down - the window ends itself
-
         assert window.ended
     finally:
         window.destroy()  # idempotent, so the happy path ending first is fine

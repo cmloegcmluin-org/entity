@@ -317,3 +317,13 @@ def test_it_knows_when_he_is_mid_utterance():
     dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
 
     assert dictation.is_busy() is False  # nothing said yet, nothing to interrupt
+
+
+def test_the_sounds_he_makes_while_thinking_never_reach_the_draft():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("Um, so uh the drive link is wrong"),
+                          FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["So the drive link is wrong"]

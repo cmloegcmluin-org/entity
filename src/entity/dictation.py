@@ -27,6 +27,7 @@ import threading
 
 import numpy as np
 
+from entity.hesitation import without_hesitations
 from entity.phrases import canonical, ends_with_command, strip_leading_command, wakes
 from entity.stt_mic import (
     PAUSE_FRAMES,
@@ -190,7 +191,9 @@ class Dictation:
 
     def _absorb(self, audio, *, armed=None):
         armed = self._armed if armed is None else armed
-        text = self._transcriber.transcribe(audio).strip()
+        # The "um"s and "uh"s go before anything reads the text - the same rule Notecraft uses on
+        # his memos, so both hear him the same way.
+        text = without_hesitations(self._transcriber.transcribe(audio).strip())
         if not text:
             return
         if self._speaking:  # its own voice, mostly - a bark check, never draft text

@@ -1,17 +1,19 @@
-"""The Entity's memory of the user.
+"""The Entity's memory of its user.
 
-Three layers, two of them under the gitignored `runtime/` dir (private):
-- `profile.md`  - the hand-written standing profile (goals, projects, life context).
+Three layers, all under the gitignored `runtime/` dir (private):
+- `profile.md`  - the hand-written standing profile (goals, projects, life context). Its title
+                  line is also what the Entity calls its user - see `user_name`.
 - `learned.md`  - facts the Entity captured itself from past conversations.
-- `lexicon.md`  - his working vocabulary: names he coined (Notecraft, WaveShaper, Skylark) AND the
-                  domain terms and proper nouns of his fields (Bayesian, acoustic, a collaborator,
-                  ...) - one word or several. Triple duty: it's part of the brain's standing
-                  context so it knows his words, transcription here is biased toward the same
-                  list (see `vocabulary`), and Notecraft corrects its voice memos against it too —
-                  so teaching a term once fixes all three. That last one is why it lives outside
-                  this repo, in the state folder Notecraft syncs between his machines.
+- `lexicon.md`  - the user's working vocabulary: names they coined (Notecraft, WaveShaper) AND the
+                  domain terms and proper nouns of the fields they work in (Bayesian inference,
+                  the people they collaborate with) - one word or several. Triple duty: it is part
+                  of the brain's standing context so it knows their words, transcription here is
+                  biased toward the same list (see `vocabulary`), and another tool that
+                  transcribes the same person can correct against it too - so teaching a term once
+                  fixes all three. That last duty is why the file may live outside this repo
+                  entirely; `lexicon_path` is how it says where.
 
-All are folded into the brain's system prompt at startup, so it knows him without being
+All are folded into the brain's system prompt at startup, so it knows the user without being
 re-told. At the end of a session the brain is asked what new, durable facts came up; those get
 appended to `learned.md`, so next time it remembers them too - the auto-capture-and-remember loop.
 """
@@ -22,11 +24,9 @@ from pathlib import Path
 _RUNTIME = Path(__file__).resolve().parents[2] / "runtime"
 DEFAULT_PROFILE_PATH = _RUNTIME / "profile.md"
 DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
-# The lexicon is the one file Notecraft reads too, so a term taught in either place fixes
-# both. Notecraft runs on his MacBook besides this PC, so the shared list lives in the
-# state folder it syncs between them (its NOTECRAFT_STATE_DIR); a file under this PC-only
-# checkout could never reach the other machine.
-DEFAULT_LEXICON_PATH = Path.home() / "Notecraft" / "state" / "lexicon.md"
+DEFAULT_LEXICON_PATH = _RUNTIME / "lexicon.md"
+# One line naming the lexicon file, when it isn't the one above - see `lexicon_path`.
+LEXICON_POINTER = _RUNTIME / "lexicon-path.txt"
 
 # `{user}` is filled in from the profile's own title line by `compose_persona` - see `user_name`.
 USER_PLACEHOLDER = "{user}"
@@ -81,8 +81,23 @@ def load_learned(path=DEFAULT_LEARNED_PATH):
     return _read(path)
 
 
-def load_lexicon(path=DEFAULT_LEXICON_PATH):
-    return _read(path)
+def lexicon_path(pointer=LEXICON_POINTER, default=DEFAULT_LEXICON_PATH):
+    """Which file the lexicon is. Beside the rest of the runtime state, unless `lexicon-path.txt`
+    names somewhere else.
+
+    The point of the indirection is that this list is worth sharing: whatever else transcribes
+    this user - a note-taker, a memo app, another machine - wants the same terms, and a term
+    taught once should fix all of them. That shared copy lives wherever the tool that syncs it
+    keeps it, which is nowhere this repo can guess, so the user writes the path down instead."""
+    try:
+        target = pointer.read_text(encoding="utf-8").strip()
+    except OSError:
+        return default
+    return Path(target).expanduser() if target else default
+
+
+def load_lexicon(path=None):
+    return _read(lexicon_path() if path is None else path)
 
 
 def _read(path):

@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from entity.memory import (
-    DEFAULT_LEXICON_PATH,
     append_learned,
     compose_persona,
+    lexicon_path,
     lexicon_terms,
     load_learned,
     load_lexicon,
@@ -122,12 +122,30 @@ def test_append_learned_does_nothing_for_empty(tmp_path):
     assert not path.exists()
 
 
-def test_the_lexicon_is_the_same_file_notecraft_reads():
-    # One list, two tools: a term taught here has to fix his transcripts there too.
-    # Notecraft runs on his MacBook as well as this PC, so the shared file sits in the
-    # state folder it syncs between them (NOTECRAFT_STATE_DIR) — never in this repo's
-    # runtime dir, which no other machine can see.
-    assert DEFAULT_LEXICON_PATH == Path.home() / "Notecraft" / "state" / "lexicon.md"
+def test_the_lexicon_can_live_wherever_the_tool_that_shares_it_keeps_it(tmp_path):
+    # One list, two tools: a term taught here should fix the other tool's transcripts too. That
+    # tool may sync its state between machines, so the shared file can't be assumed to sit in this
+    # repo's runtime dir, which no other machine can see. A pointer file says where it really is.
+    shared = tmp_path / "synced" / "lexicon.md"
+    pointer = tmp_path / "lexicon-path.txt"
+    pointer.write_text(f"{shared}\n", encoding="utf-8")
+
+    assert lexicon_path(pointer=pointer, default=tmp_path / "unused.md") == shared
+
+
+def test_the_lexicon_sits_in_the_runtime_dir_when_nothing_points_elsewhere(tmp_path):
+    default = tmp_path / "lexicon.md"
+
+    assert lexicon_path(pointer=tmp_path / "absent.txt", default=default) == default
+
+
+def test_a_pointer_written_with_a_tilde_reaches_the_home_directory(tmp_path):
+    # It is written by hand, and by hand "~/notes/lexicon.md" is what anyone types; left literal
+    # it would name a directory called "~" and the lexicon would silently read as empty.
+    pointer = tmp_path / "lexicon-path.txt"
+    pointer.write_text("~/notes/lexicon.md\n", encoding="utf-8")
+
+    assert lexicon_path(pointer=pointer, default=tmp_path / "unused.md") == Path.home() / "notes" / "lexicon.md"
 
 
 def test_profile_sections_split_on_headings():

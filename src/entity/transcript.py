@@ -36,10 +36,18 @@ class Transcript:
                 handle.write(body)
 
 
+SESSION_MARK = "===== session ====="  # emitted between files; no log ever contains one
+
+
 def past_lines(directory, *, current):
     """Every session ever recorded, oldest first - the whole thread above the live conversation,
     so scrolling back reaches the start rather than a cut with nothing on screen to explain it.
     `current` is this session's own file, which is live and excluded.
+
+    A file writes its date at the top, so several sessions in one day used to read as the same
+    date printed over and over. The two facts are separated here: the date is emitted only when
+    it changes, and a session mark goes between files - one says which day, the other says a new
+    conversation began.
 
     Unbounded on purpose: the whole archive is a few hundred kilobytes of text, and the window
     holds it rather than building it - see `bubbles.hold_back`.
@@ -47,14 +55,32 @@ def past_lines(directory, *, current):
     directory = Path(directory)
     if not directory.is_dir():
         return []
-    lines = []
+    lines, dated = [], None
     for path in sorted(path for path in directory.glob("*.log")
                        if current is None or path != Path(current)):
         try:
-            lines.extend(path.read_text(encoding="utf-8", errors="replace").splitlines())
+            session = path.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
+        if not session:
+            continue  # nothing was said, so there is no session to divide off
+        if lines:
+            lines.append(SESSION_MARK)
+        for line in session:
+            day = day_of(line)
+            if day is not None:
+                if day == dated:
+                    continue  # that date already stands above; repeating it reads as a glitch
+                dated = day
+            lines.append(line)
     return lines
+
+
+def day_of(line):
+    """The date on a file's day header, or None if the line is not one."""
+    if line.startswith("===== ") and line.endswith(" =====") and line != SESSION_MARK:
+        return line.strip("= ")
+    return None
 
 
 # Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
@@ -68,7 +94,11 @@ _ROLE_PREFIXES = (
 )
 
 
+# The two kinds of break, deliberately unalike: a dated rule for the day, and a quiet caesura for
+# one conversation ending and the next beginning. Made to look the same they read as one repeated
+# thing, which is the confusion this pair exists to end.
 DAY_BREAK = "───────  {}  ───────"
+SESSION_BREAK = "•   •   •"  # filled, not middle dots: at this size those are three faint specks
 
 
 def parse_line(line):
@@ -78,10 +108,12 @@ def parse_line(line):
     sessions appear in the window as the conversation they were, not as log lines.
     """
     line = line.rstrip()
-    if line.startswith("===== ") and line.endswith(" ====="):
+    if line == SESSION_MARK:
+        return "status", "", SESSION_BREAK
+    day = day_of(line)
+    if day is not None:
         # The date each file writes once a day. Scrolling back through every session ever is a
-        # wall without them, so it comes back as the break it marks rather than as nothing.
-        day = line.strip("= ")
+        # wall without it, so it comes back as the break it marks rather than as nothing.
         return "status", day, DAY_BREAK.format(day)
     if not line.startswith("[") or "] " not in line:
         return None

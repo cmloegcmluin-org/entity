@@ -57,7 +57,7 @@ def test_the_directory_is_created_if_it_is_not_there(tmp_path):
 
 
 def test_past_lines_hands_back_every_session_ever_recorded(tmp_path):
-    from entity.transcript import past_lines
+    from entity.transcript import SESSION_MARK, past_lines
 
     for day in range(10, 16):  # more sessions than any window would have kept
         (tmp_path / f"session-202607{day}-010000.log").write_text(
@@ -69,8 +69,27 @@ def test_past_lines_hands_back_every_session_ever_recorded(tmp_path):
 
     assert lines[:2] == ["day 10 one", "day 10 two"]  # scrolls back to the start of time
     assert lines[-1] == "day 15 two"
-    assert len(lines) == 12  # every line of every session, nothing dropped off the top
+    said = [line for line in lines if line != SESSION_MARK]
+    assert len(said) == 12  # every line of every session, nothing dropped off the top
     assert "live - must not appear" not in lines
+
+
+def test_a_day_is_dated_once_however_many_sessions_it_held(tmp_path):
+    from entity.transcript import SESSION_MARK, past_lines
+
+    for name, day, said in (("session-20260718-010000.log", "2026-07-18", "morning"),
+                            ("session-20260718-090000.log", "2026-07-18", "afternoon"),
+                            ("session-20260719-010000.log", "2026-07-19", "next day")):
+        (tmp_path / name).write_text(f"===== {day} =====\n[01:00:00] you said: {said}\n",
+                                     encoding="utf-8")
+
+    lines = past_lines(tmp_path, current=None)
+
+    # The date says which day; the session mark says a new conversation started. Two sessions in
+    # one day used to print that day's date twice, which reads as a glitch rather than a boundary.
+    assert lines.count("===== 2026-07-18 =====") == 1
+    assert lines.count(SESSION_MARK) == 2  # and each of the three sessions is still divided
+    assert lines.index(SESSION_MARK) < lines.index("===== 2026-07-19 =====")
 
 
 def test_past_lines_survives_an_empty_or_missing_directory(tmp_path):
@@ -88,13 +107,25 @@ def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
     assert parse_line("[03:41:18] (thinking…)") == ("status", "03:41:18", "(thinking…)")
 
 
-def test_a_day_header_reads_back_as_a_break_he_can_see():
+def test_a_day_header_reads_back_as_a_break_that_can_be_seen():
     from entity.transcript import parse_line
 
     role, _, text = parse_line("===== 2026-07-18 =====")
 
     # Scrolling back through every session is unreadable without a mark where one day ends.
     assert role == "status" and "2026-07-18" in text
+
+
+def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():
+    from entity.transcript import DAY_BREAK, parse_line, SESSION_MARK
+
+    role, _, text = parse_line(SESSION_MARK)
+
+    # Telling the two apart is the whole point: a dated rule wearing a different word between the
+    # dashes still reads as another date, which is what looked like a glitch in the first place.
+    assert role == "status"
+    assert text != DAY_BREAK.format("session")
+    assert not any(character.isdigit() for character in text)
 
 
 def test_lines_that_are_not_conversation_read_back_as_nothing():

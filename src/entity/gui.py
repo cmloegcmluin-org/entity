@@ -20,7 +20,7 @@ import queue
 import time
 from pathlib import Path
 
-from entity.memory import profile_sections, save_section
+from entity.memory import profile_sections, save_learned, save_section
 from entity.tailing import LogTail, discover
 from entity.transcript import parse_line
 
@@ -144,10 +144,11 @@ class EntityWindow:
     )
     CONVERSATION_TAB = "1 · Conversation"
     PERSONA_TAB = "6 · Persona"
+    MEMORY_TAB = "7 · Memory"
 
     def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
-                 profile_path=None, agent_logs_dir=None, persona=None, icon=None, title="Entity",
-                 clock=_clock, now=time.monotonic):
+                 profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
+                 icon=None, title="Entity", clock=_clock, now=time.monotonic):
         import tkinter as tk
         from tkinter import ttk
 
@@ -162,6 +163,9 @@ class EntityWindow:
         self._state = "muted"  # the mic starts off; nothing is heard until he turns it on
         self._now = now
         self._profile_path = Path(profile_path) if profile_path else None
+        self._learned_path = Path(learned_path) if learned_path else None
+        self._learned_stamp = None
+        self._learned_edited = None
         self._profile_stamp = None
         self._agent_logs_dir = Path(agent_logs_dir) if agent_logs_dir else None
         self._tails = {}  # agent name -> (LogTail, pane, rendered-entry count)
@@ -197,6 +201,11 @@ class EntityWindow:
         self._tabs.add(self._persona, text=self.PERSONA_TAB)
         if persona:
             self._persona.insert("end", persona)
+        # What it has learned about him, as it learns it - the one place a self-improvement he is
+        # told about actually lands, so he can read it the moment it lands and cross it out.
+        self._learned = self._make_pane(self._tabs, readonly=False, font=("Segoe UI", 10))
+        self._learned.bind("<KeyRelease>", lambda event: setattr(self, "_learned_edited", self._now()))
+        self._tabs.add(self._learned, text=self.MEMORY_TAB)
         # One home for the agents, however many he ends up driving at once.
         self._agent_tabs = ttk.Notebook(self._tabs)
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
@@ -327,7 +336,7 @@ class EntityWindow:
         remember to save is one you lose."""
         pane = self._make_pane(self._tabs, readonly=False)
         pane.bind("<KeyRelease>", lambda event, name=label: self._mark_dirty(name))
-        self._sections[label] = {"pane": pane, "heading": heading, "edited": None}
+        self._sections[label] = {"pane": pane, "heading": heading, "edited": None, "loaded": ""}
         return pane
 
     def _build_controls(self, tk):
@@ -398,12 +407,17 @@ class EntityWindow:
         every keystroke, and so the pane isn't re-read out from under a sentence in progress."""
         if self._profile_path is None:
             return
+        if (self._learned_path is not None and self._learned_edited is not None
+                and self._now() - self._learned_edited >= self.AUTOSAVE_AFTER):
+            save_learned(self._learned.get("1.0", "end-1c"), self._learned_path)
+            self._learned_edited = None
+            self._learned_stamp = None
         for label, section in self._sections.items():
             edited = section["edited"]
             if edited is None or self._now() - edited < self.AUTOSAVE_AFTER:
                 continue
             save_section(self._profile_path, self._heading_for(label),
-                         section["pane"].get("1.0", "end-1c"))
+                         section["pane"].get("1.0", "end-1c"), keeping=section["loaded"])
             section["edited"] = None
             self._profile_stamp = None  # re-read next slow poll, so the pane shows what landed
 
@@ -462,6 +476,7 @@ class EntityWindow:
             self._refresh_agent_tabs()
             self._autosave()
             self._refresh_profile_tabs()
+            self._refresh_learned()
         if self._done is not None and self._done.is_set():
             self.destroy()
 
@@ -513,6 +528,22 @@ class EntityWindow:
                 pane.see("end")
             entry[2] = len(model.entries)
 
+    def _refresh_learned(self):
+        """Re-read what it has learned, unless he is in the middle of editing it."""
+        if self._learned_path is None or self._learned_edited is not None:
+            return
+        try:
+            stamp = self._learned_path.stat().st_mtime
+        except OSError:
+            return
+        if stamp == self._learned_stamp:
+            return
+        self._learned_stamp = stamp
+        text = self._learned_path.read_text(encoding="utf-8")
+        if text.rstrip() != self._learned.get("1.0", "end-1c").rstrip():
+            self._learned.delete("1.0", "end")
+            self._learned.insert("end", text)
+
     def _refresh_profile_tabs(self):
         if self._profile_path is None:
             return
@@ -533,6 +564,7 @@ class EntityWindow:
             if body != section["pane"].get("1.0", "end-1c").rstrip():
                 section["pane"].delete("1.0", "end")
                 section["pane"].insert("end", body)
+            section["loaded"] = body  # what he started from, so a save can tell his edit from theirs
 
     # ---- lifecycle ------------------------------------------------------------------------------
 
@@ -596,6 +628,14 @@ class EntityWindow:
 
     def persona_text(self):
         return self._persona.get("1.0", "end-1c")
+
+    def memory_text(self):
+        return self._learned.get("1.0", "end-1c")
+
+    def set_memory_text(self, text):
+        self._learned.delete("1.0", "end")
+        self._learned.insert("end", text)
+        self._learned_edited = self._now()
 
     def section_text(self, label):
         return self._sections[label]["pane"].get("1.0", "end-1c")

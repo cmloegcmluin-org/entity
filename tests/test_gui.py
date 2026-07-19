@@ -115,6 +115,8 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         "## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n",
         encoding="utf-8",
     )
+    learned = tmp_path / "learned.md"
+    learned.write_text("- he prefers teal" + chr(10), encoding="utf-8")
     logs = tmp_path / "agent-logs"
     logs.mkdir()
     (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix the drive link\n", encoding="utf-8")
@@ -126,14 +128,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
                           profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
                           persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
-                          now=lambda: ticks[0])
+                          learned_path=learned, now=lambda: ticks[0])
     try:
         window.withdraw()
         window.close_when(done)
         window.attach_mic(submit=submitted.append, set_recording=mic_flips.append)
 
-        assert window.tab_labels()[:6] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
-                                           "4 · Goals", "5 · Projects", "6 · Persona"]
+        assert window.tab_labels()[:7] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
+                                           "4 · Goals", "5 · Projects", "6 · Persona", "7 · Memory"]
         assert "BREVITY" in window.persona_text()  # what it has been told, in the words it reads
         assert "mic off" in window.mic_button_text()  # the mic starts off
 
@@ -190,6 +192,17 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         saved = profile.read_text(encoding="utf-8")
         assert "- swim, three times a week" in saved
         assert "- better voice" in saved and "- new to the city" in saved  # other sections untouched
+
+        # What it has learned is visible the moment it lands, and his edit of it sticks.
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert "teal" in window.memory_text()
+        window.set_memory_text("- he prefers teal" + chr(10)
+                               + "- and hates being read a wall of text")
+        ticks[0] += window.AUTOSAVE_AFTER + 1
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert "hates being read a wall" in learned.read_text(encoding="utf-8")
 
         assert not window.ended
         done.set()

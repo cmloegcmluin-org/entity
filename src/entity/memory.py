@@ -115,6 +115,14 @@ def parse_facts(text):
     return facts
 
 
+def save_learned(text, path=DEFAULT_LEARNED_PATH):
+    """Write his edits to what the Entity has learned. It is his memory of him; when he crosses
+    something out it should stay crossed out."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+
+
 def append_learned(facts, path=DEFAULT_LEARNED_PATH):
     if not facts:
         return
@@ -147,6 +155,16 @@ def profile_sections(text):
 ENHANCEMENTS_HEADING = "Enhancements he wants for you (roadmap, not now)"
 
 
+def _merged(path, heading, body, keeping):
+    """His edited body, plus any line the section has gained since he started editing it."""
+    if keeping is None:
+        return body
+    current = profile_sections(_read(path)).get(heading, "")
+    added = [line for line in current.splitlines()
+             if line.strip() and line not in keeping.splitlines() and line not in body.splitlines()]
+    return "\n".join([body.rstrip()] + added) if added else body
+
+
 def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """File one enhancement bullet INSIDE its section, so the window's tab (which re-reads this
     file) shows it the moment it lands - not at the end of the file under some other heading."""
@@ -172,13 +190,18 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def save_section(path, heading, body):
+def save_section(path, heading, body, *, keeping=None):
     """Replace one "## heading" section's body, leaving every other line of the file untouched.
 
     This is his own profile - the same file the brain loads as standing context - so an edit made
     in the window has to be surgical: rewriting the whole file from parsed sections would quietly
     drop the preamble and reflow everything he didn't touch.
+
+    `keeping` is what that section held when he started typing. Anything the file has gained since
+    - a line Entity filed while his edit was in progress - is carried over instead of being
+    overwritten, which is how one of its bullets ended up truncated mid-sentence.
     """
+    body = _merged(path, heading, body, keeping)
     path = Path(path)
     lines = _read(path).splitlines()
     start = end = None

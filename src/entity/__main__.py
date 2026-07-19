@@ -367,7 +367,7 @@ def main(argv=None):
     import anyio
 
     from entity.gui import EntityWindow
-    from entity.memory import DEFAULT_PROFILE_PATH
+    from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_PROFILE_PATH
     from entity.no_console import silence_child_consoles
     from entity.transcript import recent_lines
 
@@ -381,6 +381,7 @@ def main(argv=None):
     window = EntityWindow(
         feed, on_stop=barge_in.set, on_close=stop.set,
         profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS, persona=_persona(),
+        learned_path=DEFAULT_LEARNED_PATH,
         icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
     )
     done = threading.Event()

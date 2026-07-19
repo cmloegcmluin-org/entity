@@ -36,9 +36,9 @@ DEFAULT_READY_QUESTION = "I've got a longer answer for you - ready for it?"
 # genuinely big reply should have to wait for a yes.
 DEFAULT_LONG_ANSWER_CHARS = 320
 
-# How much of a reply is SPOKEN. The rest is on screen for him to read - he has a window now, and
-# every reply being long enough to trigger "I've got a longer answer for you, ready for it?" was
-# worse than the wall it was guarding against. Roughly two sentences.
+# How long a reply may BE. Not how much of it is read aloud - he disliked hearing only part of
+# what was written, and said the real answer is that it shouldn't send such long messages. So a
+# reply is cut to this at the seam of a sentence, and what he reads is what he hears.
 DEFAULT_SPOKEN_CHARS = 260
 
 # Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).
@@ -72,15 +72,10 @@ DEFAULT_CANCEL_WAIT = 10.0
 # detaching (a slow think just blocks with check-ins, as before). Well past the check-in cadence so
 # only a genuinely long call detaches.
 DEFAULT_DETACH_AFTER = 5.0
-# Said in turn, never the same one twice running: he heard one canned sentence four times in a
-# single session and told us it was unnatural and disconcerting. Short, because this is the whole
-# of what he wants to hear while he waits - "I'll get back to you on that".
-DEFAULT_DETACH_REPLIES = (
-    "I'll get back to you on that.",
-    "Let me look into that - I'll come back to you.",
-    "That one needs a minute. I'll bring it to you.",
-    "On it - I'll get back to you.",
-)
+# His words, verbatim, every time. Varying it was a fix for hearing one canned sentence four
+# times; he then heard the variations and asked for exactly this line instead - flowery
+# alternatives are worse than repetition when all he wants to know is that it heard him.
+DEFAULT_DETACH_REPLIES = ("I'll get back to you on that.",)
 
 # After a reply, wait this long before listening again, so he gets a beat to read it rather than the
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
@@ -277,8 +272,9 @@ class Conversation:
         is what made "I've got a longer answer for you, ready for it?" fire on nearly every turn,
         and being asked that constantly was worse than the wall it guarded against.
         """
+        text = _opening(text, self._spoken_chars)  # what he reads IS what he hears
         self._console.reply(text)
-        self._say(_opening(text, self._spoken_chars), record=False)
+        self._say(text, record=False)
 
     def _pause_to_read(self):
         """A short beat after a reply before the mic reopens, so he isn't rushed off it - skipped if
@@ -435,6 +431,8 @@ class Conversation:
         background = self._background
         if background is None or not background["done"].is_set():
             return
+        if self._his_mic_is_on():
+            return  # he's talking; a finished answer waits, exactly as agent news does
         self._background = None
         reply = background["outcome"].get("reply")
         if reply is not None and self._offered is None:

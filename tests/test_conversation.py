@@ -343,9 +343,8 @@ def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
     assert any("dropped" in line for line in lines)
 
 
-def test_a_second_long_wait_is_not_worded_the_same_as_the_first():
-    # Four identical "This one'll take me a while" in one session: "stop saying the exact same
-    # phrase over and over, that's really unnatural and disconcerting".
+def test_every_long_wait_says_the_one_line_he_asked_for():
+    # He asked for this sentence literally; the flowery variations were worse than repetition.
     class SlowBrain:
         def respond(self, utterance):
             time.sleep(0.2)
@@ -364,8 +363,7 @@ def test_a_second_long_wait_is_not_worded_the_same_as_the_first():
         convo.turn()
 
     said = [line for line in tts.spoken if line in convo.detach_replies]
-    assert len(said) == 3 and len(set(said)) == 3  # three long waits, three different ways of saying so
-
+    assert said == ["I'll get back to you on that."] * 3
 
 def test_a_finished_background_answer_wakes_a_lull():
     wake = threading.Event()
@@ -1147,9 +1145,9 @@ def test_it_stays_quiet_while_his_mic_is_on():
     assert any("fixer" in line for line in tts.spoken)
 
 
-def test_a_long_reply_is_shown_whole_and_spoken_short():
-    # He is never asked "ready for it?" any more - the window shows him the words. What he HEARS
-    # is the first couple of sentences; sitting through a wall read aloud was the whole complaint.
+def test_a_long_reply_is_cut_short_rather_than_half_read():
+    # He is never asked "ready for it?" any more, and he disliked hearing only part of what was
+    # written: a reply is CUT at a sentence, so what he reads is exactly what he hears.
     lines = []
     tts = FakeTTS()
 
@@ -1162,10 +1160,9 @@ def test_a_long_reply_is_shown_whole_and_spoken_short():
 
     convo.turn()
 
-    shown = "\n".join(lines)
-    assert "Padding." in shown  # all of it is on screen
+    shown = chr(10).join(lines)
     spoken = [line for line in tts.spoken if "First," in line][0]
-    assert len(spoken) <= 100  # only the opening reaches the speaker
-    assert spoken.startswith("First, the short answer.")  # and it starts where the reply does
-    assert len(spoken) < len(shown) / 4  # the bulk of it he reads rather than sits through
+    assert len(spoken) <= 100 and spoken.startswith("First, the short answer.")
+    assert spoken in shown  # the same words on screen as in his ear
+    assert "Padding. Padding. Padding." not in shown  # the wall never reaches him at all
     assert convo.ready_question not in tts.spoken  # and he was never asked

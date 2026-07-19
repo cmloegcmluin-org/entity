@@ -170,6 +170,7 @@ class EntityWindow:
         self._polls = 0
         self._clock = clock
         self._speaker_names = {"you": "You", "entity": "Entity"}
+        self._windows_key_down = False  # the key by his spacebar, held while he reaches for Enter
 
         set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
         self._tk = tk.Tk()
@@ -201,6 +202,9 @@ class EntityWindow:
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
+        for key in self.WINDOWS_KEYS:  # watch it go down and up; Tk may not report it as a modifier
+            self._tk.bind(f"<KeyPress-{key}>", lambda event: setattr(self, "_windows_key_down", True))
+            self._tk.bind(f"<KeyRelease-{key}>", lambda event: setattr(self, "_windows_key_down", False))
         self._tk.bind("<Configure>", self._fit_bubbles)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -345,10 +349,15 @@ class EntityWindow:
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
-        # ANY modifier + Enter sends; plain Enter types a newline. He drives this machine from a
-        # Mac keyboard through a KVM, so the key by his spacebar arrives as Ctrl, Alt or the
-        # Windows key depending on the day - naming one of them would keep being the wrong one.
-        self._draft.bind("<Key-Return>", self._submit_from_key)
+        # The key by his spacebar - a Mac keyboard through a KVM, so it arrives as the Windows
+        # key. Every spelling of it is bound because Tk reports that key differently depending on
+        # the layout, and every modifier is accepted besides, since a KVM may map it to any of
+        # them. Plain Enter still types a newline.
+        for sequence in ("<Key-Return>", "<Mod4-Return>", "<Super-Return>", "<Win-Return>"):
+            try:
+                self._draft.bind(sequence, self._submit_from_key)
+            except Exception:
+                pass  # this Tk doesn't know that spelling; the others still cover the key
         self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
@@ -362,11 +371,16 @@ class EntityWindow:
             return
         self._on_mic(self._state != "recording")
 
-    MODIFIERS = 0x4 | 0x8 | 0x40 | 0x20000  # Control, Alt/Mod1, Mod4/Windows, Windows-Alt
+    # Every modifier bit Tk on Windows sets for Ctrl, Alt and the Windows key. The Windows key is
+    # the one he actually presses; it does not always arrive as a modifier at all, which is why the
+    # keysym is checked too.
+    MODIFIERS = 0x4 | 0x8 | 0x40 | 0x80 | 0x20000 | 0x40000
+    WINDOWS_KEYS = ("Super_L", "Super_R", "Win_L", "Win_R", "Meta_L", "Meta_R")
 
     def _submit_from_key(self, event):
-        if not event.state & self.MODIFIERS:
+        if not (event.state & self.MODIFIERS or self._windows_key_down):
             return None  # a bare Enter is a new line in his draft, as it should be
+        self._windows_key_down = False
         self._submit()
         return "break"  # and the newline that would otherwise be typed is not wanted
 

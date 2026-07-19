@@ -42,8 +42,9 @@ class SupervisedAgent:
         self.name = name
         self._session = session_factory(_agent_options(cwd, model, _permission_handler(name, decide)))
 
-    def work(self, message):
-        return self._session.ask(message)
+    def work(self, message, on_step=None):
+        """Do a piece of work, reporting each step as it happens (see SdkSession.ask)."""
+        return self._session.ask(message, on_step=on_step)
 
     def close(self):
         self._session.close()

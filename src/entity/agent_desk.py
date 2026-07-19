@@ -35,6 +35,7 @@ class _Desked:
         self.task = task
         self.log = log  # the timestamped exchange log the user can tail, or None
         self.state = "starting"
+        self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
 
 
@@ -105,16 +106,26 @@ class AgentDesk:
         self._log(entry, message, prefix="ENTITY> ")
         self._set_state(name, "working")
         try:
-            reply = entry.agent.work(message)
+            # Every step goes to the log as it happens, so his tab shows the agent working rather
+            # than an empty file that reads exactly like a dead one.
+            reply = entry.agent.work(message, on_step=lambda step: self._step(name, step))
         except Exception as exc:  # a dead agent is news, not something to swallow
             self._log(entry, f"(died: {exc})", prefix="AGENT> ")
             self._set_state(name, "failed")
             self._outbox.push(f"The {name} agent died: {exc}")
             return
-        self._log(entry, reply, prefix="AGENT> ")
         self._set_state(name, "idle", last_word=reply)
         # A notice, never the agent's own words - the full reply is in the log its tab reads.
         self._outbox.push(notice(name, reply))
+
+    def _step(self, name, text):
+        """A step of an agent's thinking, logged and timestamped as it arrives."""
+        with self._lock:
+            entry = self._desked.get(name)
+        if entry is not None:
+            self._log(entry, text, prefix="AGENT> ")
+            entry.last_word = text[:120]
+            entry.last_heard = self._clock("%Y-%m-%d %H:%M:%S")
 
     def _log(self, entry, text, *, prefix):
         if entry.log is not None:
@@ -137,7 +148,8 @@ class AgentDesk:
             return
         with self._lock:
             lines = [
-                f"{name} | {entry.state} | {entry.cwd} | {entry.task}"
+                f"{name} | {entry.state} | last heard {entry.last_heard or 'not yet'} | "
+                f"{entry.cwd} | {entry.task}"
                 + (f" | last: {entry.last_word[:120]}" if entry.last_word else "")
                 for name, entry in self._desked.items()
             ]

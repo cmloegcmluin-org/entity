@@ -62,18 +62,28 @@ class SdkSession:
         turn out with a result message, so the blocked `ask` returns of its own accord."""
         self._submit(self._client.interrupt())
 
-    async def _ask(self, prompt):
+    async def _ask(self, prompt, on_step):
         await self._client.query(prompt)
         messages = []
         async for message in self._client.receive_response():
             messages.append(message)
+            if on_step is not None:
+                step = extract_text([message])
+                if step:
+                    on_step(step)
             if isinstance(message, ResultMessage):
                 self.last_context_tokens = _context_tokens(message.usage)
                 break
         return extract_text(messages)
 
-    def ask(self, prompt):
-        return self._submit(self._ask(prompt))
+    def ask(self, prompt, on_step=None):
+        """Ask, and hand each step to `on_step` as it arrives.
+
+        A real task takes many minutes, and until now nothing at all was visible until the very
+        end - so an agent hard at work and an agent that had died looked exactly the same, and
+        the user sat watching an empty log for fourteen minutes while Entity declared it dead one
+        minute before it answered. The steps are the narration Claude Code shows him natively."""
+        return self._submit(self._ask(prompt, on_step))
 
     def close(self):
         try:

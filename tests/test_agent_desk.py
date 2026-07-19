@@ -16,8 +16,10 @@ class FakeAgent:
         self.closed = False
         self._hold = hold
 
-    def work(self, message):
+    def work(self, message, on_step=None):
         self.messages.append(message)
+        if on_step is not None:
+            on_step(f"[{self.name}] did: {message}")
         if self._hold is not None:
             self._hold.wait(2.0)
         return f"[{self.name}] did: {message}"
@@ -98,7 +100,7 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
     outbox = Outbox()
 
     class Exploding:
-        def work(self, message):
+        def work(self, message, on_step=None):
             raise RuntimeError("session died")
 
         def close(self):
@@ -169,3 +171,51 @@ def test_closing_the_desk_shuts_its_agents_down():
     desk.close()
 
     assert made[0].closed
+
+
+def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
+    # He watched an empty log for fourteen minutes while the agent was alive and working, and
+    # Entity declared it dead one minute before it answered. Being able to SEE it work is the fix.
+    outbox = Outbox()
+    steps = ["Reading the router.", "Writing a failing test.", "Confirmed red."]
+
+    class NarratingAgent:
+        def work(self, message, on_step=None):
+            for step in steps:
+                on_step(step)
+            return "done"
+
+        def close(self):
+            pass
+
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: NarratingAgent(),
+                     log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "do the thing")
+    assert _wait_for(lambda: bool(outbox))
+
+    log = (tmp_path / "fixer.log").read_text(encoding="utf-8")
+    for step in steps:
+        assert step in log  # every step, as it happened
+    assert log.index("Reading the router.") < log.index("Confirmed red.")  # in order
+    desk.close()
+
+
+def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
+    outbox = Outbox()
+    roster = tmp_path / "active-agents.txt"
+
+    class NarratingAgent:
+        def work(self, message, on_step=None):
+            on_step("Reading the router.")
+            return "done"
+
+        def close(self):
+            pass
+
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: NarratingAgent(),
+                     roster_path=roster, log_dir=tmp_path, clock=lambda fmt: "2026-07-19 08:20:15")
+    desk.start("fixer", "/tmp/wt", "do the thing")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert "last heard 2026-07-19 08:20:15" in roster.read_text(encoding="utf-8")
+    desk.close()

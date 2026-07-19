@@ -8,7 +8,7 @@ class FakeSession:
         self.options = options
         self.asked = []
 
-    def ask(self, message):
+    def ask(self, message, on_step=None):
         self.asked.append(message)
         return f"report: did {message}"
 

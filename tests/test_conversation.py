@@ -1166,3 +1166,40 @@ def test_a_long_reply_is_cut_short_rather_than_half_read():
     assert spoken in shown  # the same words on screen as in his ear
     assert "Padding. Padding. Padding." not in shown  # the wall never reaches him at all
     assert convo.ready_question not in tts.spoken  # and he was never asked
+
+
+def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():
+    # Truncating silently taught it nothing: it never saw the cut, so the next turn began with no
+    # evidence any of it happened. Now the cut is part of what it hears next.
+    heard = []
+
+    class WordyBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "First. Second. " + "Padding. " * 60
+
+    convo = Conversation(FakeSTT(["hi", "and again"]), WordyBrain(), FakeTTS(),
+                         long_answer_chars=None, spoken_chars=60)
+
+    convo.turn()
+    convo.turn()
+
+    assert heard[0] == "hi"  # the first turn is untouched
+    assert "CUT OFF" in heard[1] and "and again" in heard[1]  # the second carries the consequence
+
+
+def test_a_reply_that_fitted_is_not_complained_about():
+    heard = []
+
+    class BriefBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "Short enough."
+
+    convo = Conversation(FakeSTT(["hi", "again"]), BriefBrain(), FakeTTS(),
+                         long_answer_chars=None, spoken_chars=60)
+
+    convo.turn()
+    convo.turn()
+
+    assert heard == ["hi", "again"]  # nothing added when nothing was lost

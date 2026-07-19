@@ -41,6 +41,15 @@ DEFAULT_LONG_ANSWER_CHARS = 320
 # reply is cut to this at the seam of a sentence, and what he reads is what he hears.
 DEFAULT_SPOKEN_CHARS = 260
 
+# Said back to the brain on the turn AFTER one of its replies was cut. Truncating silently taught
+# it nothing - it never saw the cut, so each turn began with no evidence any of it had happened,
+# and it went on writing long. This is the only way the limit can be learned rather than merely
+# suffered.
+TRUNCATION_NOTICE = (
+    "[System note, not from the user: your last reply ran to {wrote} characters and was CUT OFF at "
+    "{limit} - he never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
+)
+
 # Whether he said yes to "ready for it?" (see _is_affirmative for the full rules).
 _AFFIRMATIVES = (
     "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "ready", "please", "now",
@@ -216,6 +225,7 @@ class Conversation:
         self._detached_count = 0  # how many calls have gone to the background, to vary the wording
         self._long_answer_chars = long_answer_chars
         self._spoken_chars = spoken_chars
+        self._cut_last_reply = None  # (written, limit) when the last reply was cut, else None
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once he says yes to "ready for it?"
         self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
@@ -272,7 +282,11 @@ class Conversation:
         is what made "I've got a longer answer for you, ready for it?" fire on nearly every turn,
         and being asked that constantly was worse than the wall it guarded against.
         """
+        whole = text
         text = _opening(text, self._spoken_chars)  # what he reads IS what he hears
+        # Remember a cut so the next turn can say so: a limit nothing ever reports is not a limit
+        # anything can learn from.
+        self._cut_last_reply = (len(whole), self._spoken_chars) if len(text) < len(whole) else None
         self._console.reply(text)
         self._say(text, record=False)
 
@@ -488,6 +502,14 @@ class Conversation:
         self._console.dropped()  # so the promise it made doesn't just silently evaporate
         self._cancel_think(background["done"])  # unwind it before his turn starts a new call
 
+    def _with_truncation_notice(self, heard):
+        """His words, prefixed with the consequence of the last reply if there was one."""
+        cut, self._cut_last_reply = self._cut_last_reply, None
+        if cut is None:
+            return heard
+        wrote, limit = cut
+        return TRUNCATION_NOTICE.format(wrote=wrote, limit=limit) + heard
+
     def _answer(self, heard):
         """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case
         it's held and offered first (see _offer)."""
@@ -495,7 +517,7 @@ class Conversation:
         self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
         think_start = time.monotonic()
         try:
-            said = self._think(heard)
+            said = self._think(self._with_truncation_notice(heard))
         except _ThinkInterrupted:  # he cut the thinking off - no reply, straight back to listening
             return None
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands

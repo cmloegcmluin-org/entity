@@ -269,7 +269,15 @@ def main(argv=None):
     announce()
 
     if not text_mode and not muted:
-        tts.speak("I'm ready. What can I do for you?")  # say out loud that startup finished
+        # Guarded, because the mic is already live: unguarded, the greeting went out of his
+        # speakers, back into the mic, and opened his draft box with "I do for you".
+        if dictation is not None:
+            dictation.begin_speaking()
+        try:
+            tts.speak("I'm ready. What can I do for you?")  # say out loud that startup finished
+        finally:
+            if dictation is not None:
+                dictation.end_speaking()
 
     had_conversation = []
     farewelled = []

@@ -13,9 +13,13 @@ mic state, level for the meter, submit requests) so the window can mirror it wit
 knowing anything about Tk. `listen()` is the Conversation-facing half: it blocks until the window
 hands over the (possibly edited) draft via `submit`, so the loop's think/speak flow is unchanged.
 
-While the Entity itself is speaking, the Conversation runs `catch_stop` - chunks heard then are
-checked for a stop BARK (and never drafted, since they're mostly its own voice): the same barge-in
-as the terminal mode.
+Two things decide whether he is being heard: whether the mic is ARMED (his button, his spoken
+phrases) and whether the Entity is SPEAKING. It only takes dictation when armed and not speaking -
+because a mic that is live while the Entity talks hears the Entity: his very first draft box opened
+with "I do for you", the tail of its own spoken greeting. Chunks heard while it speaks are checked
+for a stop BARK instead, which is the barge-in. Arming survives a reply, so a conversation flows
+without touching the button; only cutting it off mid-sentence disarms, since a stop should not turn
+straight around and start recording his next breath.
 """
 
 import queue
@@ -63,7 +67,8 @@ class Dictation:
         self._on_state = on_state
         self._on_level = on_level
         self._on_submit_request = on_submit_request
-        self._recording = not muted
+        self._armed = not muted
+        self._speaking = False
         self._terminator = terminator
         self._mutes = tuple(canonical(p) for p in mute_phrases)
         self._wakes = tuple(canonical(p) for p in wake_phrases)
@@ -98,6 +103,7 @@ class Dictation:
         he barks a stop; False once `active()` goes false (the reply finished on its own)."""
         bark = threading.Event()
         self._bark = bark
+        self.begin_speaking()
         try:
             while active():
                 if bark.wait(0.05):
@@ -105,13 +111,30 @@ class Dictation:
             return False
         finally:
             self._bark = None
+            self.end_speaking()
 
     # ---- the window-facing half ----------------------------------------------------------------
 
     def set_recording(self, recording):
-        """The mic button (and the spoken phrases) - flips the state and tells the window."""
-        self._recording = recording
-        self._on_state("recording" if recording else "muted")
+        """The mic button (and the spoken phrases) - arms or disarms and tells the window."""
+        self._armed = recording
+        self._announce_state()
+
+    def begin_speaking(self):
+        """The Entity has started talking: stop taking dictation until it's done."""
+        self._speaking = True
+        self._announce_state()
+
+    def end_speaking(self):
+        """It has finished (or been cut off) - back to however he had left the mic."""
+        self._speaking = False
+        self._announce_state()
+
+    def hearing_him(self):
+        return self._armed and not self._speaking
+
+    def _announce_state(self):
+        self._on_state("speaking" if self._speaking else ("recording" if self._armed else "muted"))
 
     def start(self):
         thread = threading.Thread(target=self.pump, daemon=True)
@@ -131,7 +154,7 @@ class Dictation:
             if self._stop is not None and self._stop.is_set():
                 return
             level = rms(frame)
-            self._on_level(level if self._recording else 0.0)
+            self._on_level(level if self.hearing_him() else 0.0)
             speech = floor.is_speech(level)
             if not started:
                 if not speech:
@@ -149,11 +172,11 @@ class Dictation:
         text = self._transcriber.transcribe(audio).strip()
         if not text:
             return
-        if self._bark is not None:  # the Entity is talking - this is a bark check, never draft text
-            if _is_stop_bark(text, STOP_WORDS):
+        if self._speaking:  # its own voice, mostly - a bark check, never draft text
+            if self._bark is not None and _is_stop_bark(text, STOP_WORDS):
                 self._bark.set()
             return
-        if self._recording:
+        if self._armed:
             self._take_dictation(text)
         else:
             self._maybe_wake(text)

@@ -225,3 +225,50 @@ def test_every_frame_reaches_the_recorder_even_while_muted():
     dictation.pump()
 
     assert len(written) == 3
+
+
+def test_nothing_is_drafted_while_the_entity_is_speaking():
+    # His draft box opened with "I do for you" - the tail of Entity's own spoken greeting, heard
+    # through his speakers. Its own voice must never become his words.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("I'm ready. What can I do for you?"),
+                          FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
+    dictation.begin_speaking()
+
+    dictation.pump()
+
+    assert ears.drafted == []
+    assert ears.states[-1] == "speaking"  # and the window can say so on its button
+    assert ears.levels[-1] == 0.0  # the meter shows nothing: it isn't listening to him
+
+
+def test_when_it_stops_speaking_the_mic_returns_to_how_he_left_it():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    dictation.begin_speaking()
+    dictation.end_speaking()
+
+    assert ears.states == ["speaking", "recording"]  # he was recording before, so he still is
+
+
+def test_cutting_it_off_leaves_the_mic_off_rather_than_recording_his_next_breath():
+    # "stopping shouldn't immediately turn on record".
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    dictation.begin_speaking()
+    dictation.set_recording(False)  # what the button does when it's showing STOP
+    dictation.end_speaking()
+
+    assert ears.states[-1] == "muted"
+
+
+def test_a_muted_mic_stays_muted_through_a_reply():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
+
+    dictation.begin_speaking()
+    dictation.end_speaking()
+
+    assert ears.states[-1] == "muted"

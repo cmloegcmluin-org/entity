@@ -17,6 +17,7 @@ tkinter runs the main thread and polls with `after`, so no Tk call ever happens 
 """
 
 import queue
+import textwrap
 import time
 from pathlib import Path
 
@@ -246,16 +247,33 @@ class EntityWindow:
             self._make_copyable(pane)
         return pane
 
+    BUBBLE_SHARE = 0.55  # of the pane's width - a column, the way a message thread reads
+
     @staticmethod
     def _bubble_margin(pane):
-        """How far in from the far edge a bubble starts: a little over half the pane."""
+        """How far in from the far edge a bubble starts, leaving it BUBBLE_SHARE of the pane."""
         width = pane.winfo_width()
         if width <= 1:  # not laid out yet; a sane first guess, corrected on the first resize
             width = 900
-        return max(120, int(width * 0.42))
+        return max(120, int(width * (1 - EntityWindow.BUBBLE_SHARE)))
+
+    @staticmethod
+    def _wrap_width(pane):
+        """How many characters fit in a bubble - measured in this pane's own font, because Tk
+        honors a left margin and ignores a right one, so the wrap has to be ours."""
+        from tkinter import font as tkfont
+
+        width = pane.winfo_width()
+        if width <= 1:
+            width = 900
+        try:
+            per_char = tkfont.Font(font=pane.cget("font")).measure("n") or 8
+        except Exception:
+            per_char = 8
+        return max(24, int(width * EntityWindow.BUBBLE_SHARE / per_char))
 
     def _fit_bubbles(self, event=None):
-        """Re-measure the bubble columns after a resize, so they stay half-width at any size."""
+        """Re-measure the bubble columns after a resize, so they stay a column at any size."""
         for pane in [self._text] + [entry[1] for entry in self._tails.values()]:
             self._build_message_tags(pane)
 
@@ -497,8 +515,10 @@ class EntityWindow:
             pane.insert("end", entry["text"] + "\n", ("status",) + extra)
             return
         name = names.get(role, "Entity · heads-up")
+        body = textwrap.fill(entry["text"], width=self._wrap_width(pane),
+                             replace_whitespace=False, drop_whitespace=True)
         pane.insert("end", f"{name} · {entry['stamp']}\n", (f"{role}:name",) + extra)
-        pane.insert("end", entry["text"] + "\n", (role,) + extra)
+        pane.insert("end", body + "\n", (role,) + extra)
 
     def _refresh_agent_tabs(self):
         """Each agent's exchange, read back the same way his own conversation is - who said what,

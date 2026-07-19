@@ -132,10 +132,21 @@ class EntityWindow:
 
     POLL_MS = 80
     SLOW_POLL_EVERY = 12  # agent logs and the profile re-check ~once a second, not every 80ms
-    SECTION_TABS = ("Goals", "Projects", "Enhancements")
+    AUTOSAVE_AFTER = 1.5  # seconds of not typing before an edited section is written back
+    # His own five categories, in his numbering. Slot 1 was "Entity construction", which is
+    # sufficiently done, so the conversation itself takes that number. The heading each tab reads
+    # is explicit, since his profile calls category 3 "Life context (for awareness; ...)".
+    SECTION_TABS = (
+        ("2 · Enhancements", "Enhancements"),
+        ("3 · Context", "Life context"),
+        ("4 · Goals", "Goals"),
+        ("5 · Projects", "Projects"),
+    )
+    CONVERSATION_TAB = "1 · Conversation"
 
     def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
-                 profile_path=None, agent_logs_dir=None, icon=None, title="Entity", clock=_clock):
+                 profile_path=None, agent_logs_dir=None, icon=None, title="Entity", clock=_clock,
+                 now=time.monotonic):
         import tkinter as tk
         from tkinter import ttk
 
@@ -147,12 +158,13 @@ class EntityWindow:
         self._on_stop = on_stop
         self._on_submit = on_submit or (lambda text: None)
         self._on_mic = on_mic or (lambda recording: None)
-        self._state = "recording"
+        self._state = "muted"  # the mic starts off; nothing is heard until he turns it on
+        self._now = now
         self._profile_path = Path(profile_path) if profile_path else None
         self._profile_stamp = None
         self._agent_logs_dir = Path(agent_logs_dir) if agent_logs_dir else None
         self._tails = {}  # agent name -> (LogTail, text widget)
-        self._sections = {}  # tab label -> {"pane": Text, "dirty": bool}
+        self._sections = {}  # tab label -> {"pane": Text, "heading": str, "edited": float|None}
         self._polls = 0
 
         set_app_id(APP_ID)  # before the window exists, or the taskbar button is already grouped
@@ -170,10 +182,10 @@ class EntityWindow:
         self._tabs = ttk.Notebook(self._tk)
         self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 4))
         self._text = self._make_pane(self._tabs, readonly=True, font=("Segoe UI", 11))
-        self._tabs.add(self._text, text="Conversation")
+        self._tabs.add(self._text, text=self.CONVERSATION_TAB)
         self._build_message_tags()
-        for label in self.SECTION_TABS:
-            self._tabs.add(self._make_section_tab(tk, label), text=label)
+        for label, heading in self.SECTION_TABS:
+            self._tabs.add(self._make_section_tab(tk, label, heading), text=label)
         self._build_controls(tk)
         self._tk.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -183,9 +195,12 @@ class EntityWindow:
         style = ttk.Style(self._tk)
         style.theme_use("clam")
         style.configure("TNotebook", background=BG, borderwidth=0)
-        style.configure("TNotebook.Tab", background=PANEL, foreground=DIM, padding=(12, 5))
-        # The selected tab is told apart by its lighter panel and plain bright text - no colour.
-        style.map("TNotebook.Tab", background=[("selected", "#333333")], foreground=[("selected", FG)])
+        style.configure("TNotebook.Tab", background=PANEL, foreground=DIM, padding=(12, 6))
+        # Told apart by its lighter panel and plain bright text - no colour, and no resizing: clam
+        # grows/shrinks the selected tab by default, which left the active one a different height
+        # from its neighbours.
+        style.map("TNotebook.Tab", background=[("selected", "#333333")], foreground=[("selected", FG)],
+                  expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
     def _make_pane(self, parent, *, readonly, font=("Consolas", 11)):
         from tkinter import scrolledtext
@@ -211,18 +226,13 @@ class EntityWindow:
                                  spacing1=4, spacing3=4)
         self._text.tag_configure("historical", foreground="#8f8f8f")
 
-    def _make_section_tab(self, tk, label):
-        frame = tk.Frame(self._tabs, bg=BG)
-        pane = self._make_pane(frame, readonly=False)
-        pane.pack(fill="both", expand=True)
+    def _make_section_tab(self, tk, label, heading):
+        """His own documents, edited in place - no Save button, because a document you have to
+        remember to save is one you lose."""
+        pane = self._make_pane(self._tabs, readonly=False)
         pane.bind("<KeyRelease>", lambda event, name=label: self._mark_dirty(name))
-        row = tk.Frame(frame, bg=BG)
-        row.pack(fill="x", pady=(6, 0))
-        tk.Button(row, text="Save", width=10, relief="flat", cursor="hand2",
-                  bg="#2a4d00", fg=ACCENT, activebackground="#2a4d00", activeforeground=ACCENT,
-                  command=lambda name=label: self.save_section_tab(name)).pack(side="right")
-        self._sections[label] = {"pane": pane, "dirty": False}
-        return frame
+        self._sections[label] = {"pane": pane, "heading": heading, "edited": None}
+        return pane
 
     def _build_controls(self, tk):
         """Everything to do with him talking, together in one row along the bottom."""
@@ -236,14 +246,14 @@ class EntityWindow:
         self._level = tk.Canvas(left, width=110, height=10, bg=PANEL, highlightthickness=0)
         self._level.pack(anchor="w", pady=(6, 0))
         self._level_bar = self._level.create_rectangle(0, 0, 0, 10, fill=ACCENT, width=0)
+        tk.Button(left, text="Submit", width=13, relief="flat", cursor="hand2", command=self._submit,
+                  bg="#2a4d00", fg=ACCENT, activebackground="#2a4d00",
+                  activeforeground=ACCENT).pack(anchor="w", pady=(6, 0))
         self._draft = tk.Text(row, height=4, wrap="word", font=("Segoe UI", 11), bg=PANEL, fg=FG,
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
                               padx=8, pady=6)
         self._draft.pack(side="left", fill="both", expand=True)
-        tk.Button(row, text="Submit", width=10, relief="flat", cursor="hand2", command=self._submit,
-                  bg="#2a4d00", fg=ACCENT, activebackground="#2a4d00",
-                  activeforeground=ACCENT).pack(side="right", fill="y", padx=(8, 0))
-        self._show_state("recording")
+        self._show_state(self._state)
 
     # ---- input, Tk thread -----------------------------------------------------------------------
 
@@ -263,25 +273,31 @@ class EntityWindow:
             self._on_submit(text)
 
     def _mark_dirty(self, label):
-        self._sections[label]["dirty"] = True
+        self._sections[label]["edited"] = self._now()
 
-    def save_section_tab(self, label):
-        """Write his edits back into the profile - the same file the brain reads as context."""
+    def _autosave(self):
+        """Write back a section he has stopped typing in. Debounced so a save isn't attempted on
+        every keystroke, and so the pane isn't re-read out from under a sentence in progress."""
         if self._profile_path is None:
             return
-        section = self._sections[label]
-        save_section(self._profile_path, self._heading_for(label), section["pane"].get("1.0", "end-1c"))
-        section["dirty"] = False
-        self._profile_stamp = None  # re-read on the next slow poll, so the pane shows what landed
+        for label, section in self._sections.items():
+            edited = section["edited"]
+            if edited is None or self._now() - edited < self.AUTOSAVE_AFTER:
+                continue
+            save_section(self._profile_path, self._heading_for(label),
+                         section["pane"].get("1.0", "end-1c"))
+            section["edited"] = None
+            self._profile_stamp = None  # re-read next slow poll, so the pane shows what landed
 
     def _heading_for(self, label):
-        """The file's heading for a tab, matched by prefix - his own headings run on
+        """The heading this tab reads and writes. Matched by prefix, since his own headings run on
         ("Enhancements he wants for you (roadmap, not now)")."""
+        wanted = self._sections[label]["heading"]
         if self._profile_path is not None and self._profile_path.exists():
             for heading in profile_sections(self._profile_path.read_text(encoding="utf-8")):
-                if heading.lower().startswith(label.lower()):
+                if heading.lower().startswith(wanted.lower()):
                     return heading
-        return label
+        return wanted
 
     # ---- rendering, Tk thread -------------------------------------------------------------------
 
@@ -326,6 +342,7 @@ class EntityWindow:
         self._polls += 1
         if self._polls % self.SLOW_POLL_EVERY == 0:
             self._refresh_agent_tabs()
+            self._autosave()
             self._refresh_profile_tabs()
         if self._done is not None and self._done.is_set():
             self.destroy()
@@ -378,14 +395,22 @@ class EntityWindow:
         self._profile_stamp = stamp
         sections = profile_sections(self._profile_path.read_text(encoding="utf-8"))
         for label, section in self._sections.items():
-            if section["dirty"]:
+            if section["edited"] is not None:
                 continue  # he's mid-edit; never overwrite what he's typing
+            wanted = section["heading"].lower()
             body = next((text for heading, text in sections.items()
-                         if heading.lower().startswith(label.lower())), "")
-            section["pane"].delete("1.0", "end")
-            section["pane"].insert("end", body)
+                         if heading.lower().startswith(wanted)), "")
+            if body != section["pane"].get("1.0", "end-1c").rstrip():
+                section["pane"].delete("1.0", "end")
+                section["pane"].insert("end", body)
 
     # ---- lifecycle ------------------------------------------------------------------------------
+
+    def attach_mic(self, *, submit, set_recording):
+        """Wire the draft box and the mic button to a Dictation that didn't exist when the window
+        opened - the window comes up first now, so he sees it while the model is still loading."""
+        self._on_submit = submit
+        self._on_mic = set_recording
 
     def close_when(self, done):
         """Once `done` (a threading.Event) fires, the window shuts itself on its own thread."""
@@ -415,6 +440,12 @@ class EntityWindow:
 
     def section_text(self, label):
         return self._sections[label]["pane"].get("1.0", "end-1c")
+
+    def tab_padding(self, state=None):
+        from tkinter import ttk
+
+        style = ttk.Style(self._tk)
+        return style.lookup("TNotebook.Tab", "padding", state and [state])
 
     def set_section_text(self, label, body):
         pane = self._sections[label]["pane"]

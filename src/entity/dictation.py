@@ -137,6 +137,7 @@ class Dictation:
         self._on_state("speaking" if self._speaking else ("recording" if self._armed else "muted"))
 
     def start(self):
+        self._announce_state()  # the window opened before this existed; tell it how the mic stands
         thread = threading.Thread(target=self.pump, daemon=True)
         thread.start()
         return thread

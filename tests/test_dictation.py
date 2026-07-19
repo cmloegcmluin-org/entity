@@ -272,3 +272,14 @@ def test_a_muted_mic_stays_muted_through_a_reply():
     dictation.end_speaking()
 
     assert ears.states[-1] == "muted"
+
+
+def test_starting_the_pump_announces_the_state_it_was_built_in():
+    # The window opens before the mic exists, so it has to be told - otherwise a mic that starts
+    # off is drawn as listening until something happens to change it.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
+
+    dictation.start().join(2.0)
+
+    assert ears.states[0] == "muted"

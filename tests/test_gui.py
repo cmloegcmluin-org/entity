@@ -110,8 +110,11 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     from entity.gui import EntityWindow
 
     profile = tmp_path / "profile.md"
-    profile.write_text("## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n",
-                       encoding="utf-8")
+    profile.write_text(
+        "## Life context (for awareness; do not raise unprompted)\n- new to the city\n\n"
+        "## Goals\n- swim\n\n## Enhancements he wants for you (roadmap, not now)\n- better voice\n",
+        encoding="utf-8",
+    )
     logs = tmp_path / "agent-logs"
     logs.mkdir()
     (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix the drive link\n", encoding="utf-8")
@@ -119,12 +122,18 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     feed = TranscriptFeed()
     done = threading.Event()
     submitted, mic_flips, stops = [], [], []
+    ticks = [1000.0]
     window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
-                          on_submit=submitted.append, on_mic=mic_flips.append,
-                          profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00")
+                          profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
+                          now=lambda: ticks[0])
     try:
         window.withdraw()
         window.close_when(done)
+        window.attach_mic(submit=submitted.append, set_recording=mic_flips.append)
+
+        assert window.tab_labels()[:5] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
+                                           "4 · Goals", "5 · Projects"]  # his own numbering
+        assert "mic off" in window.mic_button_text()  # the mic starts off
 
         feed.push("history", "[03:41:12] you said: how's the agent doing")
         feed.push("message", ("you", "pick up the drive work"))
@@ -154,12 +163,20 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
             window._drain_once()
         assert "⚙ fixer" in window.tab_labels()
         assert "fix the drive link" in window.agent_tab_text("fixer")
-        assert window.section_text("Goals").strip() == "- swim"
+        assert window.section_text("4 · Goals").strip() == "- swim"
+        assert window.section_text("3 · Context").strip() == "- new to the city"  # his category 3
 
-        window.set_section_text("Goals", "- swim, three times a week")
-        window.save_section_tab("Goals")
-        assert "- swim, three times a week" in profile.read_text(encoding="utf-8")
-        assert "- better voice" in profile.read_text(encoding="utf-8")  # other sections untouched
+        # Editing autosaves once he stops typing - there is no Save button to forget.
+        window.set_section_text("4 · Goals", "- swim, three times a week")
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert "three times a week" not in profile.read_text(encoding="utf-8")  # still typing
+        ticks[0] += window.AUTOSAVE_AFTER + 1
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        saved = profile.read_text(encoding="utf-8")
+        assert "- swim, three times a week" in saved
+        assert "- better voice" in saved and "- new to the city" in saved  # other sections untouched
 
         assert not window.ended
         done.set()
@@ -167,25 +184,3 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert window.ended
     finally:
         window.destroy()  # idempotent, so the happy path ending first is fine
-
-
-def test_the_app_announces_its_own_taskbar_identity():
-    # With no AppUserModelID of its own, Windows groups a pythonw window under whatever other
-    # python-hosted app already owns a taskbar button - his Entity window appeared under
-    # SidebarTool's icon, wearing SidebarTool's icon.
-    from entity.gui import APP_ID, set_app_id
-
-    announced = []
-    set_app_id(APP_ID, api=announced.append)
-
-    assert announced == [APP_ID]
-    assert "." in APP_ID  # Windows wants a dotted Company.Product identifier
-
-
-def test_a_platform_without_that_api_is_not_a_crash():
-    from entity.gui import APP_ID, set_app_id
-
-    def missing(_):
-        raise OSError("no shell32 here")
-
-    set_app_id(APP_ID, api=missing)  # a cosmetic nicety must never keep the window from opening

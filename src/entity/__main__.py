@@ -172,31 +172,13 @@ def _build_ears(text_mode, stop, interrupt, announce=print):
     return stt, mic, recorder
 
 
-def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    text_mode = "--text" in argv
-    muted = "--mute" in argv
-    timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
-    gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
+def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, attach=None):
+    """Build everything and run the conversation to its end.
 
-    # In a windowed run every startup line goes to the window's feed INSTEAD of stdout - launched
-    # from Entity.bat there is no terminal at all, and launched from a command line he doesn't want
-    # the window's contents spat out there too.
-    feed = TranscriptFeed() if gui else None
-
-    def announce(line=""):
-        if feed is not None:
-            feed.push("line", line)
-        else:
-            print(line, flush=True)
-
-    # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
-    # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
-    # ramble he couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
-    stop = threading.Event()
-    barge_in = threading.Event()
-    signal.signal(signal.SIGINT, lambda *_: stop.set())
-
+    Windowed, this runs on a worker while Tk owns the main thread - so the window is on screen
+    within a moment of the click, and the model loading, the brain waking and the spoken greeting
+    all happen where he can watch them. He was hearing "I'm ready" before any window appeared.
+    """
     # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
     # Entity speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
@@ -237,11 +219,14 @@ def main(argv=None):
         transcriber, mic, recorder = _open_hearing(announce)
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
+            muted=True,  # the mic starts OFF; he turns it on when he's ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
             on_level=lambda v: feed.push("level", v),
             on_submit_request=lambda: feed.push("submit", ""),
         )
+        if attach is not None:
+            attach(dictation)  # the window is already up, waiting to be wired to a mic
         dictation.start()
         stt = dictation
     else:
@@ -259,8 +244,8 @@ def main(argv=None):
     if text_mode:
         announce("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
     elif gui:
-        announce("Entity is here. Speak, and say 'over' when you finish each turn.")
-        announce("STOP (or Enter) cuts it off. Close the window, or say 'goodbye entity over', to quit.")
+        announce("Entity is here. Turn the mic on when you want to talk, or say 'hey Entity'.")
+        announce("That same button stops it while it's speaking. Close the window to quit.")
     else:
         announce("Entity is here. Speak, and say 'over' when you finish each turn.")
         announce("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
@@ -339,34 +324,72 @@ def main(argv=None):
                 except Exception:
                     pass
 
+    converse()
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    text_mode = "--text" in argv
+    muted = "--mute" in argv
+    timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless he opts out
+    gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
+
+    # In a windowed run every startup line goes to the window's feed INSTEAD of stdout - launched
+    # from the Start Menu there is no terminal at all, and launched from a command line he doesn't
+    # want the window's contents spat out there too.
+    feed = TranscriptFeed() if gui else None
+
+    def announce(line=""):
+        if feed is not None:
+            feed.push("line", line)
+        else:
+            print(line, flush=True)
+
+    # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
+    # it's the barge-in: press it to cut off whatever the Entity is saying (he had a 15-minute
+    # ramble he couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
+    stop = threading.Event()
+    barge_in = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+
+    running = dict(announce=announce, feed=feed, gui=gui, text_mode=text_mode, muted=muted,
+                   timings=timings, stop=stop, barge_in=barge_in)
     if not gui:
-        converse()
+        _session(**running)
         return
-    # Windowed: the conversation runs on a worker; Tk owns the main thread. Closing the window asks
-    # the loop to stop (the mic checks `stop` every frame), and once the worker has wound all the
-    # way down - goodbye said, memory consolidated - `done` lets the window end itself.
+
+    # Windowed: the window opens FIRST and the whole session runs on a worker, so a click puts
+    # something on screen at once instead of after a 2.4 GB model has loaded. Closing the window
+    # asks the loop to stop (the mic checks `stop` every frame), and once the worker has wound all
+    # the way down - goodbye said, memory consolidated - `done` lets the window end itself.
+    import anyio
+
     from entity.gui import EntityWindow
-
-    done = threading.Event()
-
-    def worker():
-        try:
-            converse()
-        finally:
-            done.set()
-
     from entity.memory import DEFAULT_PROFILE_PATH
+    from entity.no_console import silence_child_consoles
     from entity.transcript import recent_lines
 
-    for line in recent_lines(TRANSCRIPTS, current=session_record.path):
+    # With no console of its own to lend them, Windows gives each console child a new window: the
+    # Claude CLI the brain runs was turning up as a second window on his desktop.
+    silence_child_consoles(anyio)
+
+    for line in recent_lines(TRANSCRIPTS, current=None):
         feed.push("history", line)  # yesterday's sessions, above the divider - no more amnesia
     feed.push("line", "───────  this session  ───────")
     window = EntityWindow(
         feed, on_stop=barge_in.set, on_close=stop.set,
-        on_submit=dictation.submit, on_mic=dictation.set_recording,
         profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS,
         icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
     )
+    done = threading.Event()
+
+    def worker():
+        try:
+            _session(attach=lambda d: window.attach_mic(submit=d.submit, set_recording=d.set_recording),
+                     **running)
+        finally:
+            done.set()
+
     window.close_when(done)
     threading.Thread(target=worker, daemon=True).start()
     window.run()

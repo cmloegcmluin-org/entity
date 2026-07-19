@@ -176,7 +176,19 @@ def profile_sections(text):
     return sections
 
 
-ENHANCEMENTS_HEADING = "Enhancements he wants for you (roadmap, not now)"
+# Only the stem of the heading: a profile writes its own, and they run on ("Enhancements you want
+# (roadmap, not now)"). Every reader matches on the stem - see `find_heading`.
+ENHANCEMENTS_HEADING = "Enhancements"
+
+
+def find_heading(sections, stem):
+    """Which of the profile's own headings this stem means, or the stem itself if it has none yet.
+
+    The profile is hand-written, so its headings carry whatever gloss their author wanted. Matching
+    a whole heading line would miss the section that is plainly right there - and a filing that
+    misses doesn't fail, it starts a rival section beside the real one."""
+    lowered = stem.lower()
+    return next((h for h in sections if h.lower().startswith(lowered)), stem)
 
 
 def _merged(path, heading, body, keeping):
@@ -193,7 +205,9 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
     """File one enhancement bullet INSIDE its section, so the window's tab (which re-reads this
     file) shows it the moment it lands - not at the end of the file under some other heading."""
     path = Path(path)
-    lines = _read(path).splitlines()
+    text = _read(path)
+    heading = find_heading(profile_sections(text), heading)
+    lines = text.splitlines()
     insert_at = None
     inside = False
     for index, line in enumerate(lines):

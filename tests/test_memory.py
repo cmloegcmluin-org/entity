@@ -160,6 +160,25 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
     assert sections["Something after"] == "- untouched"  # later sections undisturbed
 
 
+def test_an_enhancement_is_filed_under_a_heading_that_merely_starts_with_the_word(tmp_path):
+    # A profile writes its own headings and they run on ("Enhancements you want (roadmap, not
+    # now)"), so the source can't carry the whole line. Matching the stem is what keeps a filing
+    # inside the section that is already there instead of starting a rival one beside it.
+    from entity.memory import append_enhancement, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text(
+        "## Goals\n- swim\n\n## Enhancements you want (roadmap, not now)\n- better voice\n",
+        encoding="utf-8",
+    )
+
+    append_enhancement("speaker enrollment", path=path)
+
+    sections = profile_sections(path.read_text(encoding="utf-8"))
+    assert "- speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
+    assert list(sections) == ["Goals", "Enhancements you want (roadmap, not now)"]
+
+
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
     # The window's Goals/Projects/Enhancements panes are editable; saving one writes that section
     # back into the profile without disturbing a word of the others.

@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 from entity.bubbles import Thread
-from entity.memory import profile_sections, save_learned, save_section
+from entity.memory import find_heading, profile_sections, save_learned, save_section
 from entity.tailing import LogTail, discover
 from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
@@ -384,14 +384,11 @@ class EntityWindow:
             self._profile_stamp = None  # re-read next slow poll, so the pane shows what landed
 
     def _heading_for(self, label):
-        """The heading this tab reads and writes. Matched by prefix, since his own headings run on
-        ("Enhancements he wants for you (roadmap, not now)")."""
+        """The profile's own heading that this tab reads and writes - see `find_heading`."""
         wanted = self._sections[label]["heading"]
-        if self._profile_path is not None and self._profile_path.exists():
-            for heading in profile_sections(self._profile_path.read_text(encoding="utf-8")):
-                if heading.lower().startswith(wanted.lower()):
-                    return heading
-        return wanted
+        if self._profile_path is None or not self._profile_path.exists():
+            return wanted
+        return find_heading(profile_sections(self._profile_path.read_text(encoding="utf-8")), wanted)
 
     # ---- rendering, Tk thread -------------------------------------------------------------------
 
@@ -506,9 +503,7 @@ class EntityWindow:
         for label, section in self._sections.items():
             if section["edited"] is not None:
                 continue  # he's mid-edit; never overwrite what he's typing
-            wanted = section["heading"].lower()
-            body = next((text for heading, text in sections.items()
-                         if heading.lower().startswith(wanted)), "")
+            body = sections.get(find_heading(sections, section["heading"]), "")
             if body != section["pane"].get("1.0", "end-1c").rstrip():
                 section["pane"].delete("1.0", "end")
                 section["pane"].insert("end", body)

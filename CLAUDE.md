@@ -8,6 +8,83 @@ behalf. The point is not convenience; it is presence — someone to show up for 
 that shields the user from the machinery underneath. Almost every law below exists because that
 shield tore somewhere.
 
+## Land by opening a PR — the merge queue gates and merges it
+
+**Never merge into the primary checkout, and never push to `main`.** You push your branch, open a
+PR, and enqueue it. GitHub's merge queue builds the candidate merge of your PR onto the current
+`main`, runs `.github/workflows/merge-gate.yml` on *that candidate*, and fast-forwards `main` only
+if it is green — so what lands is exactly what was validated, even with several agents landing at
+once, and there is no lock to hold.
+
+**This replaces the global end-of-task sequence's merge step, and the `.git/agent-merge.lock` that
+serializes it.** There is no local merge here, so no lock to take. Everything before it still
+stands — commit, rebase, full green suite — then you push and open a PR instead of merging. The
+gate runs the whole suite on `windows-latest`, the desk Entity runs on, so keep it green.
+
+Work on a branch in a worktree (`git worktree add .claude/worktrees/<name> -b claude/<name>`),
+never in the primary checkout. Sync by rebasing onto `origin/main` on a clean tree; never `reset`
+to tidy or to sync.
+
+```bash
+# from your worktree, on your claude/<name> branch, with your work committed:
+git fetch origin && git rebase origin/main    # rebase onto the LATEST main first
+git push -u origin HEAD                        # --force-with-lease if the rebase rewrote pushed commits
+gh pr create --fill --base main
+gh pr merge --auto                             # enqueue; the queue lands it when the gate is green
+                                               # --auto ALONE: --merge/--rebase/--squash trip "merge
+                                               # strategy is set by the merge queue" and may not enqueue
+```
+
+**Enqueuing is not the finish line — landing is.** On a moving `main` a PR routinely goes `DIRTY`
+or gets dropped from the queue on a red candidate, and then sits unmerged forever unless you act.
+Watch both the candidate run *and* the PR's own checks: a `merge_group` failure never appears in
+`gh pr checks`, and a failed `pull_request` check leaves auto-merge armed but never firing.
+
+```bash
+# Run in the background. Exits — and re-engages you — only when there is something to do:
+#   0  merged           → report "PR #N merged" once, then stop
+#   10 conflicts(DIRTY) → rebase onto origin/main, resolve inside the rebase, force-push, re-enqueue
+#   11 candidate failed → read the merge_group run log, fix, push, re-enqueue
+#   12 closed           → unexpected; surface to the user
+#   13 PR check failed  → read the failing pull_request run log, fix, push (auto-merge stays armed)
+pr=$(gh pr view --json number -q .number)
+mg() { gh run list --event merge_group --limit 20 --json databaseId,status,conclusion,headBranch \
+  -q "[.[]|select(.headBranch|contains(\"pr-$pr-\"))]|sort_by(.databaseId)|last|\"\(.databaseId) \(.conclusion//\"none\")\""; }
+base=$(mg); base=${base%% *}; base=${base:-0}   # ignore candidate runs from superseded fixes
+while :; do
+  st=$(gh pr view "$pr" --json state -q .state)
+  [ "$st" = MERGED ] && exit 0
+  [ "$st" = CLOSED ] && exit 12
+  [ "$(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus)" = DIRTY ] && exit 10
+  # A check that has actually concluded `fail` — not merely pending, which reads BLOCKED.
+  if gh pr checks "$pr" 2>/dev/null | grep -qiw fail; then exit 13; fi
+  latest=$(mg); rid=${latest%% *}
+  if [ -n "$rid" ] && [ "${rid:-0}" -gt "$base" ] 2>/dev/null; then
+    case "$latest" in *failure) exit 11;; esac
+  fi
+  sleep 45
+done
+```
+
+**To update a branch that is still in the queue you must dequeue it first** — a
+`push --force-with-lease` is rejected ("protected branch hook declined") while queued. Remove it,
+then push and re-enqueue:
+
+```bash
+gh api graphql -f query='mutation($id:ID!){dequeuePullRequest(input:{id:$id}){mergeQueueEntry{position}}}' \
+  -f id="$(gh pr view "$pr" --json id -q .id)"
+```
+
+**Delete your remote branch once the PR is terminal — but only on a positive merge check.**
+Deleting the head branch of a still-open PR auto-closes it unmerged, and the work silently never
+ships. Never key that on a watcher exit code:
+
+```bash
+gh pr view "$pr" --json state,mergedAt -q '.state + " " + (.mergedAt // "null")'
+# delete ONLY when this prints "MERGED <timestamp>"
+git push origin --delete "$br"
+```
+
 ## Read the evidence. Never ask for it to be pasted.
 
 Every session leaves artifacts. Use them before forming any theory:

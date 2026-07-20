@@ -1,0 +1,36 @@
+name: merge gate
+run-name: gating
+
+# The gate the merge queue runs on the candidate merge (this branch onto the main it
+# will land on), and on the PR itself so a red branch never reaches the queue.
+on:
+    pull_request:
+    merge_group:
+
+jobs:
+    suite:
+        # Entity is a Windows app - a WebView2 window, a PowerShell voice, os.startfile
+        # links, a low-level keyboard hook - so the desk it runs on is the desk it is
+        # gated on. A Linux or Mac runner would test a machine that does not exist. Kept
+        # a one-entry matrix so the check is named `suite (windows-latest)` (which the
+        # branch ruleset requires) and a second desk is one line away if it ever gains one.
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.13"
+
+            # The real manifest, not a hand-picked subset of it. A dependency that cannot
+            # install is a launch that dies on the user's desk - found here instead of
+            # there. The hardware and the model are mocked in the suite, so nothing is
+            # downloaded or opened.
+            - name: Install what the manifest says the app needs
+              run: pip install -e ".[dev]"
+
+            - name: The suite
+              run: python -m pytest -q

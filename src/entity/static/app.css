@@ -96,10 +96,20 @@ body.page { padding: 10px; }
    heard and acted on. Dimmed rather than struck through: struck through it cannot be read, and a
    done item is still something worth going back to. */
 .checklist { list-style: none; margin: 0; padding: 0; }
-.checklist li { padding: 2px 0; }
-.checklist label { display: flex; gap: 9px; align-items: baseline; cursor: pointer; }
-.checklist input { accent-color: var(--accent); margin: 0; flex: none; }
-.checklist li.done span { color: var(--dim); }
+/* The row itself is the line the box and the words sit on. It used to be a <label> inside the row,
+   which cannot be here: a label makes a click anywhere in it tick the box, and these are rows he
+   types into - the caret would never land where he aimed it. */
+.checklist li { display: flex; gap: 9px; align-items: baseline; padding: 2px 0; }
+.checklist input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0;
+                   flex: none; cursor: pointer; }
+/* The words ARE the item - this is what he types into, and what Enter makes another of. One of
+   them runs to a paragraph, so it wraps against its own edge under the box rather than under the
+   tick. It keeps a line's height while it is empty, or the row he has just made would be a box
+   with nothing beside it and nowhere to click. */
+.checklist .item { flex: 1; min-width: 0; min-height: 1.45em; padding: 0 4px; margin: 0 -4px;
+                   border-radius: 6px; outline: none; }
+.checklist .item:focus { background: rgba(127, 255, 0, .07); }
+.checklist li.done .item { color: var(--dim); }
 /* What it heard, and what he actually said. A rule is two things and an arrow between them, so it
    reads as one line rather than as a table to scan across. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }

@@ -248,51 +248,41 @@ ENHANCEMENTS_HEADING = "Enhancements"
 # a personal file the running app may be autosaving at the same moment.
 _BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?P<item>.*)$")
 UNTICKED, TICKED = "- [ ] ", "- [x] "
-# What the window shows in place of the markdown. A box you can see and click is the whole point of
-# his asking for this; `- [x]` spelled out is a thing to decode, not a thing to read.
-EMPTY_BOX, FULL_BOX = "☐ ", "☑ "
-_SHOWN = re.compile(r"^([☐☑])\s*(.*)$")
 
 
-def checklist_shown(body):
-    """The stored markdown as the window renders it: a box per item, everything else untouched."""
-    return "\n".join(_as_box(line) for line in body.splitlines())
+def checklist_items(body):
+    """A section's lines as the things the window ticks: whether each is done, and what it says.
+
+    ANY line with words on it is an item - "the enhancements tab should simply assume that any
+    newline is a checklist item" - because he types them in plain, and boxing only the ones already
+    punctuated as bullets left his own additions sitting outside the list they were meant to join.
+    A blank line is not an item; it is the gap between two."""
+    items = []
+    for line in body.splitlines():
+        match = _BULLET.match(line)
+        text = (match.group("item") if match else line).strip()
+        if text:
+            items.append({"done": match is not None and (match.group("tick") or " ") != " ",
+                          "text": text})
+    return items
 
 
-def _as_box(line):
-    """One line as a box. ANY line with words on it is an item - "the enhancements tab should simply
-    assume that any newline is a checklist item" - because he types them in plain, and boxing only
-    the ones already punctuated as bullets left his own additions sitting outside the list they were
-    meant to join. A blank line is the gap he left, and stays one."""
-    match = _BULLET.match(line)
-    item = (match.group("item") if match else line).strip()
-    if not item:
-        return line
-    ticked = match is not None and (match.group("tick") or " ") != " "
-    return (FULL_BOX if ticked else EMPTY_BOX) + item
+def checklist_markdown(items):
+    """The items back as markdown - the form the file keeps and the brain reads.
 
+    Not quite the inverse of `checklist_items`: a bullet written before the boxes existed comes
+    back as `- [ ]`, so the list upgrades itself the first time he touches it rather than needing a
+    migration run over a personal file the app may be autosaving at that moment.
 
-def checklist_stored(body):
-    """What the window shows, back as markdown - the form the file keeps and the brain reads.
+    A row with nothing typed into it yet is not an item. Enter is how every item is made, so the
+    empty row is the normal state of the one he is about to fill in; storing it would leave a
+    bullet with nothing after it sitting in his profile.
 
-    Not quite the inverse: a bullet written before the boxes existed comes back as `- [ ]`, so the
-    list upgrades itself the first time he touches it rather than needing a migration run over a
-    personal file the app may be autosaving at that moment."""
-    return "\n".join(_as_markdown(line) for line in body.splitlines())
-
-
-def _as_markdown(line):
-    shown = _SHOWN.match(line)
-    if shown is not None:
-        return _bullet(shown.group(1) == FULL_BOX.strip(), shown.group(2))
-    bullet = _BULLET.match(line)
-    if bullet is not None:
-        return _bullet((bullet.group("tick") or " ") != " ", bullet.group("item"))
-    return line if not line.strip() else _bullet(False, line)  # a plain line is an item too
-
-
-def _bullet(ticked, item):
-    return (TICKED if ticked else UNTICKED) + item.strip()
+    A row holding several lines - a block pasted into one of them - becomes the items it reads as.
+    Stored whole it would be one bullet with newlines inside it, and those lines come back as
+    items that have lost their place in the list."""
+    return "\n".join((TICKED if item["done"] else UNTICKED) + line.strip()
+                     for item in items for line in item["text"].splitlines() if line.strip())
 
 
 def find_heading(sections, stem):
@@ -305,14 +295,21 @@ def find_heading(sections, stem):
     return next((h for h in sections if h.lower().startswith(lowered)), stem)
 
 
-def _merged(path, heading, body, keeping):
-    """Their edited body, plus any line the section has gained since they started editing it."""
-    if keeping is None:
-        return body
-    current = profile_sections(_read(path)).get(heading, "")
-    added = [line for line in current.splitlines()
-             if line.strip() and line not in keeping.splitlines() and line not in body.splitlines()]
-    return "\n".join([body.rstrip()] + added) if added else body
+def save_checklist(path, heading, items, *, drawn):
+    """Write one section's list back, as the markdown the file keeps and the brain reads.
+
+    `drawn` is what the page believes the file holds - the words of every item it was drawn with,
+    or last sent. Anything the section has gained since is carried over rather than overwritten:
+    Entity files enhancements into this same list while the window sits open, and every keystroke
+    writes the whole list back, so without this the next character he types deletes them.
+
+    Compared on the WORDS of an item, never on the line it is stored as - the file upgrades `- x`
+    to `- [ ] x` the first time anything writes it, and comparing lines read that upgrade as an
+    item nobody had seen and filed a second copy of everything he had edited."""
+    seen = {item["text"] for item in items} | set(drawn)
+    gained = [item for item in checklist_items(profile_sections(_read(path)).get(heading, ""))
+              if item["text"] not in seen]
+    save_section(path, heading, checklist_markdown(items + gained))
 
 
 def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
@@ -370,18 +367,13 @@ def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_H
     return False
 
 
-def save_section(path, heading, body, *, keeping=None):
+def save_section(path, heading, body):
     """Replace one "## heading" section's body, leaving every other line of the file untouched.
 
     This is their own profile - the same file the brain loads as standing context - so an edit made
     in the window has to be surgical: rewriting the whole file from parsed sections would quietly
     drop the preamble and reflow everything they didn't touch.
-
-    `keeping` is what that section held when they started typing. Anything the file has gained since
-    - a line Entity filed while their edit was in progress - is carried over instead of being
-    overwritten, which is how one of its bullets ended up truncated mid-sentence.
     """
-    body = _merged(path, heading, body, keeping)
     path = Path(path)
     lines = _read(path).splitlines()
     start = end = None

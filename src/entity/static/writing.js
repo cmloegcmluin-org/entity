@@ -1,10 +1,18 @@
-/* The pages that are edited in place: the profile's sections, and what Entity has learned.
+/* The pages that are edited in place: the profile's lists, what Entity has learned, and the words
+   it swaps.
 
    There is no Save button, because a document you have to remember to save is one you lose. It
-   writes back when typing stops, and says so - a save nobody can see is one nobody trusts. */
+   writes back when typing stops, and says so - a save nobody can see is one nobody trusts.
+
+   And it writes back BEFORE the page goes. A save half a second after the last keystroke never
+   happens at all if the next thing you do is click another page in the bar, which is exactly how
+   the profile lost everything he added to it: "I add new items, tab away, tab back, and they're
+   just gone." So whatever is still waiting goes out the moment what he is editing loses focus,
+   and again on the way off the page - by beacon, the only send that outlives the page that
+   started it. */
 
 const saved = document.getElementById("saved");
-const AFTER = 1200;   // milliseconds of not typing before what is written goes back
+const AFTER = 500;   // milliseconds of not typing before what is written goes back
 
 function announce(what) {
   saved.textContent = what;
@@ -12,36 +20,157 @@ function announce(what) {
   setTimeout(() => saved.classList.remove("showing"), 1600);
 }
 
-async function write(where, body) {
-  await fetch(where, { method: "POST", body: new URLSearchParams(body) });
+/* Two shapes of thing to send, and one way to send either: a box of text is the field it holds,
+   a list is its items. `fetch` and `sendBeacon` both read the encoding off the body itself. */
+const asForm = (fields) => new URLSearchParams(fields);
+const asJson = (payload) => new Blob([JSON.stringify(payload)], { type: "application/json" });
+
+async function post(where, body, leaving) {
+  if (leaving) {
+    navigator.sendBeacon(where, body);   // the page is going; nothing that waits for a reply lands
+    return;
+  }
+  await fetch(where, { method: "POST", body });
   announce("Saved");
 }
 
-/* Where a box writes itself back to, and what it has to say to be understood there. */
-function destination(box) {
-  if (box.dataset.learned) return ["/memory", { body: box.value }];
-  if (box.dataset.translations) return ["/translations", { body: box.value }];
-  return ["/profile", { heading: box.dataset.heading, body: box.value }];
+/* ---- what is still waiting to be written back ----------------------------------------------- */
+
+const waiting = new Map();   // the box or list being edited -> what will save it, and when
+
+function soon(what, save) {
+  clearTimeout(waiting.get(what)?.timer);
+  waiting.set(what, { save, timer: setTimeout(() => flush(what), AFTER) });
 }
+
+function flush(what, leaving) {
+  const held = waiting.get(what);
+  if (!held) return;
+  clearTimeout(held.timer);
+  waiting.delete(what);
+  held.save(leaving);
+}
+
+/* Ticking a box is not typing: there is no pause to wait out, so it goes now - and drops whatever
+   was still on the timer, which is the same save reading the same list. */
+function atOnce(what, save) {
+  clearTimeout(waiting.get(what)?.timer);
+  waiting.delete(what);
+  save(false);
+}
+
+/* A click on another page in the bar takes this one away with the edit still on its timer. Both of
+   these fire while the page can still speak: `pagehide` is its last word, and a window merely
+   hidden - he switched to something else - may never come back to fire anything. */
+const flushAll = () => { for (const what of [...waiting.keys()]) flush(what, true); };
+addEventListener("pagehide", flushAll);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushAll(); });
+
+/* ---- the boxes of text: what Entity has learned, and the words it swaps ---------------------- */
 
 for (const box of document.querySelectorAll(".writing")) {
-  let waiting = null;
-  box.addEventListener("input", () => {
-    clearTimeout(waiting);
-    waiting = setTimeout(() => write(...destination(box)), AFTER);
-  });
+  // Which page this box belongs to, and so where it writes itself back to.
+  const where = box.dataset.learned ? "/memory" : "/translations";
+  const save = (leaving) => post(where, asForm({ body: box.value }), leaving);
+  box.addEventListener("input", () => soon(box, save));
+  box.addEventListener("blur", () => flush(box));
 }
 
-/* A checklist writes back the whole list every time one box is ticked: an item that gets done is
-   ticked, never removed, so what is stored is the list with one mark changed. */
+/* ---- the profile's lists: a box to tick, and the words beside it ----------------------------- */
+
+const rowsOf = (list) => [...list.querySelectorAll("li")];
+const wordsOf = (row) => row.querySelector(".item");
+const itemsOf = (list) => rowsOf(list).map((row) => ({
+  done: row.querySelector("input").checked,
+  text: wordsOf(row).textContent,
+}));
+
+/* Put the caret in a row, at one end or the other of what it says. */
+function caretTo(row, atStart) {
+  const words = wordsOf(row);
+  words.focus();
+  const spot = document.createRange();
+  spot.selectNodeContents(words);
+  spot.collapse(atStart);
+  const chosen = getSelection();
+  chosen.removeAllRanges();
+  chosen.addRange(spot);
+}
+
+const lengthBefore = (words, node, offset) => {
+  const spot = document.createRange();
+  spot.selectNodeContents(words);
+  spot.setEnd(node, offset);
+  return spot.toString().length;
+};
+
+/* Where the caret is in a row's words, as the start and end of what is selected - the same number
+   twice when nothing is. Measured as the length of the text before each point rather than as an
+   offset into a node, because the words are a single text node only until something splits them.
+   A selection that has escaped this row reads as the very end, so Enter adds a row rather than
+   cutting across two of them. */
+function caretIn(words) {
+  const chosen = getSelection();
+  const spot = chosen.rangeCount ? chosen.getRangeAt(0) : null;
+  const end = words.textContent.length;
+  if (!spot || !words.contains(spot.startContainer) || !words.contains(spot.endContainer)) {
+    return [end, end];
+  }
+  return [lengthBefore(words, spot.startContainer, spot.startOffset),
+          lengthBefore(words, spot.endContainer, spot.endOffset)];
+}
+
 for (const list of document.querySelectorAll(".checklist")) {
+  /* What the page believes the file holds, so a save can tell his own edit from an item Entity
+     filed into the same section while the window sat open. It is what was last SENT rather than
+     what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
+     it, and a stale answer here files a second copy of everything he has edited since. */
+  let drawn = itemsOf(list).map((item) => item.text);
+  const save = (leaving) => {
+    const items = itemsOf(list);
+    const was = drawn;
+    drawn = items.map((item) => item.text);
+    return post("/profile", asJson({ heading: list.dataset.heading, items, drawn: was }), leaving);
+  };
+
+  /* An item that gets done is ticked, never removed: it is the only record that a complaint was
+     heard and acted on. Dimmed rather than struck through, so it stays legible. */
   list.addEventListener("change", (event) => {
-    if (event.target.type !== "checkbox") return;
     event.target.closest("li").classList.toggle("done", event.target.checked);
-    const body = [...list.querySelectorAll("li")].map((row) => {
-      const ticked = row.querySelector("input").checked;
-      return `${ticked ? "☑" : "☐"} ${row.querySelector("span").textContent}`;
-    }).join("\n");
-    write("/profile", { heading: list.dataset.heading, body });
+    atOnce(list, save);
+  });
+
+  list.addEventListener("input", () => soon(list, save));
+  list.addEventListener("focusout", () => flush(list));
+
+  list.addEventListener("keydown", (event) => {
+    const words = event.target.closest(".item");
+    if (!words) return;
+    const row = words.closest("li");
+    if (event.key === "Enter") {
+      /* Enter is how an item is made - the whole point of this page. Whatever is to the right of
+         the caret goes with it, so Enter at the end of a line (which is where it is pressed) makes
+         an empty one, and Enter in the middle of one splits it where he asked. */
+      event.preventDefault();
+      const said = words.textContent;
+      const [from, to] = caretIn(words);
+      words.textContent = said.slice(0, from);
+      const next = row.cloneNode(true);   // a row's shape is written once, in the page
+      next.className = "";
+      next.querySelector("input").checked = false;
+      wordsOf(next).textContent = said.slice(to);
+      row.after(next);
+      soon(list, save);
+      caretTo(next, true);                // ...which loses focus, and sends what was just made
+    } else if (event.key === "Backspace" && !words.textContent && rowsOf(list).length > 1) {
+      /* Backspace out of a row he made and did not fill in, the way he made it. Only an empty one:
+         an item with words in it is removed by emptying it first, never by one stray keystroke. */
+      event.preventDefault();
+      const above = row.previousElementSibling;
+      const back = above || row.nextElementSibling;
+      row.remove();
+      soon(list, save);
+      caretTo(back, !above);
+    }
   });
 }

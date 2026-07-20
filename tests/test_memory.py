@@ -279,45 +279,107 @@ def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
     assert "- [x] better voice" in path.read_text(encoding="utf-8")
 
 
-def test_a_checklist_is_shown_as_boxes_and_stored_as_markdown():
-    # The tab is where he actually reads this list, so in the window the boxes have to BE boxes -
-    # while the file stays markdown, because that same file is what the brain loads as standing
-    # context and what he reads outside the app.
-    from entity.memory import checklist_shown, checklist_stored
+def test_a_section_reads_back_as_the_items_the_window_ticks():
+    # The window draws boxes to click, so what it is handed is items - whether each is done and
+    # what it says - rather than lines for it to parse a second time. The file stays markdown:
+    # that same file is what the brain loads as standing context and what he reads outside the app.
+    from entity.memory import checklist_items
 
     stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
 
-    assert checklist_shown(stored) == (
-        "☐ better voice\n☑ speaker enrollment\n☐ a bullet from before the boxes\n\n☐ prose"
+    assert checklist_items(stored) == [
+        {"done": False, "text": "better voice"},
+        {"done": True, "text": "speaker enrollment"},
+        {"done": False, "text": "a bullet from before the boxes"},
+        {"done": False, "text": "prose"},   # any line with words on it is an item
+    ]
+
+
+def test_the_items_go_back_as_the_markdown_the_brain_reads():
+    # A bullet written before the boxes existed comes back as `- [ ]`, so the list upgrades itself
+    # the first time he touches it rather than needing a migration run over a personal file the
+    # running app may be autosaving at that moment.
+    from entity.memory import checklist_items, checklist_markdown
+
+    items = checklist_items("- [x] done\n- a bullet from before the boxes\ntyped straight in")
+
+    assert checklist_markdown(items) == (
+        "- [x] done\n- [ ] a bullet from before the boxes\n- [ ] typed straight in"
     )
-    assert checklist_stored(checklist_shown(stored)) == (
-        "- [ ] better voice\n- [x] speaker enrollment\n- [ ] a bullet from before the boxes\n\n- [ ] prose"
+
+
+def test_several_lines_pasted_into_one_row_become_the_items_they_read_as():
+    # A row is one line in the file, so a pasted block landing in one of them would otherwise be
+    # stored as a bullet with newlines inside it - which reads back as items that have lost their
+    # place in the list. It is split where he pasted the breaks, which is where he meant them.
+    from entity.memory import checklist_markdown
+
+    assert checklist_markdown([{"done": False, "text": "better voice\nspeaker enrollment"}]) == (
+        "- [ ] better voice\n- [ ] speaker enrollment"
     )
 
 
-def test_every_line_he_types_into_the_checklist_becomes_an_item():
-    # "The enhancements tab should simply assume that any newline is a checklist item." He types
-    # them in as plain lines; a tab that boxed only the ones already punctuated as bullets left his
-    # own additions sitting there as prose, outside the list they were meant to join.
-    from entity.memory import checklist_shown, checklist_stored
+def test_a_row_with_nothing_typed_into_it_yet_is_not_stored():
+    # Pressing Enter makes the row before there are any words in it - and Enter is how every item
+    # is made, so an untyped row is the normal state of the one he is about to fill in. Storing it
+    # would leave a bullet with nothing after it sitting in his profile.
+    from entity.memory import checklist_markdown
 
-    assert checklist_shown("- [x] done\ntyped straight in\n\nafter a gap") == (
-        "☑ done\n☐ typed straight in\n\n☐ after a gap"
+    assert checklist_markdown([{"done": False, "text": "better voice"},
+                               {"done": False, "text": "  "}]) == "- [ ] better voice"
+
+
+def test_ticking_and_typing_write_the_whole_list_back_into_its_section(tmp_path):
+    from entity.memory import profile_sections, save_checklist
+
+    path = tmp_path / "profile.md"
+    path.write_text("# Ada\n\n## Goals\n- swim\n- cello\n\n## Projects\n- the atlas\n",
+                    encoding="utf-8")
+
+    save_checklist(path, "Goals", [{"done": True, "text": "swim"},
+                                   {"done": False, "text": "cello, twice a week"}],
+                   drawn=["swim", "cello"])
+
+    sections = profile_sections(path.read_text(encoding="utf-8"))
+    assert sections["Goals"] == "- [x] swim\n- [ ] cello, twice a week"
+    assert sections["Projects"] == "- the atlas"  # the section beside it is untouched
+
+
+def test_an_item_filed_while_the_page_sat_open_survives_the_next_thing_he_types(tmp_path):
+    # Entity files enhancements into this same list, and the window is open all session. Every
+    # keystroke writes the whole list back, so without this the next character he types deletes
+    # whatever it filed a moment ago.
+    from entity.memory import append_enhancement, profile_sections, save_checklist
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
+    drawn = ["better voice"]        # what the page was showing when he started typing into it
+    append_enhancement("filed while he typed", path=path)
+
+    save_checklist(path, "Enhancements", [{"done": False, "text": "better voice, Cartesia"}],
+                   drawn=drawn)
+
+    assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
+        "- [ ] better voice, Cartesia\n- [ ] filed while he typed"
     )
-    assert checklist_stored("☑ done\ntyped straight in") == "- [x] done\n- [ ] typed straight in"
 
 
-def test_a_blank_line_stays_a_blank_line():
-    from entity.memory import checklist_shown, checklist_stored
+def test_an_item_he_edits_after_ticking_it_is_not_filed_a_second_time(tmp_path):
+    # The first save upgrades `- swim` to `- [x] swim` in the file. Comparing what the page holds
+    # against the stored LINES then reads that upgrade as an item nobody had seen, and files a
+    # second copy of it beside his edit - so the comparison is on the words of an item instead.
+    from entity.memory import profile_sections, save_checklist
 
-    assert checklist_shown("one\n\ntwo") == "☐ one\n\n☐ two"  # the gap he left is his
-    assert checklist_stored("☐ one\n\n☐ two") == "- [ ] one\n\n- [ ] two"
+    path = tmp_path / "profile.md"
+    path.write_text("## Goals\n- swim\n", encoding="utf-8")
 
+    save_checklist(path, "Goals", [{"done": True, "text": "swim"}], drawn=["swim"])
+    save_checklist(path, "Goals", [{"done": True, "text": "swim, three times a week"}],
+                   drawn=["swim"])
 
-def test_a_box_ticked_in_the_window_is_stored_as_a_ticked_one():
-    from entity.memory import checklist_stored
-
-    assert checklist_stored("☑ better voice") == "- [x] better voice"
+    assert profile_sections(path.read_text(encoding="utf-8"))["Goals"] == (
+        "- [x] swim, three times a week"
+    )
 
 
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):

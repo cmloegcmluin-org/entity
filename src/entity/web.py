@@ -18,11 +18,10 @@ from pathlib import Path
 from flask import Flask, render_template, request
 
 from entity.memory import (
-    checklist_shown,
-    checklist_stored,
+    checklist_items,
     profile_sections,
+    save_checklist,
     save_learned,
-    save_section,
     save_translations,
     translation_pairs,
 )
@@ -141,16 +140,6 @@ def _heading(found, stem):
     profile glosses its headings however it likes ("Enhancements he wants for you (roadmap, not
     now)")."""
     return next((head for head in found if head.lower().startswith(stem.lower())), None)
-
-
-def _items(body):
-    """A checklist's lines as things to tick: whether each is done, and what it says.
-
-    Any line with words on it is an item - they are typed in plain, and boxing only what is
-    already punctuated as a bullet left additions sitting outside the list they were meant to
-    join. A blank line is the gap that was left, and stays one."""
-    return [{"done": line.startswith("☑"), "text": line[1:].strip(), "blank": not line.strip()}
-            for line in checklist_shown(body).splitlines()]
 
 
 class Agents:
@@ -280,8 +269,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         found = _profile_text()
         sections = [
             # A box to click, not `- [x]` spelled out for the reader to decode.
-            {"title": title, "heading": heading, "body": found[heading],
-             "items": _items(found[heading])}
+            {"title": title, "heading": heading, "items": checklist_items(found[heading])}
             for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
             if heading is not None
         ]
@@ -289,13 +277,15 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.post("/profile")
     def write_profile():
-        """Save one section back, keeping what was there when the page was drawn - so a save can
-        tell an edit from a change the brain made underneath it. It goes back as the markdown the
-        file keeps and the brain reads, never as the boxes drawn from it."""
+        """Save one section's list back, as the markdown the file keeps and the brain reads -
+        never as the boxes drawn from it.
+
+        `drawn` is what the page believes the file holds, so an enhancement Entity filed into the
+        same section while the window sat open is carried over rather than overwritten by the next
+        character he types."""
         if profile_path is not None:
-            heading = request.form["heading"]
-            save_section(profile_path, heading, checklist_stored(request.form["body"]),
-                         keeping=_profile_text().get(heading, ""))
+            sent = request.get_json()
+            save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"])
         return ("", 204)
 
     @app.get("/persona")

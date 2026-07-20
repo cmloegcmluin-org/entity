@@ -1,11 +1,26 @@
 {% extends "base.html" %}
 {% block title %} · Profile{% endblock %}
 
+{#- One row of a list, written once here: Enter makes the next one by cloning the row it was
+    pressed in, so there is no second definition of a row's shape in the script to drift from this
+    one. Which is why a list is never empty - an empty section still draws one row, and that row
+    is both where he types and what the next one is made from.
+
+    No <label> around it. A label makes a click anywhere inside it tick the box, and these are rows
+    he types into: the caret would never land where he aimed it. -#}
+{% macro row(item={}) -%}
+<li class="{{ 'done' if item.done }}"><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}><span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+{%- endmacro %}
+
 {% block content %}
 {#- The four sections that were four tabs. They are the same kind of thing - a list under a
     heading - so they read down one page instead of hiding each other, and every one of them draws
-    the same boxes. Edited in place and saved when typing stops: a document you have to remember
-    to save is one you lose. -#}
+    the same boxes.
+
+    Edited in place: the words of an item ARE the item, and Enter in one makes the next. There is
+    no box to edit the section as raw markdown any more - it was the only way to add an item and
+    it lost them ("I add new items, tab away, tab back, and they're just gone"), so for as long as
+    it stood there was no way to file an enhancement at all. -#}
 <main id="content" class="reading">
   {% for section in sections %}
   <section class="section">
@@ -14,20 +29,10 @@
         complaint was heard and acted on. Dimmed rather than struck through, so it stays legible
         - "that makes it impossible to read; simply dim the text when it has been checked". -#}
     <ul class="checklist" data-heading="{{ section.heading }}">
-      {% for item in section["items"] if not item.blank %}
-      <li class="{{ 'done' if item.done }}">
-        <label>
-          <input type="checkbox" {{ 'checked' if item.done }}>
-          <span>{{ item.text }}</span>
-        </label>
-      </li>
+      {% for item in section["items"] %}{{ row(item) }}
+      {% else %}{{ row() }}{# somewhere to type when a section is empty; Enter grows it from there #}
       {% endfor %}
     </ul>
-    <details class="as-text">
-      <summary>Edit as text</summary>
-      <textarea class="writing" data-heading="{{ section.heading }}"
-                aria-label="{{ section.title }}">{{ section.body }}</textarea>
-    </details>
   </section>
   {% else %}
   <p class="empty">No profile is loaded, so there is nothing here to edit.</p>

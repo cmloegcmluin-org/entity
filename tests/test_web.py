@@ -76,11 +76,12 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     client = _client(profile_path=profile)
 
     page = client.get("/profile").get_data(as_text=True)
-    assert "- better voice" in page and "- swim" in page
+    assert "better voice" in page and "swim" in page
     # Matched by prefix, since a profile glosses its own headings however it likes.
     assert 'data-heading="Enhancements he wants for you (roadmap, not now)"' in page
 
-    client.post("/profile", data={"heading": "Goals", "body": "- swim, three times a week"})
+    client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
+                                  "items": [{"done": False, "text": "swim, three times a week"}]})
 
     saved = profile.read_text(encoding="utf-8")
     # A bullet written before the boxes existed comes back as an unticked one, so the list
@@ -102,13 +103,17 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
     assert page.count('<li class="done">') == 1
 
     # Ticking one writes the whole list back as markdown, which is the form the brain reads.
-    client.post("/profile", data={"heading": "Enhancements he wants for you (roadmap, not now)",
-                                  "body": "☑ hear only his voice\n☑ live captions\n☐ plain line"})
+    client.post("/profile", json={
+        "heading": "Enhancements he wants for you (roadmap, not now)",
+        "drawn": ["hear only his voice", "live captions", "plain line"],
+        "items": [{"done": True, "text": "hear only his voice"},
+                  {"done": True, "text": "live captions"},
+                  {"done": False, "text": "plain line"}],
+    })
 
     saved = profile.read_text(encoding="utf-8")
     assert "- [x] live captions" in saved  # ticked, not removed - the record that it was done
     assert "- [ ] plain line" in saved     # and a plain line joined the list it was meant to
-    assert "☑" not in saved                # what is drawn never reaches the file
 
 
 def test_every_translation_in_force_is_on_the_page_and_his_own_save_back(tmp_path):
@@ -178,9 +183,23 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
     assert page.count('<input type="checkbox"') == 4
 
     # And a tick in any of them still writes markdown back, which is what the brain reads.
-    client.post("/profile", data={"heading": "Goals", "body": "☑ swim"})
+    client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
+                                  "items": [{"done": True, "text": "swim"}]})
 
     assert "- [x] swim" in profile.read_text(encoding="utf-8")
+
+
+def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path):
+    # "I add new items, tab away, tab back, and they're just gone." The box to edit a section as
+    # raw markdown was the only way to add one, and it lost what he typed - so the items
+    # themselves are what he types into, and a new one is made by pressing Enter in the list.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
+
+    page = _client(profile_path=profile).get("/profile").get_data(as_text=True)
+
+    assert page.count('contenteditable="plaintext-only"') == 2  # the words of an item are the item
+    assert "Edit as text" not in page and "<textarea" not in page
 
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):

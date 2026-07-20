@@ -31,7 +31,7 @@ from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.supervising_brain import SupervisingBrain
-from entity.transcript import Transcript
+from entity.transcript import Transcript, recent_turns
 from entity.tts_system import NullTTS, SystemTTS
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
@@ -224,7 +224,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
-    sdk_brain = SdkBrain(persona=_persona(), user=user_name(load_profile()))
+    # Seeded with the tail of the last session's transcript, so a restart - his only way of picking
+    # up a fix - resumes the conversation instead of greeting him as a stranger.
+    sdk_brain = SdkBrain(persona=_persona(), user=user_name(load_profile()),
+                         seed_turns=recent_turns(TRANSCRIPTS))
     sdk_brain.warmup()
     # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
     # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds

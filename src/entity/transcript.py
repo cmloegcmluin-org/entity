@@ -101,6 +101,41 @@ DAY_BREAK = "───────  {}  ───────"
 SESSION_BREAK = "•   •   •"  # filled, not middle dots: at this size those are three faint specks
 
 
+def recent_turns(directory, keep=16):
+    """The tail of the newest session, as (their words, the reply) pairs - the seed that lets a
+    restarted process pick the conversation back up instead of greeting them as a stranger.
+
+    "There should be a way to reload Entity so that it gets any fixes but without breaking the
+    current session." The half of a restart that breaks the session is the lost thread; the
+    transcript already holds it. Only the newest file: continuity is with the conversation they
+    just had, and the older history is already in learned.md. A question with no reply under it
+    (the line the session died on) is skipped, never stitched to the next answer - a seed where
+    answers sit under the wrong questions is worse than no seed at all.
+    """
+    directory = Path(directory)
+    if not directory.is_dir():
+        return []
+    newest = max(directory.glob("*.log"), default=None)  # filenames sort chronologically
+    if newest is None:
+        return []
+    try:
+        lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    turns, question = [], None
+    for line in lines:
+        parsed = parse_line(line)
+        if parsed is None:
+            continue
+        role, _, text = parsed
+        if role == "you":
+            question = text  # a question already waiting is the one the session died on - dropped
+        elif role == "entity" and question is not None:
+            turns.append((question, text))
+            question = None
+    return turns[-keep:]
+
+
 def parse_line(line):
     """Read one recorded line back as (role, time, text), or None if it isn't conversation.
 

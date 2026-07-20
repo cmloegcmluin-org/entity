@@ -41,6 +41,47 @@ def test_a_remember_false_turn_stays_out_of_the_recent_window():
     assert "HEARTBEAT poll" not in carried  # the poll didn't enter the carried-forward memory
 
 
+def test_a_brain_seeded_with_past_turns_starts_mid_conversation():
+    # A restart used to greet him as a stranger five minutes after they'd been mid-task - that is
+    # the "breaking the current session" half of his reload ticket. Seeded, the FIRST session opens
+    # already carrying the recent back-and-forth, exactly as a compaction reseed does.
+    made = []
+
+    class Session:
+        def __init__(self, options):
+            made.append(options)
+            self.last_context_tokens = 0
+
+        def ask(self, message):
+            return "reply"
+
+        def close(self):
+            pass
+
+    SdkBrain(session_factory=Session, user="Ada",
+             seed_turns=[("how is the agent doing", "Still working.")])
+
+    prompt = made[0].system_prompt
+    assert "Ada: how is the agent doing" in prompt and "You: Still working." in prompt
+    assert "continuity" in prompt  # the same framing a compaction reseed carries
+
+
+def test_an_unseeded_brain_starts_clean():
+    made = []
+
+    class Session:
+        def __init__(self, options):
+            made.append(options)
+            self.last_context_tokens = 0
+
+        def close(self):
+            pass
+
+    SdkBrain(session_factory=Session)
+
+    assert "continuity" not in made[0].system_prompt  # no seed, no invented history
+
+
 def test_respond_rebuilds_the_session_when_it_hits_a_usage_limit_then_recovers():
     made = []
 

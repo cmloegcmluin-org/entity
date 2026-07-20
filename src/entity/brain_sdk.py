@@ -156,6 +156,7 @@ class SdkBrain:
         session_factory=SdkSession,
         compact_growth_budget=DEFAULT_COMPACT_GROWTH,
         recent_turns_kept=DEFAULT_RECENT_TURNS_KEPT,
+        seed_turns=(),
     ):
         self._persona = persona
         self._user = user  # what to call the speaker when the carried turns are read back
@@ -163,10 +164,14 @@ class SdkBrain:
         self._growth_budget = compact_growth_budget
         self._new_session = session_factory
         self._baseline = None  # context size at the start of the current session's life
-        self._recent = deque(maxlen=recent_turns_kept)  # last turns, carried across a compaction
+        self._recent = deque(seed_turns, maxlen=recent_turns_kept)  # last turns, carried across a compaction
         self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
         self._respond_lock = threading.Lock()  # one session, so one ask at a time
-        self._session = self._new_session(_make_options(persona, model))
+        # `seed_turns` are the tail of the LAST session's transcript, so a restarted process picks
+        # the conversation back up instead of greeting its user as a stranger - the machinery is
+        # the compaction reseed, fed from disk instead of from this process's own memory.
+        self._session = self._new_session(
+            self._seeded_options() if self._recent else _make_options(persona, model))
 
     def interrupt(self):
         """Cancel the ask in flight so a barge-in doesn't have to wait it out. The flag is set

@@ -136,3 +136,68 @@ def test_lines_that_are_not_conversation_read_back_as_nothing():
 
     assert parse_line("") is None
     assert parse_line("[03:41:12] ") is None
+
+
+def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
+    # "There should be a way to reload Entity so that it gets any fixes but without breaking the
+    # current session." The half that breaks is the thread of the conversation: a fresh process
+    # started with no memory of five minutes ago. The transcript already holds those turns; this
+    # reads them back as (his words, the reply) pairs so a restarted brain can be seeded with them.
+    from entity.transcript import recent_turns
+
+    log = tmp_path / "session-20260719-200000.log"
+    log.write_text(
+        "===== 2026-07-19 =====\n"
+        "[20:00:01] you said: how is the agent doing\n"
+        "[20:00:02] Got it.\n"
+        "[20:00:03] (thinking…)\n"
+        "[20:00:05] entity> Still working - nothing new to report.\n"
+        "[20:00:09]   [think 2.2s · speak 1.8s]\n"
+        "[20:01:00] you said: okay tell it to rebase first\n"
+        "[20:01:02] entity> Done - passed that along.\n",
+        encoding="utf-8",
+    )
+
+    assert recent_turns(tmp_path) == [
+        ("how is the agent doing", "Still working - nothing new to report."),
+        ("okay tell it to rebase first", "Done - passed that along."),
+    ]
+
+
+def test_only_the_newest_session_is_read_back(tmp_path):
+    # Continuity is with the conversation he just had, not with every session ever - the older
+    # history is already in learned.md and on screen; re-feeding weeks of it would drown the seed.
+    from entity.transcript import recent_turns
+
+    (tmp_path / "session-20260718-100000.log").write_text(
+        "[10:00:00] you said: old question\n[10:00:01] entity> old answer\n", encoding="utf-8")
+    (tmp_path / "session-20260719-200000.log").write_text(
+        "[20:00:00] you said: new question\n[20:00:01] entity> new answer\n", encoding="utf-8")
+
+    assert recent_turns(tmp_path) == [("new question", "new answer")]
+
+
+def test_recent_turns_keeps_only_the_tail_and_survives_absence(tmp_path):
+    from entity.transcript import recent_turns
+
+    lines = "".join(f"[20:00:0{n%10}] you said: q{n}\n[20:00:0{n%10}] entity> a{n}\n" for n in range(9))
+    (tmp_path / "session-20260719-200000.log").write_text(lines, encoding="utf-8")
+
+    assert recent_turns(tmp_path, keep=2) == [("q7", "a7"), ("q8", "a8")]
+    assert recent_turns(tmp_path / "nowhere") == []
+
+
+def test_a_question_the_session_died_on_is_not_paired_with_the_next_answer(tmp_path):
+    # A crash between his words and the reply must not stitch his question to the answer of the
+    # NEXT question - a seeded conversation where answers sit under the wrong questions is worse
+    # than no seed at all.
+    from entity.transcript import recent_turns
+
+    (tmp_path / "session-20260719-200000.log").write_text(
+        "[20:00:00] you said: the one it died on\n"
+        "[20:01:00] you said: a fresh start\n"
+        "[20:01:01] entity> the fresh answer\n",
+        encoding="utf-8",
+    )
+
+    assert recent_turns(tmp_path) == [("a fresh start", "the fresh answer")]

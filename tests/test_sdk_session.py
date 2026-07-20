@@ -129,3 +129,27 @@ def test_interrupt_runs_the_clients_interrupt_on_the_session_loop():
 
     assert client.interrupted.is_set()  # the cancel was driven on the session's own event loop
     session.close()
+
+
+def test_a_closed_session_refuses_work_instead_of_hanging_on_it_forever():
+    # `close()` stops this session's private event loop, and a coroutine handed to a stopped loop is
+    # queued and never run - so `.result()` waits for something that cannot happen. Anything holding
+    # a closed session then stops answering ALTOGETHER rather than failing: no reply, no error, no
+    # end to the wait. A brain rebuild that fails leaves exactly that session in place.
+    session = SdkSession(object(), client_factory=lambda options: FakeClient())
+    session.close()
+
+    outcome = []
+    asking = threading.Thread(target=lambda: outcome.append(_ask_quietly(session)), daemon=True)
+    asking.start()
+    asking.join(2.0)
+
+    assert not asking.is_alive(), "asking a closed session never came back"
+    assert isinstance(outcome[0], Exception)  # it fails, and a failure is something callers can see
+
+
+def _ask_quietly(session):
+    try:
+        return session.ask("are you there")
+    except Exception as exc:
+        return exc

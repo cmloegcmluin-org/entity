@@ -48,11 +48,25 @@ class SdkSession:
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
+        self._closed = False
         self._client = client_factory(options=options)
         self._submit(self._client.connect())
         self.last_context_tokens = 0  # size of the context the most recent ask processed
 
     def _submit(self, coro):
+        """Run a coroutine on this session's loop and wait for it.
+
+        Refused once closed, because closing STOPS that loop: a coroutine handed to a stopped loop
+        is queued and never run, so the wait is for something that cannot happen. Whoever still
+        holds a closed session would then not fail - it would stop answering altogether, with no
+        reply, no error and no end to the wait. A brain whose rebuild failed holds exactly that.
+        """
+        if self._closed:
+            coro.close()  # it will never be awaited; closing it keeps the warning out of the log
+            raise RuntimeError("this session is closed")
+        return self._run(coro)
+
+    def _run(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
 
     def interrupt(self):
@@ -88,7 +102,12 @@ class SdkSession:
         return self._submit(self._ask(prompt, on_message))
 
     def close(self):
+        """Disconnect and stop the loop. Idempotent: closing twice happens on every failure path,
+        and the second call must not wait on a loop the first one already stopped."""
+        if self._closed:
+            return
+        self._closed = True
         try:
-            self._submit(self._client.disconnect())
+            self._run(self._client.disconnect())
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)

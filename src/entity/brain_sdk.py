@@ -185,7 +185,8 @@ class SdkBrain:
         first, and it's what makes `respond` abandon the turn rather than reconnect-and-retry -
         so cancellation holds even if the underlying interrupt call itself fails."""
         self._interrupting.set()
-        self._session.interrupt()
+        if self._session is not None:
+            self._session.interrupt()
 
     def respond(self, utterance, *, remember=True):
         """Ask the brain. `remember=False` keeps a background exchange out
@@ -196,7 +197,7 @@ class SdkBrain:
             if self._should_compact():
                 self._compact()
             try:
-                reply = self._session.ask(utterance)
+                reply = self._live_session().ask(utterance)
             except Exception:
                 # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
                 # retry - re-asking would re-run the very work we just cancelled.
@@ -205,7 +206,7 @@ class SdkBrain:
                 # Otherwise the session may be wedged (a dropped connection strands every later turn
                 # as a "glitch"). Rebuild it and try once more; only give up if that also fails.
                 self._reconnect()
-                reply = self._session.ask(utterance)
+                reply = self._live_session().ask(utterance)
             if self._interrupting.is_set():
                 raise BrainInterrupted  # a reply may have landed, but it was cut off - drop it unspoken
             if _is_usage_limit(reply):
@@ -213,7 +214,7 @@ class SdkBrain:
                 # try once more: a fresh session recovers the moment usage is back, instead of
                 # parroting the notice forever. If still gone, the retry says so once - not in a loop.
                 self._reconnect()
-                reply = self._session.ask(utterance)
+                reply = self._live_session().ask(utterance)
             self._observe(self._session.last_context_tokens)
             if remember:
                 self._recent.append((utterance, reply))
@@ -227,6 +228,7 @@ class SdkBrain:
     def _should_compact(self):
         return (
             self._baseline is not None
+            and self._session is not None
             and self._session.last_context_tokens - self._baseline >= self._growth_budget
         )
 
@@ -244,14 +246,27 @@ class SdkBrain:
             pass
 
     def _reconnect(self):
-        # The old session is wedged, so drop it first, then rebuild - still seeded with the recent
-        # turns so a dropped connection doesn't also wipe the thread of the conversation.
+        """Drop the wedged session and build a fresh one, still seeded with the recent turns so a
+        dropped connection doesn't also wipe the thread of the conversation.
+
+        The old session is let go BEFORE the replacement is attempted, and a failed attempt leaves
+        none rather than the dead one - `_live_session` builds the next one on demand. Keeping the
+        closed session was how a single bad moment became the rest of the run: it had been closed,
+        so it could never answer again, and every later turn asked it anyway.
+        """
+        old, self._session = self._session, None
         try:
-            self._session.close()
+            old.close()
         except Exception:
             pass
-        self._session = self._new_session(self._seeded_options())
-        self._baseline = None
+        self._live_session()
+
+    def _live_session(self):
+        """The session to ask, built now if the last attempt to build one failed."""
+        if self._session is None:
+            self._session = self._new_session(self._seeded_options())
+            self._baseline = None
+        return self._session
 
     def _seeded_options(self):
         """Options for a fresh session that carries the recent turns forward as context."""
@@ -265,7 +280,8 @@ class SdkBrain:
 
     def warmup(self):
         """Pay the variable cold-start of the first query now, so the user's first real turn is fast."""
-        self._session.ask("Reply with just: ready")
+        self._live_session().ask("Reply with just: ready")
 
     def close(self):
-        self._session.close()
+        if self._session is not None:
+            self._session.close()

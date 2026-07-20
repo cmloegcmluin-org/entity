@@ -82,6 +82,38 @@ def test_an_unseeded_brain_starts_clean():
     assert "continuity" not in made[0].system_prompt  # no seed, no invented history
 
 
+def test_a_rebuild_that_fails_leaves_no_session_rather_than_a_dead_one():
+    # "It has never said that and recovered." A rebuild that itself failed left `self._session`
+    # pointing at the session it had just CLOSED, and a closed session cannot answer again - so one
+    # bad moment (this morning it was a CLINotFoundError) became the rest of the run. Nothing is
+    # kept now; the next turn builds a fresh one and gets on with it.
+    made = []
+
+    class RefusesToBeBuiltOnce:
+        def __init__(self, options):
+            made.append(self)
+            self.closed = False
+            self.last_context_tokens = 0
+            if len(made) == 2:  # the rebuild can't reach the CLI either
+                raise RuntimeError("CLI not found")
+
+        def ask(self, message):
+            if self.closed or self is made[0]:
+                raise RuntimeError("this session is gone")
+            return "back with you"
+
+        def close(self):
+            self.closed = True
+
+    brain = SdkBrain(session_factory=RefusesToBeBuiltOnce)
+
+    with pytest.raises(RuntimeError):
+        brain.respond("are you there")  # this turn is lost: the rebuild failed too
+
+    assert brain._session is None  # and nothing dead was left behind to be asked again
+    assert brain.respond("are you there") == "back with you"  # so the next turn simply works
+
+
 def test_respond_rebuilds_the_session_when_it_hits_a_usage_limit_then_recovers():
     made = []
 

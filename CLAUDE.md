@@ -84,7 +84,8 @@ transcription into an editable draft, `hey entity` / `stop listening` to arm and
 reports whether it is recording so nothing speaks over the user. `gui.py` mirrors everything through
 one thread-safe feed into Tk; anything that can be wrong lives outside Tk and is tested without a
 display. `bubbles.py` is one tinted box per message — a real widget, because a Tk tag's background
-paints the whole line box. `agent_desk.py` holds each agent as a live session in-process (handles
+paints the whole line box; it also underlines whatever a message names that can be opened, which
+`links.py` decides and opens. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets) and streams the whole exchange into its log; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.

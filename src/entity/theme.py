@@ -9,3 +9,4 @@ MINE = "#2b3a1a"  # the user's messages, right - a warm dark green
 ITS = "#22262b"  # Entity's, left - a cool dark slate
 ACCENT = "#7fff00"  # teal
 SELECTION = "#3a5f00"
+LINK = "#8ab4f8"  # a path or address to click - blue and underlined, the one universal affordance

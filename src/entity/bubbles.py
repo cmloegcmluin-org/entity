@@ -7,11 +7,18 @@ width is its own, which means a real widget. Each one is a `Frame` of measured s
 `Text` that can still be selected and copied from, embedded in the pane and pushed to its side
 by the line's justify.
 
-The measuring is pure and lives at the top of this file, so what decides a bubble's width can be
-tested without a display; the Tk half below only builds what those numbers describe.
+A bubble also carries whatever it names that can be opened - a path, a web address - underlined
+and clickable, because reading a path off the screen to type it somewhere else is exactly the
+work the window exists to save. What counts as one is `links.py`; where it LANDED, once the
+wrapping has had its way with it, is `link_runs` below.
+
+The measuring is pure and lives at the top of this file, so what decides a bubble's width and
+where its links ended up can be tested without a display; the Tk half below only builds what
+those numbers describe.
 """
 
-from entity.theme import DIM, FG, ITS, MINE, PANEL, PAST, SELECTION
+from entity.links import link_in
+from entity.theme import DIM, FG, ITS, LINK, MINE, PANEL, PAST, SELECTION
 
 SHARE = 0.55  # of the pane a bubble may take - about half, the way a message thread reads
 PAD_X = 10
@@ -24,6 +31,8 @@ WORK_FONT = ("Consolas", 9)
 PAGE = 40  # messages built at a time - what a screenful needs, and what a scroll back adds
 COPY_ICON = "⧉"  # two joined squares - the copy glyph, in the font the window already uses
 REACH_MS = 250  # how long the copy button waits after the pointer leaves, to be reachable
+LINK_TAG = "link"  # one tag per openable thing in a message, numbered - see `_mark_links`
+STILL = 3  # pixels a click may wobble and still be a click, not a drag - see `_link_released`
 
 # Who sits where, and in what tint. A heads-up is Entity talking out of turn, so it takes Entity's
 # side and color and says so in the name.
@@ -86,6 +95,64 @@ def _remembering(measure):
     return width
 
 
+def link_runs(text, lines):
+    """Every openable thing in `text`, and where its characters landed once wrapped, as
+    (target, [(row, column, length), ...]) - more than one run when the wrapping cut it up.
+
+    Where a link ENDED UP is not something the message can be searched for: wrapping joins words
+    with single spaces and cuts one too long for the bubble into pieces on consecutive lines.
+    It can be walked to, though. Wrapping never reorders and never alters a character - it only
+    replaces the whitespace between words - so stepping through the laid-out lines and the
+    message's words together says where each word went, pieces and all."""
+    found = []
+    at = (0, 0)
+    for word in text.split():
+        at = _past_gap(lines, at)
+        runs, at = _run_of(lines, at, len(word))
+        target = link_in(word)
+        if target is not None:
+            found.append((target, _slice(runs, word.index(target), len(target))))
+    return found
+
+
+def _past_gap(lines, at):
+    """Past whatever spaces and line ends sit between one word and the next."""
+    row, column = at
+    while row < len(lines):
+        while column < len(lines[row]) and lines[row][column] == " ":
+            column += 1
+        if column < len(lines[row]):
+            return row, column
+        row, column = row + 1, 0
+    return row, column
+
+
+def _run_of(lines, at, length):
+    """The runs the next `length` characters occupy, and where that leaves off."""
+    runs, (row, column) = [], at
+    while length and row < len(lines):
+        taken = min(length, len(lines[row]) - column)
+        if taken:
+            runs.append((row, column, taken))
+            length, column = length - taken, column + taken
+        if length:
+            row, column = row + 1, 0
+    return runs, (row, column)
+
+
+def _slice(runs, start, length):
+    """The part of a word's runs that the link itself covers - never the bracket in front of it
+    or the full stop after it, which belong to the sentence."""
+    kept = []
+    for row, column, run in runs:
+        taken = min(run - start, length) if start < run else 0
+        if taken > 0:
+            kept.append((row, column + start, taken))
+            length -= taken
+        start = max(0, start - run)
+    return kept
+
+
 def _break_word(word, limit, measure):
     """A word that fits, as one line; one that doesn't, in as many pieces as it takes."""
     pieces, piece = [], ""
@@ -109,12 +176,14 @@ class Thread:
     FALLBACK_WIDTH = 900  # what to assume before the window has been laid out even once
     KEPT = "kept-the-place"  # marks the line being read, while more of the past loads above it
 
-    def __init__(self, pane, names, *, prepare):
+    def __init__(self, pane, names, *, prepare, follow):
         from tkinter import font as tkfont
 
         self._pane = pane
         self._names = names
         self._prepare = prepare  # makes a bubble read-only and copyable, the way panes are
+        self._follow = follow  # opens a path or an address that was clicked
+        self._down_at = None  # where a press on a link landed, to tell a click from a drag
         self._font = tkfont.Font(font=pane.cget("font"))
         self._measure = _remembering(self._font.measure)
         self._shown = []  # [(entry, holder or None, body or None)], oldest built first
@@ -394,6 +463,38 @@ class Thread:
             return holder.winfo_x() - (self._copier.winfo_x() + self._copier.winfo_width())
         return self._copier.winfo_x() - (holder.winfo_x() + holder.winfo_width())
 
+    def links_painted(self, index):
+        """What one bubble has actually marked as openable, read off the widget - the painted
+        ranges joined back up, so one the wrapping cut across lines reads as the one link it is."""
+        body = self.bodies()[index]
+        painted = []
+        for tag in body.tag_names():
+            if tag.startswith(LINK_TAG):
+                edges = [str(edge) for edge in body.tag_ranges(tag)]
+                painted.append("".join(body.get(start, end)
+                                       for start, end in zip(edges[::2], edges[1::2])))
+        return painted
+
+    def click_link(self, index, number, *, dragging=False):
+        """Click the nth thing a bubble offers to open, where its characters actually are - or
+        drag across it instead, which is a selection being made and must open nothing.
+
+        The pointer is MOVED onto it first, because that is what tells a text widget which
+        character it is over, and a tag's bindings are the current character's: measured, a press
+        and a release at a link's own coordinates fire nothing at all without it."""
+        body = self.bodies()[index]
+        self._pane.update_idletasks()
+        start = body.tag_ranges(f"{LINK_TAG}{number}")[0]
+        left, top, width, height = body.bbox(str(start))
+        x, y = left + width // 2, top + height // 2
+        far = x + 4 * width if dragging else x
+        body.event_generate("<Motion>", x=x, y=y)
+        body.event_generate("<Button-1>", x=x, y=y)
+        if dragging:
+            body.event_generate("<B1-Motion>", x=far, y=y)
+        body.event_generate("<ButtonRelease-1>", x=far, y=y)
+        self._pane.update()
+
     def hover_copies(self, index):
         """Hover one bubble, press its copy button, and hand back the text that copied.
 
@@ -417,7 +518,41 @@ class Thread:
         holder.configure(width=width, height=height)
         body.delete("1.0", "end")
         body.insert("end", "\n".join(lines))
+        self._mark_links(body, entry["text"], lines)
         self._fitted = self._width()
+
+    def _mark_links(self, body, text, lines):
+        """Underline what can be opened, and let a click open it.
+
+        A tag per link rather than one shared one, because a click has to know WHICH of them it
+        landed on and a tag carrying its own target answers that with no lookup. The count is a
+        message's worth of links, never the archive's - each bubble is its own widget. Re-marked
+        on every fill, since the wrapping moves where they are whenever the window is resized."""
+        for number, (target, runs) in enumerate(link_runs(text, lines)):
+            tag = f"{LINK_TAG}{number}"
+            body.tag_configure(tag, foreground=LINK, underline=True)
+            body.tag_bind(tag, "<Button-1>", self._link_pressed)
+            body.tag_bind(tag, "<ButtonRelease-1>",
+                          lambda event, at=target: self._link_released(event, at))
+            # A text tag has no cursor of its own - measured - so the widget's is what changes.
+            body.tag_bind(tag, "<Enter>", lambda event, on=body: on.configure(cursor="hand2"))
+            body.tag_bind(tag, "<Leave>", lambda event, on=body: on.configure(cursor=""))
+            for row, column, length in runs:
+                body.tag_add(tag, f"{row + 1}.{column}", f"{row + 1}.{column + length}")
+
+    def _link_pressed(self, event):
+        self._down_at = (event.x_root, event.y_root)
+
+    def _link_released(self, event, target):
+        """Open it - but only if the pointer came up where it went down. A button released
+        somewhere else is the end of a drag ACROSS the link: what was wanted was the words, and a
+        browser opening in the middle of copying a line is the window acting on its own."""
+        pressed = self._down_at
+        if pressed is None:
+            return
+        self._down_at = None
+        if abs(event.x_root - pressed[0]) + abs(event.y_root - pressed[1]) <= STILL:
+            self._follow(target)
 
     def _name_line(self, entry):
         name = self._names.get(entry["role"], f"{self._names['entity']} · heads-up")

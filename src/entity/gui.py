@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 from entity.bubbles import NAME_FONT, SIDES, Thread
+from entity.links import open_link
 from entity.memory import (
     EMPTY_BOX,
     FULL_BOX,
@@ -197,7 +198,8 @@ class EntityWindow:
 
     def __init__(self, feed, *, on_stop, on_close, confirm_close=None,
                  profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
-                 icon=None, title="Entity", clock=_clock, now=time.monotonic, chord=None):
+                 icon=None, title="Entity", clock=_clock, now=time.monotonic, chord=None,
+                 follow=open_link):
         import tkinter as tk
         from tkinter import ttk
 
@@ -214,6 +216,7 @@ class EntityWindow:
         self._on_mic = lambda recording: None
         self._on_auto_listen = lambda on: None
         self._state = "muted"  # the mic starts off; nothing is heard until it is turned on
+        self._follow = follow  # what a clicked path or address opens with
         self._now = now
         self._profile_path = Path(profile_path) if profile_path else None
         self._learned_path = Path(learned_path) if learned_path else None
@@ -313,7 +316,7 @@ class EntityWindow:
     def _make_thread(self, parent, names, *, font):
         """A pane that reads as a message thread: bubbles, not lines."""
         pane = self._make_pane(parent, readonly=True, font=font)
-        return Thread(pane, names, prepare=self._make_readonly)
+        return Thread(pane, names, prepare=self._make_readonly, follow=self._follow)
 
     def _make_readonly(self, widget):
         """No caret and no typing, but every bit of selecting and copying still works. What a
@@ -822,6 +825,8 @@ class EntityWindow:
 
     def _pane_for(self, label):
         """The pane behind a tab label - what a right-click lands in."""
+        if label == self.CONVERSATION_TAB:
+            return self._thread.pane
         if label == self.PERSONA_TAB:
             return self._persona
         if label == self.MEMORY_TAB:
@@ -872,6 +877,17 @@ class EntityWindow:
     def bubble_text(self, index):
         """The words actually sitting in one bubble, read off the widget."""
         return self._thread.bodies()[index].get("1.0", "end-1c")
+
+    def bubble_links(self, index):
+        """What one bubble is offering to open, read back off the widget."""
+        return self._thread.links_painted(index)
+
+    def click_link(self, index, number, *, dragging=False):
+        """Click the nth thing a bubble offers to open - or drag across it instead. The
+        conversation is brought to the front first: a bubble on a tab nobody is looking at is
+        never laid out, so it has no pixels to aim at."""
+        self._front(self.CONVERSATION_TAB)
+        self._thread.click_link(index, number, dragging=dragging)
 
     def hover_gap(self, index):
         """How far clear of a bubble the copy button lands when that bubble is hovered."""

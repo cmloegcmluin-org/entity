@@ -170,7 +170,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
     feed = TranscriptFeed()
     done = threading.Event()
-    submitted, mic_flips, stops, auto_listens = [], [], [], []
+    submitted, mic_flips, stops, auto_listens, followed = [], [], [], [], []
     ticks = [1000.0]
     chord = SimpleNamespace(started=0, stopped=0)
     chord.start = lambda: setattr(chord, "started", chord.started + 1)
@@ -180,7 +180,8 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
                           on_close=lambda: closes.append(True), confirm_close=lambda: sure[0],
                           profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
                           persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
-                          learned_path=learned, now=lambda: ticks[0], chord=chord)
+                          learned_path=learned, now=lambda: ticks[0], chord=chord,
+                          follow=followed.append)
     try:
         window.hide()
         window.close_when(done)
@@ -386,6 +387,26 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
             window._drain_once()
         ticked = profile.read_text(encoding="utf-8")
         assert "- [x] better voice" in ticked  # ticked in the file, still there to read
+
+        # A path or an address in the conversation is a thing to CLICK, not a thing to read out
+        # and retype somewhere else. Entity writes real Windows paths here constantly, and the
+        # bubble is capped at half the pane, so a long one is cut across lines - every piece of
+        # it still has to open the whole thing.
+        feed.push("message", ("entity", "I left it in C:\\ada\\workspace\\runtime\\agent-inbox\\"
+                                        "task.md, and the notes are at https://example.com/n."))
+        window._drain_once()
+        assert window.bubble_links(-1) == ["C:\\ada\\workspace\\runtime\\agent-inbox\\task.md",
+                                           "https://example.com/n"]
+        window.click_link(-1, 0)
+        window.click_link(-1, 1)
+        assert followed == ["C:\\ada\\workspace\\runtime\\agent-inbox\\task.md",
+                            "https://example.com/n"]
+
+        # Dragging across one is a selection being made, not a click on it - opening a browser
+        # in the middle of copying a line would be the window acting on its own.
+        window.click_link(-1, 1, dragging=True)
+        assert followed == ["C:\\ada\\workspace\\runtime\\agent-inbox\\task.md",
+                            "https://example.com/n"]
 
         # A selection has to be startable at the left edge of a line, which in this tab is a box.
         # The pane's own padding reports column 0 exactly as the box does, so claiming the column

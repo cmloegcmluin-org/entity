@@ -1,4 +1,4 @@
-from entity.bubbles import hold_back, size_bubble, wrap_to_pixels
+from entity.bubbles import hold_back, link_runs, size_bubble, wrap_to_pixels
 
 
 def _measure(text):
@@ -19,6 +19,38 @@ def test_a_word_too_long_for_the_bubble_is_broken_rather_than_left_hanging_out()
     # away either - so it breaks mid-word.
     assert wrap_to_pixels("see http://example.com/x", 80, _measure) == [
         "see", "http://e", "xample.c", "om/x",
+    ]
+
+
+def test_a_path_is_found_where_the_wrapping_actually_put_it():
+    # Not where it sits in the message: wrapping joins words with single spaces and moves them
+    # onto lines of its own, so a search of the message would underline the wrong characters.
+    lines = wrap_to_pixels("I put it in C:\\ada\\task.md just now", 200, _measure)
+
+    assert lines == ["I put it in", "C:\\ada\\task.md just", "now"]
+    assert link_runs("I put it in C:\\ada\\task.md just now", lines) == [
+        ("C:\\ada\\task.md", [(1, 0, 14)]),
+    ]
+
+
+def test_a_link_too_long_for_the_bubble_stays_one_link_across_the_pieces_it_was_cut_into():
+    # A bubble is capped at its share of the pane, so a long address is cut mid-word to fit. Each
+    # piece has to open the WHOLE address: underlining one of them alone would offer "http://e".
+    lines = wrap_to_pixels("see http://example.com/x", 80, _measure)
+
+    assert lines == ["see", "http://e", "xample.c", "om/x"]
+    assert link_runs("see http://example.com/x", lines) == [
+        ("http://example.com/x", [(1, 0, 8), (2, 0, 8), (3, 0, 4)]),
+    ]
+
+
+def test_the_sentence_around_a_link_is_not_part_of_it():
+    lines = wrap_to_pixels("(https://example.com/a) and C:\\ada\\x.md.", 500, _measure)
+
+    assert lines == ["(https://example.com/a) and C:\\ada\\x.md."]
+    assert link_runs("(https://example.com/a) and C:\\ada\\x.md.", lines) == [
+        ("https://example.com/a", [(0, 1, 21)]),  # not the bracket it sits in
+        ("C:\\ada\\x.md", [(0, 28, 11)]),  # nor the full stop that ends the sentence
     ]
 
 

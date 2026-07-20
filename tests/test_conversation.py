@@ -426,10 +426,11 @@ def test_a_reply_with_nothing_to_say_says_nothing():
     assert not any(line.startswith("entity>") for line in lines)  # and no blank reply line
 
 
-def test_a_late_empty_reply_is_not_announced_either():
-    # The same silence, when the directive was slow enough to detach: "I'll get back to you on
-    # that." followed later by an empty announcement would be worse than the stock phrases it
-    # replaces.
+def test_a_late_silent_success_still_closes_the_promise():
+    # A slow directive says "I'll get back to you on that." before its silent success lands - and a
+    # promise to get back that is never followed by ANYTHING is this program's original sin: he
+    # waited half an hour on exactly that line. So a late empty reply is not silence, it is the
+    # smallest possible closure, tied to what it closes.
     release = threading.Event()
 
     class SlowSilentBrain:
@@ -438,15 +439,17 @@ def test_a_late_empty_reply_is_not_announced_either():
             return ""
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["file that", ""]), SlowSilentBrain(), tts, acknowledgement="ACK",
-                         detach_after=0.05, patience=30, long_answer_chars=None)
+    convo = Conversation(FakeSTT(["file both of those", ""]), SlowSilentBrain(), tts,
+                         acknowledgement="ACK", detach_after=0.05, patience=30,
+                         long_answer_chars=None)
 
-    convo.turn()  # detaches
+    convo.turn()  # detaches: the promise is made
     release.set()
     assert convo._background["done"].wait(2.0)
-    convo.turn()  # the lull: nothing to deliver, so nothing is said
+    convo.turn()  # the lull: the promise is closed, minimally
 
-    assert [line for line in tts.spoken if "On \"" in line] == []
+    closures = [line for line in tts.spoken if "file both of those" in line and "ACK" not in line]
+    assert closures == ['On "file both of those" - handled.']
 
 
 def test_a_prompt_answer_is_not_prefaced_with_the_question():

@@ -66,6 +66,12 @@ LATE_ANSWER_PREFACE = 'On "{question}" - {answer}'
 # bury the answer it prefaces.
 LATE_QUESTION_CHARS = 90
 
+# The answer given when a SLOW directive succeeded with nothing to say. A prompt silent success
+# really is silent - the ack covered it - but a slow one already said "I'll get back to you on
+# that.", and a promise to get back that is never followed by anything is this program's original
+# sin. The smallest closure that names what it closes.
+LATE_CLOSURE = "handled."
+
 # Said back to the brain on the turn AFTER anything was spoken in its name that it did not write -
 # the acknowledgement, the handoff line, an agent's notice, a canned confirmation.
 #
@@ -509,10 +515,12 @@ class Conversation:
         to count the messages back to work out what it belonged to. Their own words are the preface
         that makes it land as an answer."""
         reply = background["outcome"].get("reply")
-        if reply is None or not reply.strip():  # nothing to deliver - a silent success stays silent
+        if reply is None:  # it failed; a background best-effort's failure stays dropped
             return None
         question = _opening(" ".join(background["question"].split()), LATE_QUESTION_CHARS)
-        return LATE_ANSWER_PREFACE.format(question=question, answer=reply)
+        # An empty reply is a silent success - but "I'll get back to you on that." was already said,
+        # so this call owes a closure, however small (see LATE_CLOSURE).
+        return LATE_ANSWER_PREFACE.format(question=question, answer=reply.strip() or LATE_CLOSURE)
 
     def _reap(self, done):
         done.wait()

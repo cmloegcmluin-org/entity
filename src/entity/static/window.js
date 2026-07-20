@@ -17,17 +17,16 @@ let offers = null;      // what the copy button would copy, and the element it b
 /* ---- drawing ------------------------------------------------------------------------------ */
 
 function element(entry) {
-  if (entry.role === "day") {
-    const day = document.createElement("div");
-    day.className = "day";
-    day.append(entry.stamp);
-    return day;
-  }
-  if (entry.role === "session") {
-    const session = document.createElement("div");
-    session.className = "session";
-    session.append("• • •");
-    return session;
+  // A break is a full-width row so it can be hovered anywhere along it, holding an inner mark
+  // that is only as wide as what is drawn - which is what the copy button has to sit beside.
+  if (entry.role === "day" || entry.role === "session") {
+    const row = document.createElement("div");
+    row.className = entry.role;
+    const mark = document.createElement("span");
+    mark.className = "mark";
+    mark.append(entry.role === "day" ? entry.stamp : "• • •");
+    row.append(mark);
+    return row;
   }
   if (!entry.bubble) {
     const aside = document.createElement("div");
@@ -47,14 +46,13 @@ function element(entry) {
   return said;
 }
 
-function draw(entries) {
+function draw(fresh, at) {
   const atEnd = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
-  for (const entry of entries.slice(drawn)) {
+  fresh.forEach((entry, index) => {
     const node = element(entry);
-    node.dataset.at = entries.indexOf(entry);
+    node.dataset.at = at + index;
     thread.append(node);
-  }
-  drawn = entries.length;
+  });
   if (atEnd) thread.scrollTop = thread.scrollHeight;
 }
 
@@ -95,13 +93,14 @@ function offer(node, entries) {
   copier.hidden = false;
   copier.classList.remove("done");
   copier.classList.add("showing");
-  const box = node.classList.contains("said") ? node.querySelector(".box") : node;
-  const spot = box.getBoundingClientRect();
-  const beside = node.classList.contains("right");
+  // Beside what is drawn: a message's box, or a break's mark - never the full-width row a
+  // break sits in, which would put the button out at the far edge of an empty stretch.
+  const drawnPart = node.querySelector(".box, .mark") || node;
+  const spot = drawnPart.getBoundingClientRect();
   copier.style.top = `${spot.top + spot.height / 2 - copier.offsetHeight / 2}px`;
-  copier.style.left = beside
+  copier.style.left = node.classList.contains("right")
     ? `${spot.left - copier.offsetWidth - 8}px`
-    : `${(node.classList.contains("said") ? spot.right : spot.right - 40) + 8}px`;
+    : `${spot.right + 8}px`;
 }
 
 function withdraw() {
@@ -153,14 +152,23 @@ function showState(state) {
 
 /* ---- the poll ------------------------------------------------------------------------------ */
 
-let latest = [];
+const latest = [];   // everything drawn, in order, so a copy can read a whole session back
+let polling = false; // one poll at a time: two in flight both ask from the same place, and both
+                     // draw what they are given - which is how one conversation became 52,000 rows
 
 async function refresh() {
-  const shown = await (await fetch("/messages")).json();
-  latest = shown.entries;
-  draw(shown.entries);
-  listSessions(shown.sessions);
-  showState(shown.state);
+  if (polling) return;
+  polling = true;
+  try {
+    const shown = await (await fetch(`/messages?since=${drawn}`)).json();
+    latest.push(...shown.entries);
+    draw(shown.entries, shown.at);
+    drawn = shown.total;
+    listSessions(shown.sessions);
+    showState(shown.state);
+  } finally {
+    polling = false;
+  }
 }
 
 refresh();

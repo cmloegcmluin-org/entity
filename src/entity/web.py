@@ -39,14 +39,17 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, state=None):
 
     @app.get("/messages")
     def messages():
-        """The whole conversation, and where each session starts in it.
+        """What the page has not drawn yet, and where each session starts.
 
-        Whole rather than a tail: it is a few hundred entries of text, the page holds what it has
-        already drawn, and a poll that hands back only what is new cannot say when something older
-        arrived - which is exactly what preloading every session ever recorded does."""
+        `since` is how much it already holds, so a poll four times a second carries a few bytes
+        rather than every session ever recorded. The contents list is small and its numbering
+        shifts as the conversation grows, so that goes whole each time."""
         entries = model.entries
+        since = min(request.args.get("since", 0, type=int), len(entries))
         return {
-            "entries": [_said(entry) for entry in entries],
+            "entries": [_said(entry) for entry in entries[since:]],
+            "at": since,
+            "total": len(entries),
             "sessions": [{"label": label, "at": entries.index(opening)}
                          for label, opening in sessions(entries)],
             "state": (state or (lambda: "muted"))(),

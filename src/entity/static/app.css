@@ -103,10 +103,14 @@ body {
 /* The two breaks, deliberately unalike: a day is a ruled line carrying its date, a session is
    three dots. Made to look the same they read as one thing repeated, which is what a day
    holding three sessions looked like when the date was doing both jobs. */
-.day, .session { align-self: stretch; display: flex; align-items: center; justify-content: center;
-                 gap: 12px; color: var(--dim); font-size: .74rem; padding: 10px 0 6px; }
-.day::before, .day::after { content: ""; height: 1px; width: 84px; background: var(--line); }
-.session { letter-spacing: .5em; padding: 8px 0; }
+.day, .session { align-self: stretch; display: flex; justify-content: center;
+                 color: var(--dim); font-size: .74rem; padding: 10px 0 6px; }
+/* The row spans the thread so it can be hovered anywhere along it; the mark inside is only as
+   wide as what is drawn, which is what the copy button measures itself against. */
+.mark { display: inline-flex; align-items: center; gap: 12px; }
+.day .mark::before, .day .mark::after { content: ""; height: 1px; width: 84px; background: var(--line); }
+.session { padding: 8px 0; }
+.session .mark { letter-spacing: .4em; }
 
 /* Both breaks head a session, so both offer to copy one — the dated rule most of all, since
    that is the line that reads as a session's heading. */

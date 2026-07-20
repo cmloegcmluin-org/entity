@@ -417,7 +417,9 @@ def main(argv=None):
 
     def worker():
         try:
-            _session(attach=lambda d: window.attach_mic(submit=d.submit, set_recording=d.set_recording),
+            _session(attach=lambda d: window.attach_mic(submit=d.submit,
+                                                        set_recording=d.set_recording,
+                                                        set_auto_listen=d.set_auto_listen),
                      **running)
         finally:
             done.set()

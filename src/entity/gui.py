@@ -9,9 +9,9 @@ forwards buttons.
 Layout: the conversation reads like a text thread - the user's messages in tinted boxes down the
 right, Entity's down the left, each with a name and a time, past sessions above a divider. The
 boxes themselves are `bubbles.py`. Everything to do with talking sits together along the bottom:
-mic button, level meter, the editable draft speech types into, Submit, and a one-click Yes for the
-answer he gives oftenest with a bin beside it for the draft he doesn't want. Beside the
-conversation are tabs - one per agent log, tailed live, and the profile's Goals, Projects and
+mic button, level meter, an auto-listen switch, the editable draft speech types into, Submit, and a
+one-click Yes for the answer he gives oftenest with a bin beside it for the draft he doesn't want.
+Beside the conversation are tabs - one per agent log, tailed live, and the profile's Goals, Projects and
 Enhancements, editable and saved straight back into the file the brain reads.
 
 Threads: the conversation loop and the dictation pump run on workers and push into the feed;
@@ -159,8 +159,10 @@ class TranscriptFeed:
 
 class EntityWindow:
     """The Tk window. Thin on purpose: rendering mirrors the model and the profile file, input
-    forwards to callbacks (`on_stop`, `on_close`, `on_submit`, `on_mic`). `close_when(done)` lets
-    the window end itself once the conversation has wound all the way down."""
+    forwards to callbacks - `on_stop` and `on_close` from the start, the mic's own (`submit`,
+    `set_recording`, `set_auto_listen`) once `attach_mic` has one to wire them to.
+    `close_when(done)` lets the window end itself once the conversation has wound all the way
+    down."""
 
     POLL_MS = 80
     SLOW_POLL_EVERY = 12  # agent logs and the profile re-check ~once a second, not every 80ms
@@ -182,7 +184,7 @@ class EntityWindow:
     # ticked line is the only evidence a complaint was heard and answered.
     CHECKLIST_HEADINGS = ("Enhancements",)
 
-    def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
+    def __init__(self, feed, *, on_stop, on_close,
                  profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
                  icon=None, title="Entity", clock=_clock, now=time.monotonic, chord=None):
         import tkinter as tk
@@ -194,8 +196,11 @@ class EntityWindow:
         self._done = None
         self.ended = False
         self._on_stop = on_stop
-        self._on_submit = on_submit or (lambda text: None)
-        self._on_mic = on_mic or (lambda recording: None)
+        # No-ops until `attach_mic` hands over the real ones: the window opens before the mic
+        # exists, and every one of these is a control he can already reach.
+        self._on_submit = lambda text: None
+        self._on_mic = lambda recording: None
+        self._on_auto_listen = lambda on: None
         self._state = "muted"  # the mic starts off; nothing is heard until it is turned on
         self._now = now
         self._profile_path = Path(profile_path) if profile_path else None
@@ -411,6 +416,15 @@ class EntityWindow:
         self._level = tk.Canvas(left, width=1, height=10, bg=PANEL, highlightthickness=0)
         self._level.pack(fill="x", pady=(6, 0))
         self._level_bar = self._level.create_rectangle(0, 0, 0, 10, fill=ACCENT, width=0)
+        # With this on, the mic opens itself every time a reply ends, so answering costs nothing.
+        # It sits with the mic rather than with Submit, because it is about listening.
+        self._auto_on = tk.BooleanVar(value=False)
+        self._auto_button = tk.Checkbutton(
+            left, text="auto-listen", variable=self._auto_on, command=self._press_auto_listen,
+            font=NAME_FONT, bg=BG, fg=DIM, activebackground=BG, activeforeground=FG,
+            selectcolor=PANEL, borderwidth=0, highlightthickness=0, anchor="w", cursor="hand2",
+        )
+        self._auto_button.pack(fill="x", pady=(4, 0))
         self._submit = tk.Button(left, text="Submit", width=13, relief="flat", cursor="hand2",
                                  command=self._submit_draft, bg="#2a4d00", fg=ACCENT,
                                  activebackground="#2a4d00", activeforeground=ACCENT)
@@ -448,6 +462,9 @@ class EntityWindow:
             self._on_mic(False)
             return
         self._on_mic(self._state != "recording")
+
+    def _press_auto_listen(self):
+        self._on_auto_listen(self._auto_on.get())
 
     # The modifier bits Tk on Windows sets for Ctrl and Alt, measured rather than assumed. The
     # Windows key sets none of them - it never reaches Tk here at all - so that chord is the
@@ -652,11 +669,12 @@ class EntityWindow:
 
     # ---- lifecycle ------------------------------------------------------------------------------
 
-    def attach_mic(self, *, submit, set_recording):
-        """Wire the draft box and the mic button to a Dictation that didn't exist when the window
+    def attach_mic(self, *, submit, set_recording, set_auto_listen):
+        """Wire the draft box and the mic controls to a Dictation that didn't exist when the window
         opened - the window comes up first now, so it is visible while the model is still loading."""
         self._on_submit = submit
         self._on_mic = set_recording
+        self._on_auto_listen = set_auto_listen
 
     def close_agent_tab(self, name):
         """Take an agent's tab away and archive its log, so it stays closed. Asked how to close
@@ -871,6 +889,13 @@ class EntityWindow:
 
     def press_mic(self):
         self._press_mic()
+
+    def auto_listening(self):
+        return self._auto_on.get()
+
+    def toggle_auto_listen(self):
+        """Click the switch itself, so its wiring is what gets exercised."""
+        self._auto_button.invoke()
 
     def press_yes(self):
         """Click the Yes button itself, so its wiring is what gets exercised."""

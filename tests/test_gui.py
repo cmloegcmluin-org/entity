@@ -170,7 +170,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
     feed = TranscriptFeed()
     done = threading.Event()
-    submitted, mic_flips, stops = [], [], []
+    submitted, mic_flips, stops, auto_listens = [], [], [], []
     ticks = [1000.0]
     chord = SimpleNamespace(started=0, stopped=0)
     chord.start = lambda: setattr(chord, "started", chord.started + 1)
@@ -182,7 +182,8 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     try:
         window.hide()
         window.close_when(done)
-        window.attach_mic(submit=submitted.append, set_recording=mic_flips.append)
+        window.attach_mic(submit=submitted.append, set_recording=mic_flips.append,
+                          set_auto_listen=auto_listens.append)
 
         assert window.tab_labels()[:7] == ["1 · Conversation", "2 · Enhancements", "3 · Context",
                                            "4 · Goals", "5 · Projects", "6 · Persona", "7 · Memory"]
@@ -301,6 +302,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         window.press_undo()
         assert window.draft_text() == "something I was still writing"
         window.press_discard()
+
+        # The switch for auto-listening sits with the rest of the mic, and starts off - the mic
+        # opening itself is something he turns on, not something that happens to him.
+        assert window.auto_listening() is False and auto_listens == []
+        window.toggle_auto_listen()
+        assert window.auto_listening() is True and auto_listens == [True]
+        window.toggle_auto_listen()
+        assert window.auto_listening() is False and auto_listens == [True, False]
 
         # One button: it IS the stop while Entity talks, and stopping leaves the mic off.
         feed.push("state", "speaking")

@@ -305,6 +305,12 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert window.draft_text() == "something I was still writing"
         window.press_discard()
 
+        # Every control got the height it asked for. The column grew from four things to six and
+        # the conversation above it claims its space first, which does not push what won't fit off
+        # the window - it CRUSHES it: Yes and the bin came out one pixel tall, mapped, positioned,
+        # reporting a width, and impossible to see or hit.
+        assert window.controls_at_full_height()
+
         # The switch for auto-listening sits with the rest of the mic, and starts off - the mic
         # opening itself is something he turns on, not something that happens to him.
         assert window.auto_listening() is False and auto_listens == []

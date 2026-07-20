@@ -38,7 +38,9 @@ from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
 
 LEVEL_FULL = 0.06  # the meter tops out around loud speech, so ordinary talk visibly moves it
-YES = "Yes."  # what the one-click answer sends - word for word what dictating it used to produce
+# What the one-click answer SENDS is word for word what dictating it used to produce, so the brain
+# sees no difference; what it's LABELLED is a button, and a button doesn't end in a full stop.
+YES, YES_LABEL = "Yes.", "Yes"
 BIN = "🗑"  # checked against the pixels: Tk 8.6 here draws it as a wastebasket, not a tofu box
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
@@ -241,6 +243,12 @@ class EntityWindow:
                 pass  # a bad icon must never keep the window from opening
 
         self._build_menu(tk)  # before any pane, since every pane posts this one menu
+        # The controls go down FIRST, though they sit at the bottom. The packer hands out space in
+        # the order things are packed, and the conversation asks to expand - so packed after it,
+        # the row got whatever was left, which was nothing: Yes and the bin came out one pixel
+        # tall. Claiming the row's own height first leaves the conversation the rest, which is
+        # what it should have anyway.
+        self._build_controls(tk)
         self._style_tabs(ttk)
         self._tabs = ttk.Notebook(self._tk)
         self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 4))
@@ -263,7 +271,6 @@ class EntityWindow:
         self._agent_tabs = ttk.Notebook(self._tabs)
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
-        self._build_controls(tk)
         self._confirm_close = confirm_close or (lambda: _ask_before_closing(self._tk, title))
         self._tk.protocol("WM_DELETE_WINDOW", self.request_close)
         if self._chord is not None:
@@ -405,7 +412,7 @@ class EntityWindow:
         """Everything to do with talking, together in one row along the bottom, with the contents
         of the conversation above it in the same column."""
         row = tk.Frame(self._tk, bg=BG)
-        row.pack(fill="x", padx=8, pady=(0, 8))
+        row.pack(side="bottom", fill="x", padx=8, pady=(0, 8))
         left = tk.Frame(row, bg=BG)
         left.pack(side="left", fill="y", padx=(0, 8))
         # Every session, oldest first, as somewhere to jump to. Its width is the column's, which
@@ -446,7 +453,7 @@ class EntityWindow:
         # are sized in characters, so neither of these two sets it.
         answer = tk.Frame(left, bg=BG)
         answer.pack(fill="x", pady=(6, 0))
-        self._yes = tk.Button(answer, text=YES, relief="flat", cursor="hand2",
+        self._yes = tk.Button(answer, text=YES_LABEL, relief="flat", cursor="hand2",
                               command=self._press_yes, bg=PANEL, fg=FG,
                               activebackground=PANEL, activeforeground=FG)
         self._yes.pack(side="left", fill="x", expand=True)
@@ -760,6 +767,17 @@ class EntityWindow:
         """Drag the scrollbar to the top, as a reader would, and let what that pulls in settle."""
         self._thread.pane.yview_moveto(0.0)
         self._tk.update()
+
+    def controls_at_full_height(self):
+        """Whether every control in the bottom row got the height it asked for.
+
+        A control the packer has no room for is not moved off the window, where it would be
+        plainly missing - it is flattened where it stands. Yes and the bin came out one pixel
+        tall: mapped, positioned, the right width, and impossible to see or hit."""
+        self._tk.update_idletasks()
+        return all(widget.winfo_height() >= widget.winfo_reqheight()
+                   for widget in (self._mic_button, self._auto_button, self._submit,
+                                  self._yes, self._bin))
 
     def control_widths(self):
         """The bottom-left column as it actually laid out: mic, meter, Submit, contents."""

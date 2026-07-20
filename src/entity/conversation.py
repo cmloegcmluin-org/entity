@@ -489,16 +489,32 @@ class Conversation:
         if self._offered is not None:  # they're answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
         if self._background is not None:
-            self._abandon_background()  # they're talking again - their live turn outranks the old call
+            self._settle_background()  # keep a promise that has come due; drop one that hasn't
         return self._answer(heard)
 
-    def _abandon_background(self):
-        """They spoke while a detached call was still running. There's only one session, so it can't
-        answer them until that call ends - and bouncing them with a canned "still finishing your last
-        one" threw their words away every time, which locked them out of the conversation entirely.
-        Cancel the stale call instead: what they're saying now always outranks work they've given up on."""
+    def _settle_background(self):
+        """They spoke while a detached call was outstanding. What happens next turns entirely on
+        whether that call has ANSWERED yet.
+
+        If it has, that answer is the thing they were promised - say it, before taking their new
+        turn. It cost minutes to produce, it is sitting right here, and it is very often the exact
+        thing they are asking about. Cancelling it instead was the worst bug this program has had:
+        they asked, were told "I'll get back to you on that", and every time they pushed for the
+        answer, the push is what destroyed it. Half an hour of that reads as being ignored, because
+        from where they sit it IS - pressing harder made the answer strictly less likely.
+
+        If it hasn't answered, cancel it: there's only one session, so it can't answer them until
+        that call ends, and bouncing them with a canned "still finishing your last one" threw their
+        words away and locked them out of the conversation entirely. Work they've given up on is
+        outranked by what they're saying now - an answer already in hand never is.
+        """
         background = self._background
         self._background = None
+        if background["done"].is_set():
+            reply = background["outcome"].get("reply")  # a failure stays dropped, as it always has
+            if reply is not None:
+                self._speak_reply(reply)
+            return
         self._console.dropped()  # so the promise it made doesn't just silently evaporate
         self._cancel_think(background["done"])  # unwind it before their turn starts a new call
 

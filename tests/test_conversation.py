@@ -318,18 +318,71 @@ def test_talking_again_cancels_the_detached_call_instead_of_deflecting_the_user(
     assert calls == ["slow one", "what about this"]
 
 
+def test_a_finished_background_answer_is_spoken_when_they_speak_again():
+    # The worst half-hour this program has had. They asked, heard "I'll get back to you on that",
+    # waited, and asked again - and asking is what destroyed the answer, because a call that had
+    # already FINISHED was cancelled and thrown away as though it were still running. Every push for
+    # the answer made it less likely, never more, so pressing harder looked exactly like being
+    # ignored. An answer that exists is never something to cancel.
+    release = threading.Event()
+    holder = {}
+
+    class SlowBrain:
+        def __init__(self):
+            self.cancelled = False
+
+        def respond(self, utterance):
+            if utterance == "how is it going":
+                release.wait(2.0)
+                return "the answer they were promised"
+            return "reply to their new turn"
+
+        def interrupt(self):
+            self.cancelled = True
+
+    class TalkingWhileItLands(FakeSTT):
+        """It finishes WHILE they are mid-sentence, so the top-of-turn collect has already been and
+        gone by the time their words arrive - which is the ordinary case, not a corner one."""
+
+        def listen(self):
+            heard = super().listen()
+            if heard == "you are taking too long":
+                release.set()
+                assert holder["convo"]._background["done"].wait(2.0)
+            return heard
+
+    brain = SlowBrain()
+    tts = FakeTTS()
+    convo = Conversation(
+        TalkingWhileItLands(["how is it going", "you are taking too long"]), brain, tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30, long_answer_chars=None,
+    )
+    holder["convo"] = convo
+
+    convo.turn()  # detaches: "I'll get back to you on that."
+    convo.turn()  # they push for it, and it lands while they are saying so
+
+    assert "the answer they were promised" in tts.spoken  # the promise is kept, not collected
+    assert brain.cancelled is False  # nothing to cancel: it had already answered
+
+
 def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
     # They were told "I'll let you know when it's ready" and then never heard back, because their next
     # words quietly killed the call. Whatever else happens, the record shows it was dropped.
     lines = []
+    release = threading.Event()
 
     class SlowBrain:
+        # Hangs until cancelled, rather than racing a sleep against the turn: only a call that is
+        # genuinely still running is dropped now, so a fixture that might have finished first would
+        # be testing whichever branch it happened to land in.
         def respond(self, utterance):
-            time.sleep(0.2) if utterance == "slow one" else None
+            if utterance == "slow one":
+                release.wait(2.0)
             return "answer"
 
         def interrupt(self):
-            pass
+            release.set()
 
     convo = Conversation(
         FakeSTT(["slow one", "what about this"]), SlowBrain(), FakeTTS(),

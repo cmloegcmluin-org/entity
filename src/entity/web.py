@@ -12,6 +12,7 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
+import re
 from pathlib import Path
 
 from flask import Flask, render_template, request
@@ -73,6 +74,41 @@ def _thread(entries, since, speakers=SPEAKERS):
         "total": len(entries),
         "sessions": [{"label": label, "at": at} for label, at in found],
     }
+
+
+# The persona marks its own sections by shouting - "BREVITY IS YOUR MOST IMPORTANT RULE",
+# "SURFACE FAILURES IMMEDIATELY", "HOW TO PUT AN AGENT ON WORK". Two capitalised words in a row at
+# the start of a sentence is that and nothing else, and it is the only structure six thousand
+# characters arriving on one line have.
+_SHOUT = r"[A-Z][A-Z'’]*(?:[ ,-]+[A-Z][A-Z'’]*)+"
+_OPENS_A_SECTION = re.compile(rf"(?<=[.:!?])\s+(?={_SHOUT}\b)")
+# It is a heading only when it FINISHES - on a full stop, or on the dash that introduces what it
+# is about. Running straight on into lowercase ("A CORE part of your job", "ONE EXCEPTION, and it
+# overrides brevity") it is emphasis inside a sentence, and pulling it out would break the sentence
+# in half.
+_LEAD = re.compile(rf"^({_SHOUT}(?:[.:!?]|(?=\s+[-–—]\s)))\s*")
+
+
+def persona_paragraphs(text):
+    """The persona as something readable, without one word of it being changed.
+
+    This is the exact text the brain reads - the window shows it so he can see what it has been
+    told, and a second, tidied copy would drift from the real one. So nothing here rewrites: it
+    only decides where the breaks go. Blank lines are breaks already (his profile arrives with its
+    own headings and bullets); the rest are where the persona starts shouting, which is where its
+    author meant a new section.
+
+    Each block is {lead, body} - the shouted opening, if it has one, and the rest."""
+    blocks = []
+    for paragraph in text.split("\n\n"):
+        for part in _OPENS_A_SECTION.split(paragraph):
+            part = part.strip()
+            if not part:
+                continue
+            found = _LEAD.match(part)
+            lead = found.group(1) if found else ""
+            blocks.append({"lead": lead, "body": part[found.end():] if found else part})
+    return blocks
 
 
 def _items(body):
@@ -214,7 +250,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.get("/persona")
     def show_persona():
-        return render_template("persona.html", here="/persona", persona=persona)
+        return render_template("persona.html", here="/persona",
+                               blocks=persona_paragraphs(persona), length=len(persona))
 
     def _his_translations():
         if translations_path is None or not translations_path.exists():

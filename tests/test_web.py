@@ -1,5 +1,5 @@
 from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
-from entity.web import create_app
+from entity.web import create_app, persona_paragraphs
 
 
 def _model(*lines):
@@ -125,6 +125,42 @@ def test_every_translation_in_force_is_on_the_page_and_his_own_save_back(tmp_pat
     client.post("/translations", data={"body": "hydeas -> Notecraft\nhi deas -> Notecraft"})
 
     assert "hi deas -> Notecraft" in translations.read_text(encoding="utf-8")
+
+
+def test_the_persona_breaks_where_it_shouts_and_not_one_word_is_lost():
+    # Six thousand characters arrive on a single line. The only structure in them is the author's
+    # own shouting - "BREVITY IS YOUR MOST IMPORTANT RULE" - so that is where it is broken.
+    persona = ("You are Entity, their companion. BREVITY IS YOUR MOST IMPORTANT RULE. Keep every "
+               "reply to two sentences. SURFACE FAILURES IMMEDIATELY. Say so in one line first.")
+
+    blocks = persona_paragraphs(persona)
+
+    assert [block["lead"] for block in blocks] == [
+        "", "BREVITY IS YOUR MOST IMPORTANT RULE.", "SURFACE FAILURES IMMEDIATELY.",
+    ]
+    # Laid out, never rewritten: this is the exact text the brain reads, and a second edited copy
+    # of it would drift from what it actually reads.
+    rebuilt = " ".join(" ".join(f"{block['lead']} {block['body']}".split()) for block in blocks)
+    assert rebuilt == " ".join(persona.split())
+
+
+def test_shouting_inside_a_sentence_is_not_pulled_out_as_a_heading():
+    # "A CORE part of your job is..." and "ONE EXCEPTION, and it overrides brevity:" both open
+    # with capitals and neither is a heading - lifting one out would cut its sentence in half.
+    blocks = persona_paragraphs("Keep it short. A CORE part of your job is running agents. "
+                                "ONE EXCEPTION, and it overrides brevity: answer them.")
+
+    assert [block["lead"] for block in blocks] == ["", "", ""]
+    assert blocks[1]["body"].startswith("A CORE part of your job")
+
+
+def test_a_paragraph_that_is_already_markdown_is_left_as_it_was():
+    # His profile arrives inside the persona with headings and bullets of its own, on their own
+    # lines. Those are already readable and must survive intact.
+    blocks = persona_paragraphs("## Goals\n- swim\n- cello\n\nplain words after it")
+
+    assert [block["body"] for block in blocks] == ["## Goals\n- swim\n- cello", "plain words after it"]
+    assert all(block["lead"] == "" for block in blocks)
 
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):

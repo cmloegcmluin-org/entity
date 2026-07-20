@@ -81,9 +81,15 @@ body.page { padding: 10px; }
   padding: 6px 8px;
 }
 .writing:focus { outline: none; border-color: var(--line); }
-.section.tall .writing, .persona { min-height: 60vh; }
-.persona { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere;
-           font: inherit; color: var(--past); }
+.section.tall .writing { min-height: 60vh; }
+/* Thirty-two thousand characters, two of its paragraphs six thousand long apiece. Broken where it
+   shouts, given room between the pieces, and held to a readable measure - the words themselves are
+   untouched, because this is the text the brain reads and a tidied second copy would drift. */
+.persona { padding: 6px 8px; color: var(--past); max-width: 68ch; }
+.persona p { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.persona p:last-child { margin-bottom: 0; }
+/* Where it shouts is where its author meant a new section, so it is allowed to look like one. */
+.persona .shout { display: block; color: var(--fg); font-weight: 600; letter-spacing: .01em; }
 .empty { color: var(--dim); text-align: center; padding: 40px 0; }
 
 /* An item that gets done is ticked, never removed - it is the only record that a complaint was

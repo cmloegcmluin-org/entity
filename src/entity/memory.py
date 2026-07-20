@@ -195,6 +195,18 @@ def profile_sections(text):
 # (roadmap, not now)"). Every reader matches on the stem - see `find_heading`.
 ENHANCEMENTS_HEADING = "Enhancements"
 
+# The enhancements list is a CHECKLIST: an item that gets done is ticked, never removed. "As you
+# check items off from the enhancements list, I don't want them deleted forever." A struck-through
+# item is also the only record that a complaint was heard and acted on - deleting it loses both the
+# ask and the answer, and the same thing then gets filed again (five separate tickets in that list
+# are one bug, refiled because nothing ever showed it had been dealt with).
+#
+# The list predates the boxes, so a plain "- item" is read as an unticked one and upgraded the first
+# time anything writes it back. That migrates the file by use rather than by rewriting, under him,
+# a personal file the running app may be autosaving at the same moment.
+_BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?P<item>.*)$")
+UNTICKED, TICKED = "- [ ] ", "- [x] "
+
 
 def find_heading(sections, stem):
     """Which of the profile's own headings this stem means, or the stem itself if it has none yet.
@@ -238,9 +250,37 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
         insert_at = len(lines)
     while insert_at > 0 and not lines[insert_at - 1].strip():
         insert_at -= 1  # tuck the bullet against the section's last line, not after its blank gap
-    lines.insert(insert_at, f"- {item}")
+    lines.insert(insert_at, UNTICKED + item)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+    """Tick the enhancement whose text contains `item`, in place. True if one was found.
+
+    Matched loosely and on the first hit only, because the caller is quoting a fragment of a line
+    the user wrote in their own words and at their own length. Reporting a miss matters: a tick that
+    silently lands nowhere reads as done and isn't."""
+    path = Path(path)
+    text = _read(path)
+    heading = find_heading(profile_sections(text), heading)
+    wanted = item.strip().lower()
+    lines = text.splitlines()
+    inside = False
+    for index, line in enumerate(lines):
+        if line.startswith("## "):
+            if inside:
+                break  # the section ended; an item further down the file is not this list's
+            inside = line[3:].strip() == heading
+            continue
+        match = _BULLET.match(line) if inside else None
+        if match is None or (match.group("tick") or " ") != " ":
+            continue  # not a bullet, or already ticked
+        if wanted in match.group("item").strip().lower():
+            lines[index] = TICKED + match.group("item").strip()
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return True
+    return False
 
 
 def save_section(path, heading, body, *, keeping=None):

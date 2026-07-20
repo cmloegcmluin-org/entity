@@ -175,7 +175,7 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
 
     sections = profile_sections(path.read_text(encoding="utf-8"))
     assert "- better voice" in sections["Enhancements you want (roadmap, not now)"]
-    assert "- speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
+    assert "- [ ] speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
     assert sections["Something after"] == "- untouched"  # later sections undisturbed
 
 
@@ -194,8 +194,61 @@ def test_an_enhancement_is_filed_under_a_heading_that_merely_starts_with_the_wor
     append_enhancement("speaker enrollment", path=path)
 
     sections = profile_sections(path.read_text(encoding="utf-8"))
-    assert "- speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
+    assert "- [ ] speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
     assert list(sections) == ["Goals", "Enhancements you want (roadmap, not now)"]
+
+
+def test_a_filed_enhancement_lands_as_an_unticked_box(tmp_path):
+    # "As you check items off from the enhancements list, I don't want them deleted forever." So an
+    # item is a checkbox from the moment it is filed, and finishing one ticks it in place.
+    from entity.memory import append_enhancement, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
+
+    append_enhancement("speaker enrollment", path=path)
+
+    body = profile_sections(path.read_text(encoding="utf-8"))["Enhancements"]
+    assert "- [ ] speaker enrollment" in body
+
+
+def test_completing_an_enhancement_ticks_it_and_leaves_it_there(tmp_path):
+    from entity.memory import complete_enhancement, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text(
+        "## Enhancements\n- [ ] better voice\n- [ ] Only notice HIS voice: speaker enrollment\n",
+        encoding="utf-8",
+    )
+
+    assert complete_enhancement("speaker enrollment", path=path) is True
+
+    body = profile_sections(path.read_text(encoding="utf-8"))["Enhancements"]
+    assert "- [x] Only notice HIS voice: speaker enrollment" in body  # ticked, and still readable
+    assert "- [ ] better voice" in body  # and nothing else was touched
+
+
+def test_an_item_that_isnt_there_is_reported_rather_than_invented(tmp_path):
+    # A filing that silently misses is worse than one that fails: it reads as done and isn't.
+    from entity.memory import complete_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
+
+    assert complete_enhancement("something nobody asked for", path=path) is False
+    assert "[x]" not in path.read_text(encoding="utf-8")
+
+
+def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
+    # The list predates the checkboxes, so most of it is plain bullets. Ticking one upgrades it
+    # rather than refusing to find it.
+    from entity.memory import complete_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- better voice\n", encoding="utf-8")
+
+    assert complete_enhancement("better voice", path=path) is True
+    assert "- [x] better voice" in path.read_text(encoding="utf-8")
 
 
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):

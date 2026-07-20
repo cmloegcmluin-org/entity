@@ -290,18 +290,24 @@ class EntityWindow:
                   expand=[("selected", [0, 0, 0, 0])], padding=[("selected", (12, 6))])
 
     def _make_pane(self, parent, *, readonly, font=("Consolas", 11)):
-        """A pane that can always be selected and copied from. Read-only panes stay in the
-        NORMAL state and refuse edits key by key instead - a disabled Text widget takes no
-        focus, so Ctrl-C never reaches it and the conversation cannot be got out of the
-        window."""
+        """A pane that can always be selected and copied from - editable or not. Read-only panes
+        stay in the NORMAL state and refuse edits key by key instead - a disabled Text widget
+        takes no focus, so Ctrl-C never reaches it and the conversation cannot be got out of the
+        window.
+
+        Copyable comes FIRST and applies to every pane, because being editable is not the same as
+        being copyable: the section tabs were editable and still had no right-click on them, which
+        is the copy that works with a hand on the mouse. He could read that list and not get a
+        line out of it."""
         from tkinter import scrolledtext
 
         pane = scrolledtext.ScrolledText(
             parent, wrap="word", font=font, bg=PANEL, fg=FG, selectbackground=SELECTION,
             borderwidth=0, padx=10, pady=8, insertbackground=ACCENT,
         )
+        self._make_copyable(pane)
         if readonly:
-            self._make_readonly(pane)
+            self._refuse_typing(pane)
         return pane
 
     def _make_thread(self, parent, names, *, font):
@@ -310,10 +316,15 @@ class EntityWindow:
         return Thread(pane, names, prepare=self._make_readonly)
 
     def _make_readonly(self, widget):
-        """No caret and no typing, but every bit of selecting and copying still works."""
+        """No caret and no typing, but every bit of selecting and copying still works. What a
+        bubble's body is prepared with - a widget `_make_pane` never made, so it needs both
+        halves here."""
+        self._make_copyable(widget)
+        self._refuse_typing(widget)
+
+    def _refuse_typing(self, widget):
         widget.bind("<Key>", self._refuse_edit)
         widget.configure(insertwidth=0)  # reads as text rather than as a box to type in
-        self._make_copyable(widget)
 
     def _build_menu(self, tk):
         """ONE right-click menu, for the window rather than per widget. A menu of its own on every
@@ -379,6 +390,7 @@ class EntityWindow:
         checklist = heading in self.CHECKLIST_HEADINGS
         if checklist:
             pane.tag_configure("done", overstrike=True, foreground=DIM)
+            pane.tag_raise("sel")  # made after the pane, so it would otherwise dim the highlight
             pane.bind("<Button-1>", lambda event, name=label: self._clicked_box(event, name))
         self._sections[label] = {"pane": pane, "heading": heading, "edited": None, "loaded": "",
                                  "checklist": checklist}
@@ -799,6 +811,47 @@ class EntityWindow:
     def menu_labels(self):
         """What the right-click menu offers."""
         return [self._menu.entrycget(index, "label") for index in range(self._menu.index("end") + 1)]
+
+    def _pane_for(self, label):
+        """The pane behind a tab label - what a right-click lands in."""
+        if label == self.PERSONA_TAB:
+            return self._persona
+        if label == self.MEMORY_TAB:
+            return self._learned
+        return self._sections[label]["pane"]
+
+    def _front(self, label):
+        """Bring a tab to the front and let it lay out. A notebook page nobody has opened is one
+        pixel wide and reports every x in it as column 0, so a click aimed by its geometry is
+        aimed at nothing - which is the state every one of these was measured in."""
+        pane = self._pane_for(label)
+        self._tabs.select(pane)
+        self._tk.update()
+        return pane
+
+    def copy_by_menu(self, label, start, end):
+        """Select part of a tab and take Copy off its right-click menu, the way a hand on the
+        mouse does it, and hand back the text that copied. The click is generated on the pane
+        itself, so the binding has to be there: a menu that only opens over the conversation is a
+        tab you cannot get a word out of.
+
+        Only the posting is held back. `tk_popup` takes a global grab and does not return until a
+        person dismisses the menu, which in a test never happens - measured: it hangs outright."""
+        pane = self._front(label)
+        pane.tag_remove("sel", "1.0", "end")
+        pane.tag_add("sel", start, end)
+        self._copied = None
+        self._menu.tk_popup = lambda *ignored: None
+        try:
+            pane.event_generate("<Button-3>", x=4, y=4)
+        finally:
+            del self._menu.tk_popup
+        self._menu.invoke(0)
+        return self._copied
+
+    def tag_order(self, label):
+        """A tab's text tags, lowest priority first - where the selection sits among them."""
+        return list(self._pane_for(label).tag_names())
 
     def menu_count(self):
         """How many Tk menus the window holds - which must not grow with the conversation."""

@@ -387,6 +387,17 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         ticked = profile.read_text(encoding="utf-8")
         assert "- [x] better voice" in ticked  # ticked in the file, still there to read
 
+        # Copying has to work in every tab, not only the conversation. Right-click is the copy
+        # that works with a hand on the mouse, and the section tabs had no <Button-3> bound at
+        # all - measured - so a list he could read was a list he could not get a line out of.
+        assert window.copy_by_menu("2 · Enhancements", "1.2", "1.8") == "better"
+        assert window.copy_by_menu("4 · Goals", "1.2", "1.7") == "learn"
+        assert window.copy_by_menu("6 · Persona", "1.0", "1.3") == "You"
+        # And the highlight has to be visible where it lands: the strike-through tag is made after
+        # the pane, so unless the selection is raised over it, a ticked line highlights under a
+        # tag that dims it.
+        assert window.tag_order("2 · Enhancements")[-1] == "sel"
+
         # What it has learned is visible the moment it lands, and an edit of it sticks.
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()

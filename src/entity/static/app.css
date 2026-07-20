@@ -115,6 +115,21 @@ body.page { padding: 10px; }
 .as-text summary { font-size: .76rem; color: var(--dim); cursor: pointer; }
 .as-text .writing { margin-top: 6px; }
 .agent.thread { height: 340px; }
+.section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
+                    background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
+.section h2 .shut:hover { color: #ff9b9b; }
+
+/* Yes and the bin share one row, so neither sets the column's width - that comes from the
+   buttons above them. */
+.answer { display: flex; gap: 6px; }
+.answer #yes { flex: 1; }
+.answer #bin { flex: none; padding: 7px 10px; }
+
+/* What a message names that can be opened. Underlined so it reads as a thing to click, in the
+   text's own colour so a path in the middle of a sentence is still part of the sentence. */
+.opens { color: inherit; text-decoration: underline; text-underline-offset: 2px;
+         text-decoration-color: var(--accent); cursor: pointer; }
+.opens:hover { color: var(--accent); }
 
 /* ---- the contents, above the controls ----------------------------------------------------- */
 

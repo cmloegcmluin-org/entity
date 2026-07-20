@@ -8,7 +8,12 @@
 <main id="content" class="reading">
   {% for name in names %}
   <section class="section">
-    <h2>{{ name }}</h2>
+    {#- Closing one archives its log, which is what makes it stay closed: the roster IS the log
+        folder, so a log left in it comes straight back on the next poll. -#}
+    <h2>{{ name }}
+      <button type="button" class="shut" data-agent="{{ name }}"
+              title="Close {{ name }}" aria-label="Close {{ name }}">✕</button>
+    </h2>
     <div class="agent thread" data-agent="{{ name }}"></div>
   </section>
   {% else %}

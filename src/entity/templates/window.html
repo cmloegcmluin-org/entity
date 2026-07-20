@@ -23,6 +23,13 @@
     <div id="meter"><div id="level"></div></div>
     <label class="switch"><input type="checkbox" id="auto"> auto-listen</label>
     <button type="button" id="send" class="btn send">Submit</button>
+    {#- Saying yes was costing four gestures - mic on, the word, mic off, Submit - for about half
+        his turns. This is the one click that does it, with the bin beside it for the opposite:
+        everything drafted, gone, and Ctrl+Z brings it back. -#}
+    <div class="answer">
+      <button type="button" id="yes" class="btn">Yes</button>
+      <button type="button" id="bin" class="btn" title="Discard the draft" aria-label="Discard the draft">🗑</button>
+    </div>
   </div>
 
   <div class="saying">

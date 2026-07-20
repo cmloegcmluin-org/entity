@@ -14,7 +14,11 @@ import threading
 
 from entity.mirror import APP_ID
 
-WINDOW = {"width": 980, "height": 760, "min_size": (620, 520)}
+# confirm_close: the X asks first. "Godddamnit, I accidentally closed this app. There should
+# definitely be an 'are you sure' confirmation dialog!!" - and behind that button are a live
+# conversation, a mic and running agents. The Tk window asked; the port dropped the question and
+# it had to be reported as missing before anyone noticed.
+WINDOW = {"width": 980, "height": 760, "min_size": (620, 520), "confirm_close": True}
 
 
 def _set_app_id_via_shell32(app_id):
@@ -50,6 +54,38 @@ def serve(app, port, host="127.0.0.1"):
     return thread
 
 
+def turn_on_context_menus(control):
+    """Switch WebView2's default context menus back on, once its core is up.
+
+    pywebview's WebView2 backend ties `AreDefaultContextMenusEnabled` to its debug flag, so an
+    ordinary run has no right-click menu anywhere - and copying PART of a message is exactly what
+    that menu is for. The hover button copies a whole message; a selection needs this. Called
+    before the core has finished initialising the setting would have nothing to land on, so the
+    caller fires and forgets."""
+    core = control.CoreWebView2
+    if core is not None:
+        core.Settings.AreDefaultContextMenusEnabled = True
+
+
+def restore_context_menus(window, apply=turn_on_context_menus):
+    """Give the page back its right-click Cut/Copy/Paste.
+
+    Windows only, and best-effort: Ctrl+C keeps working either way, so a failure here costs a
+    menu and nothing else."""
+    try:
+        form = window.native            # the winforms form pywebview built
+        control = form.browser.webview  # the WebView2 control it hosts
+        # A WebView2 setting must be touched on the thread that created the control.
+        if form.InvokeRequired:
+            from System import Action  # noqa: PLC0415 - pythonnet, only under the winforms backend
+
+            form.Invoke(Action(lambda: apply(control)))
+        else:
+            apply(control)
+    except Exception:
+        pass
+
+
 def open_window(app, *, title="Entity", icon=None, webview=None, port=None):
     """Show the app in its own window, and return when that window is closed.
 
@@ -66,7 +102,11 @@ def open_window(app, *, title="Entity", icon=None, webview=None, port=None):
     set_app_id(APP_ID)
     port = port or free_port()
     serve(app, port)
-    webview.create_window(title, f"http://127.0.0.1:{port}/", **WINDOW)
+    window = webview.create_window(title, f"http://127.0.0.1:{port}/", **WINDOW)
+    # Once the page is up, hand it back its right-click menu - pywebview switches it off, and
+    # copying part of a message rather than all of it is what that menu is for.
+    if hasattr(window, "events"):
+        window.events.loaded += lambda: restore_context_menus(window)
     # pywebview's winforms backend applies the icon to the window, and so to the taskbar button;
     # without it Windows shows pythonw.exe's. (Its "GTK/QT only" docstring is stale.)
     webview.start(icon=icon) if icon else webview.start()

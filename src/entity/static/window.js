@@ -124,6 +124,21 @@ function showHearing(text) {
 }
 
 document.getElementById("send").onclick = send;
+
+/* One click that says yes. About half his turns were the mic on, the word, the mic off and
+   Submit - four gestures for one word. Whatever is half-written in the draft is left exactly
+   where it is: losing typed words is the thing he filed a ticket about. */
+document.getElementById("yes").onclick = () => post("/submit", { text: "Yes." });
+
+/* And the bin beside it: the whole draft gone, undoably. Written through the document's own edit
+   command rather than by assigning `.value`, because assigning wipes the undo stack with it and a
+   button that destroys typed words for good is that same complaint again. */
+document.getElementById("bin").onclick = () => {
+  draft.focus();
+  draft.select();
+  if (!document.execCommand("delete")) draft.value = "";
+  dictated.length = 0;
+};
 draft.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();

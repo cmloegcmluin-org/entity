@@ -28,7 +28,21 @@ function element(entry) {
   who.append(`${entry.name} · ${entry.stamp}`);
   const box = document.createElement("div");
   box.className = "box";
-  box.append(entry.text);
+  // What can be opened is decided on the server (links.py); the page only draws it. Reading a
+  // path back off the screen to retype it is exactly what this saves.
+  for (const part of entry.parts || [{ text: entry.text, link: "" }]) {
+    if (!part.link) { box.append(part.text); continue; }
+    const link = document.createElement("a");
+    link.className = "opens";
+    link.href = "#";
+    link.title = part.link;
+    link.append(part.text);
+    link.onclick = (event) => {
+      event.preventDefault();
+      fetch("/open", { method: "POST", body: new URLSearchParams({ target: part.link }) });
+    };
+    box.append(link);
+  }
   said.append(who, box);
   return said;
 }

@@ -299,3 +299,68 @@ def test_an_agent_that_is_not_in_the_log_folder_is_not_a_path_to_read(tmp_path):
     answer = _client(agent_logs_dir=logs, clock=lambda: "12:00:00").get("/agents/..%2Fprofile")
 
     assert answer.status_code == 404
+
+
+def test_a_message_naming_a_path_hands_it_over_as_something_to_open():
+    # Entity names paths and addresses constantly, and reading one off the screen to retype it is
+    # exactly what this saves. The rules live in links.py; the page only draws what it is handed.
+    named = r"C:\ada\runtime\task.md"
+    model = _model(rf"[10:00:00] entity> Filed it at {named}, see https://ex.com/x")
+
+    parts = _client(model).get("/messages").get_json()["entries"][0]["parts"]
+
+    assert [part["link"] for part in parts if part["link"]] == [named, "https://ex.com/x"]
+    # The sentence's own punctuation stays outside the link, and not one word is lost.
+    assert "".join(part["text"] for part in parts).strip() == (
+        f"Filed it at {named}, see https://ex.com/x")
+
+
+def test_only_what_was_offered_as_a_link_can_be_opened():
+    opened = []
+    client = _client(opener=opened.append)
+
+    assert client.post("/open", data={"target": "https://ex.com/x"}).status_code == 204
+    # A POST that opens whatever string it is handed is a way to run things by talking to the port.
+    assert client.post("/open", data={"target": "not a link at all"}).status_code == 400
+    assert opened == ["https://ex.com/x"]
+
+
+def test_the_one_click_yes_and_the_bin_are_both_on_the_page():
+    # Saying yes cost four gestures - mic on, the word, mic off, Submit - for about half his turns,
+    # and the bin beside it throws a draft away undoably. Both went missing in the port.
+    page = _client().get("/").get_data(as_text=True)
+
+    assert 'id="yes"' in page and 'id="bin"' in page
+
+
+def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):
+    # The roster IS the log folder, so a log left in place comes straight back on the next poll.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix it\n", encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    assert client.post("/agents/fixer/close").status_code == 204
+
+    assert not (logs / "fixer.log").exists()
+    assert (logs / "closed" / "fixer.log").exists()
+    assert 'data-agent="fixer"' not in client.get("/agents").get_data(as_text=True)
+    assert client.post("/agents/fixer/close").status_code == 404  # and it is not a path to touch
+
+
+def test_the_win_enter_chord_reaches_the_page_as_one_send():
+    # The chord cannot reach any window on this machine, so it arrives by keyboard hook and
+    # crosses the feed. Every link of that chain but the hook itself is checked here, because the
+    # port moved the far end of it from a Tk binding to a page poll.
+    from entity.chord import ENTER, LWIN, SubmitChord
+
+    feed = TranscriptFeed()
+    mirror = Mirror(feed, clock=lambda: "12:00:00")
+    client = _client(mirror.model, mirror=mirror)
+    chord = SubmitChord(submit=lambda: feed.push("submit", ""), focused=lambda: True)
+
+    chord.key(LWIN, released=False)
+    chord.key(ENTER, released=False)
+
+    assert client.get("/messages").get_json()["send"] is True
+    assert client.get("/messages").get_json()["send"] is False  # and the box is sent once

@@ -26,6 +26,7 @@ from entity.memory import (
     save_translations,
     translation_pairs,
 )
+from entity.links import link_in, open_link
 from entity.mirror import SIDES, TranscriptModel, sessions
 from entity.tailing import LogTail, discover
 from entity.vocabulary import translations_in_force
@@ -37,6 +38,32 @@ SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 # ("Enhancements he wants for you (roadmap, not now)").
 SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
             ("Goals", "Goals"), ("Projects", "Projects"))
+
+
+def _parts(text):
+    """A message split into what can be opened and what cannot.
+
+    Entity names paths and addresses constantly, and reading one back to retype it is the thing
+    this saves. The server decides what is a link - `links.link_in` is where the rules live and
+    where they are tested - so the page only draws what it is handed."""
+    parts, plain = [], []
+    for word in text.split(" "):
+        target = link_in(word)
+        if target is None:
+            plain.append(word)
+            continue
+        if plain:
+            parts.append({"text": " ".join(plain) + " ", "link": ""})
+            plain = []
+        # The sentence's own punctuation stays outside the link, so a full stop after a filename
+        # is not part of the filename.
+        head, _, rest = word.partition(target)
+        parts.append({"text": head, "link": ""}) if head else None
+        parts.append({"text": target, "link": target})
+        parts.append({"text": rest + " ", "link": ""})
+    if plain:
+        parts.append({"text": " ".join(plain), "link": ""})
+    return [part for part in parts if part["text"]]
 
 
 def _said(entry, label="", speakers=SPEAKERS):
@@ -54,6 +81,8 @@ def _said(entry, label="", speakers=SPEAKERS):
         "historical": entry["historical"],
         "bubble": entry["role"] in SIDES,
         "side": SIDES.get(entry["role"], ""),
+        # What in it can be opened, worked out here so the page only draws it.
+        "parts": _parts(entry["text"]) if entry["role"] in SIDES else [],
     }
 
 
@@ -138,6 +167,17 @@ class Agents:
     def names(self):
         return sorted(discover(self._directory)) if self._directory else []
 
+    def close(self, name):
+        """Take an agent away and archive its log, so it stays closed. Moving the log aside is
+        what makes that stick - the roster is the folder, so a log still in it comes straight
+        back on the next poll."""
+        self._read.pop(name, None)
+        log = self._directory / f"{name}.log" if self._directory else None
+        if log is not None and log.exists():
+            closed = self._directory / "closed"
+            closed.mkdir(parents=True, exist_ok=True)
+            log.replace(closed / log.name)
+
     def entries(self, name):
         if name not in self._read:
             self._read[name] = (LogTail(self._directory / f"{name}.log"),
@@ -148,7 +188,8 @@ class Agents:
         return model.entries
 
 
-def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None, mirror=None,
+def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
+               opener=open_link, mirror=None,
                profile_path=None, learned_path=None, translations_path=None, terms=(), persona="",
                agent_logs_dir=None, clock=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
@@ -214,6 +255,18 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         """Whether the mic re-arms itself after each reply, rather than being pressed each time."""
         if on_auto_listen is not None:
             on_auto_listen(request.form["on"] == "true")
+        return ("", 204)
+
+    @app.post("/open")
+    def open_what_was_clicked():
+        """Open something a message named - an address in the browser, a path on this machine.
+
+        Only what this same server offered as a link: the page can ask for anything, and a POST
+        that opens whatever string it is handed is a way to run things by talking to the port."""
+        target = request.form["target"]
+        if link_in(target) != target:
+            return ("", 400)
+        opener(target)
         return ("", 204)
 
     # ---- the pages that were tabs -------------------------------------------------------------
@@ -300,5 +353,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         # In an agent's thread the Entity is the one asking and the agent answers.
         return _thread(agents.entries(name), request.args.get("since", 0, type=int),
                        {"you": "Entity", "entity": name, "heads-up": "Entity · heads-up"})
+
+    @app.post("/agents/<name>/close")
+    def close_agent(name):
+        if name not in agents.names():  # never touch a path that did not come from the log folder
+            return ("", 404)
+        agents.close(name)
+        return ("", 204)
 
     return app

@@ -9,6 +9,8 @@ dependencies = [
     "onnx-asr[cpu,hub]>=0.11",   # local Parakeet speech-to-text
     "sounddevice>=0.4",          # microphone capture
     "numpy>=1.26",               # audio frames + energy VAD
+    "flask>=3",                  # the window is a local web app, as in Notecraft
+    "pywebview>=5",              # ...shown in its own native window rather than a browser tab
 ]
 
 [project.optional-dependencies]

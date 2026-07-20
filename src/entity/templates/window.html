@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entity</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  {#- The contents stands beside the conversation, not under it: it is a way into the thread,
+      so it belongs alongside the thread rather than in the row of things to do with talking. -#}
+  <aside id="contents" aria-label="Sessions"></aside>
+
+  <main id="thread" aria-live="polite"></main>
+
+  {#- Everything to do with talking, together along the bottom. -#}
+  <footer id="controls">
+    <div class="column">
+      <button type="button" id="mic" class="btn">○ mic off</button>
+      <div id="meter"><div id="level"></div></div>
+      <button type="button" id="send" class="btn send">Submit</button>
+    </div>
+    <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
+  </footer>
+
+  {#- The one control that follows the pointer: it is only ever wanted in one place at a time,
+      and one per message would be a button built for every line of every session ever. -#}
+  <button type="button" id="copy" class="copy" hidden aria-label="Copy">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
+    <span class="copied">Copied</span>
+  </button>
+  <svg hidden><symbol id="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+       stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
+    <path d="M10.5 2.5h-8v8"></path>
+  </symbol></svg>
+
+  <script src="{{ url_for('static', filename='window.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+/* The window: a contents column, the conversation, and the row of things to do with talking.
+
+   The look follows Notecraft — system font, hairline outline buttons that take the accent on
+   hover, one accent and one danger colour — so the two apps read as the same hand. What is
+   Entity's own is the thread: a message is a box that hugs its own words, and there are two
+   sides to the conversation.
+
+   A bubble's width is `max-width` and its height is its text. That is the whole of what the Tk
+   build spent a module measuring: a proportional-font word wrap, a pixel box per message, and a
+   re-measure on every resize. */
+
+:root {
+  color-scheme: dark;
+  --bg: #161616;
+  --panel: #1f1f1f;
+  --line: rgba(128, 128, 128, .22);
+  --fg: #d6d6d6;
+  --dim: #7a7a7a;
+  --past: #8f8f8f;      /* a message from an earlier session, half a step back */
+  --mine: #2b3a1a;      /* the user's messages, right — a warm dark green */
+  --its: #22262b;       /* Entity's, left — a cool dark slate */
+  --accent: #7fff00;
+  --bubble: 55%;        /* of the thread a message may take — about half, as a thread reads */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* ---- the contents, beside the conversation ------------------------------------------------ */
+
+#contents {
+  grid-row: 1 / span 2;
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 8px 0;
+}
+#contents button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: .78rem;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+#contents button:hover { color: var(--fg); background: rgba(127, 255, 0, .06); }
+#contents button[aria-current="true"] { color: var(--fg); border-left-color: var(--accent); }
+
+/* ---- the conversation --------------------------------------------------------------------- */
+
+#thread {
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* A message: the name above, the box under it, both against the same edge. */
+.said { display: flex; flex-direction: column; max-width: var(--bubble); }
+.said.right { align-self: flex-end; align-items: flex-end; }
+.said.left { align-self: flex-start; align-items: flex-start; }
+.said + .said { margin-top: 8px; }
+
+.who { font-size: .72rem; color: var(--dim); padding: 0 2px 3px; }
+
+.box {
+  padding: 7px 11px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;   /* a pasted URL breaks rather than pushing the box past its half */
+  user-select: text;
+}
+.right .box { background: var(--mine); border-bottom-right-radius: 4px; }
+.left .box { background: var(--its); border-bottom-left-radius: 4px; }
+.historical .box { color: var(--past); }
+.historical .who { color: #6b6b6b; }
+
+/* A remark that is not a message: the ignore counter, the mic's own lines. */
+.aside { align-self: center; color: var(--dim); font-size: .74rem; padding: 3px 0; }
+
+/* The two breaks, deliberately unalike: a day is a ruled line carrying its date, a session is
+   three dots. Made to look the same they read as one thing repeated, which is what a day
+   holding three sessions looked like when the date was doing both jobs. */
+.day, .session { align-self: stretch; display: flex; align-items: center; justify-content: center;
+                 gap: 12px; color: var(--dim); font-size: .74rem; padding: 10px 0 6px; }
+.day::before, .day::after { content: ""; height: 1px; width: 84px; background: var(--line); }
+.session { letter-spacing: .5em; padding: 8px 0; }
+
+/* Both breaks head a session, so both offer to copy one — the dated rule most of all, since
+   that is the line that reads as a session's heading. */
+.day, .session, .said { position: relative; }
+
+/* ---- the copy button ---------------------------------------------------------------------- */
+
+.copy {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: .72rem;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s, color .12s, border-color .12s;
+}
+.copy[hidden] { display: none; }
+.copy.showing { opacity: 1; }
+/* It answers the pointer, and it answers the press. Neither did anything in the Tk build:
+   the button sat there at one brightness whether it had been hovered, clicked, or ignored. */
+.copy:hover { color: var(--accent); border-color: var(--accent); }
+.copy:active { background: rgba(127, 255, 0, .12); }
+.copy svg { width: 13px; height: 13px; display: block; }
+.copied { display: none; }
+.copy.done { color: var(--accent); border-color: var(--accent); }
+.copy.done svg { display: none; }
+.copy.done .copied { display: inline; }
+
+/* ---- talking ------------------------------------------------------------------------------ */
+
+#controls { display: flex; gap: 10px; align-items: stretch; }
+.column { display: flex; flex-direction: column; gap: 6px; width: 140px; }
+
+.btn {
+  font: inherit;
+  font-size: .9rem;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.send { color: var(--accent); border-color: rgba(127, 255, 0, .35); }
+.btn.send:hover { background: rgba(127, 255, 0, .12); }
+#mic.recording { color: var(--accent); border-color: var(--accent); }
+#mic.speaking { color: #ff9b9b; border-color: #ff9b9b; }
+
+/* The meter spans the column, because it is the column's width that says what full is. */
+#meter { height: 10px; border-radius: 5px; background: var(--panel); overflow: hidden; }
+#level { height: 100%; width: 0; background: var(--accent); transition: width .06s linear; }
+
+#draft {
+  flex: 1;
+  font: inherit;
+  resize: none;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+#draft:focus { outline: none; border-color: var(--line); }
+
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; }
+::-webkit-scrollbar-track { background: transparent; }

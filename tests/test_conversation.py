@@ -288,7 +288,8 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
 
     convo.turn()  # the lull it woke: the answer goes out on its own
 
-    assert "the finished long-running answer" in tts.spoken  # the promise is kept without being chased
+    late = [line for line in tts.spoken if "the finished long-running answer" in line]
+    assert late and late[0].startswith('On "do the slow thing')  # kept, and tied to its question
     assert convo.ready_question not in tts.spoken  # and there was nothing for them to say yes to
 
 
@@ -368,8 +369,51 @@ def test_a_finished_background_answer_is_spoken_when_they_speak_again():
     convo.turn()  # detaches: "I'll get back to you on that."
     convo.turn()  # they push for it, and it lands while they are saying so
 
-    assert "the answer they were promised" in tts.spoken  # the promise is kept, not collected
+    late = [line for line in tts.spoken if "the answer they were promised" in line]
+    assert late and late[0].startswith('On "how is it going')  # kept, and tied to its question
     assert brain.cancelled is False  # nothing to cancel: it had already answered
+
+
+def test_a_late_answer_names_the_question_it_is_answering():
+    # "See there again an example of you responding to something that I said several messages ago.
+    # The last time I mentioned logs was one, two, three, four, five, six, seven messages ago. So it
+    # doesn't make sense for you to phrase things like you just did, like as if we were just talking
+    # about logs." A detached answer lands after he has moved on, and arrived with nothing tying it
+    # to what it answered - so a perfectly good answer read as a non-sequitur.
+    release = threading.Event()
+
+    class SlowBrain:
+        def respond(self, utterance):
+            if "agents keep dying" in utterance:
+                release.wait(2.0)
+                return "That one didn't die - it finished hours ago and went idle."
+            return "a fresh reply"
+
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["why do these agents keep dying", ""]), SlowBrain(), tts,
+        acknowledgement="ACK", detach_after=0.05, patience=30, long_answer_chars=None,
+    )
+
+    convo.turn()  # detaches
+    release.set()
+    assert convo._background["done"].wait(2.0)
+    convo.turn()  # the lull it woke, and the answer goes out
+
+    late = [line for line in tts.spoken if "didn't die" in line][0]
+    assert "why do these agents keep dying" in late  # his own words, so it lands as an answer
+    assert late.endswith("That one didn't die - it finished hours ago and went idle.")
+
+
+def test_a_prompt_answer_is_not_prefaced_with_the_question():
+    # Only a LATE one needs tying back. Repeating his question at him when he has just asked it
+    # would be one more stock phrase in a conversation he already called a waste of his time.
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["did it work"]), FakeBrain(), tts, long_answer_chars=None)
+
+    convo.turn()
+
+    assert "reply to did it work" in tts.spoken
 
 
 def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
@@ -469,7 +513,7 @@ def test_a_collected_answer_is_gated_on_its_length_like_any_other_reply():
 
     convo, tts = collected("Started 1 agent.", long_answer_chars=100)
 
-    assert "Started 1 agent." in tts.spoken  # short enough to just say, so it is just said
+    assert any(line.endswith("Started 1 agent.") for line in tts.spoken)  # short: just said
     assert convo.ready_question not in tts.spoken
 
     convo, tts = collected("A wall of an answer. " * 20, long_answer_chars=100)
@@ -1272,12 +1316,12 @@ def test_a_finished_answer_goes_out_while_the_mic_sits_armed():
     stt.talking = True
     convo.turn()
 
-    assert "the finished answer" not in tts.spoken  # mid-sentence: it waits, exactly as it always has
+    assert not any("the finished answer" in line for line in tts.spoken)  # mid-sentence: it waits
 
     stt.talking = False
     convo.turn()
 
-    assert "the finished answer" in tts.spoken  # they've stopped - armed mic and all, it speaks
+    assert any("the finished answer" in line for line in tts.spoken)  # they've stopped - it speaks
 
 
 def test_a_long_reply_is_cut_short_rather_than_half_read():

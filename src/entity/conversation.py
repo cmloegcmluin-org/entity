@@ -56,6 +56,16 @@ TRUNCATION_NOTICE = (
     "{limit} - they never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
 )
 
+# Wraps a detached answer when it finally goes out. By then they have said other things and moved
+# on, so an answer that arrives bare reads as a non-sequitur: "you responded to something that I
+# said several messages ago... it doesn't make sense to phrase things like we were just talking
+# about logs." Their own words are the one preface that makes a late answer land as an answer.
+LATE_ANSWER_PREFACE = 'On "{question}" - {answer}'
+
+# How much of their question is quoted back. Enough to recognise; a whole spoken paragraph would
+# bury the answer it prefaces.
+LATE_QUESTION_CHARS = 90
+
 # Said back to the brain on the turn AFTER anything was spoken in its name that it did not write -
 # the acknowledgement, the handoff line, an agent's notice, a canned confirmation.
 #
@@ -412,14 +422,15 @@ class Conversation:
         talking = getattr(self._stt, "is_mid_utterance", None)
         return bool(talking and talking())
 
-    def _think(self, heard):
+    def _think(self, heard, question=None):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
         check-in comes after `patience`, then it keeps checking in every `check_in` seconds - each
         time saying how long it's been - until the reply lands. If they barge in while it's thinking,
         the call is cancelled and `_ThinkInterrupted` is raised so the loop drops the turn. If it
         runs past `detach_after`, it's handed to the background and `_ThinkDetached` is raised so the
-        loop is freed and the answer is offered later. Re-raises whatever the brain raised, so the
-        caller's error handling is unchanged."""
+        loop is freed and the answer is offered later - remembering `question` (their words as they
+        said them, without the system notes prefixed to `heard`) so the late answer can say what it
+        answers. Re-raises whatever the brain raised, so the caller's error handling is unchanged."""
         outcome = {}
         done = threading.Event()
 
@@ -446,7 +457,7 @@ class Conversation:
                     raise _ThinkInterrupted
                 if detach_at is not None and time.monotonic() >= detach_at:  # too slow - background it
                     self._speak_reply(self._detach_line())
-                    self._detach(done, outcome)
+                    self._detach(done, outcome, question if question is not None else heard)
                     raise _ThinkDetached
                 deadline = next_check_in if detach_at is None else min(next_check_in, detach_at)
                 timeout = min(self._interrupt_poll, max(0.0, deadline - time.monotonic()))
@@ -483,13 +494,25 @@ class Conversation:
                 print(f"[interrupt error] {exc!r}", file=sys.stderr)
         done.wait(self._cancel_wait)
 
-    def _detach(self, done, outcome):
-        """Leave the slow call running on its worker and remember it; a reaper breaks the next lull
-        the moment it lands, so the finished answer reaches them promptly rather than waiting for
-        them to speak first."""
-        self._background = {"done": done, "outcome": outcome}
+    def _detach(self, done, outcome, question):
+        """Leave the slow call running on its worker and remember it - with the question it is
+        answering, so the answer can say what it answers when it finally arrives. A reaper breaks
+        the next lull the moment it lands, so the finished answer reaches them promptly rather than
+        waiting for them to speak first."""
+        self._background = {"done": done, "outcome": outcome, "question": question}
         if self._wake is not None:
             threading.Thread(target=self._reap, args=(done,), daemon=True).start()
+
+    def _late_reply(self, background):
+        """A detached answer, tied back to what it answers. By the time it lands they have moved on,
+        and a bare answer to a question from seven messages ago reads as a non-sequitur - they had
+        to count the messages back to work out what it belonged to. Their own words are the preface
+        that makes it land as an answer."""
+        reply = background["outcome"].get("reply")
+        if reply is None:
+            return None
+        question = _opening(" ".join(background["question"].split()), LATE_QUESTION_CHARS)
+        return LATE_ANSWER_PREFACE.format(question=question, answer=reply)
 
     def _reap(self, done):
         done.wait()
@@ -510,7 +533,7 @@ class Conversation:
         if self._they_are_talking():
             return  # mid-sentence; a finished answer waits, exactly as agent news does
         self._background = None
-        reply = background["outcome"].get("reply")
+        reply = self._late_reply(background)
         if reply is None or self._offered is not None:
             return
         if self._should_gate(reply):
@@ -577,7 +600,7 @@ class Conversation:
         background = self._background
         self._background = None
         if background["done"].is_set():
-            reply = background["outcome"].get("reply")  # a failure stays dropped, as it always has
+            reply = self._late_reply(background)  # a failure stays dropped, as it always has
             if reply is not None:
                 self._speak_reply(reply, known=True)
             return
@@ -606,7 +629,7 @@ class Conversation:
         self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
         think_start = time.monotonic()
         try:
-            said = self._think(self._with_system_notes(heard))
+            said = self._think(self._with_system_notes(heard), question=heard)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             return None
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands

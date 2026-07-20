@@ -291,6 +291,7 @@ class EntityWindow:
         went back far enough, and the window then would not open at all. Which widget was clicked
         is remembered as the menu is posted instead."""
         self._clicked = None  # the widget the menu was posted over
+        self._copied = None  # the text Copy last handed over
         self._menu = tk.Menu(self._tk, tearoff=0, bg=PANEL, fg=FG, activebackground=SELECTION)
         self._menu.add_command(label="Copy", command=lambda: self._copy_selection(self._clicked))
 
@@ -322,6 +323,7 @@ class EntityWindow:
     def _to_clipboard(self, text):
         if not text:
             return
+        self._copied = text  # which text was handed over, for a test to check without the OS
         self._tk.clipboard_clear()
         self._tk.clipboard_append(text)
 
@@ -728,17 +730,19 @@ class EntityWindow:
         return self._thread.hover_copies(index)
 
     def copy_from_bubble(self, index, start, end):
-        """Select part of one bubble and press Ctrl-C, the way a reader would, and read the
-        clipboard back.
+        """Select part of one bubble and press Ctrl-C, the way a reader would, and hand back the
+        text that copied (see BubbleThread.hover_copies for why not the clipboard itself).
 
-        Emptied first: whatever was last copied in another app is on that clipboard, and reading
-        it back would let a copy that never happened look exactly like one that did."""
-        self._tk.clipboard_clear()
+        Focus is FORCED, not merely set. Tk routes a generated key event to the display's focus
+        window, and a window laid out at zero alpha only holds the desktop's focus if nothing else
+        took it back - so about one run in five the keystroke went nowhere at all and nothing was
+        copied. Forcing it states what a real keypress already implies: the reader is in this box."""
+        self._copied = None
         body = self._thread.bodies()[index]
-        body.focus_set()
+        body.focus_force()
         body.tag_add("sel", start, end)
         body.event_generate("<Control-c>")
-        return self._tk.clipboard_get()
+        return self._copied
 
     def draft_text(self):
         return self._draft.get("1.0", "end-1c")

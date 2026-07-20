@@ -120,6 +120,7 @@ class Thread:
         self._marks = {}  # id(entry) -> a Tk mark on its line, for the ones with no widget
         self._offered = None  # the entry the copy button currently belongs to
         self._withdrawing = None  # a pending hide, cancelled if the pointer reaches the button
+        self._copied = None  # the text the copy button last handed over
         for role, (side, _) in SIDES.items():
             pane.tag_configure(role, justify=side)
             pane.tag_configure(f"{role}:name", justify=side, foreground=DIM, font=NAME_FONT,
@@ -225,6 +226,7 @@ class Thread:
         if entry is None:
             return
         text = entry["text"] if entry["role"] in SIDES else self.session_text(entry)
+        self._copied = text  # which text was handed over, for a test to check without the OS
         self._pane.clipboard_clear()
         self._pane.clipboard_append(text)
 
@@ -373,13 +375,20 @@ class Thread:
         return self._copier.winfo_x() - (holder.winfo_x() + holder.winfo_width())
 
     def hover_copies(self, index):
-        """Hover one bubble, press its copy button, and hand back what reached the clipboard."""
+        """Hover one bubble, press its copy button, and hand back the text that copied.
+
+        The text it handed over - not what the system clipboard holds afterwards. Every Windows
+        clipboard read and write needs the machine-wide clipboard lock, and any other process
+        holding it for an instant (clipboard history, another app) makes Tk's update silently do
+        nothing. Read back, that left the PREVIOUS run's text sitting there looking exactly like a
+        copy that had just happened, and about one suite run in ten died on it. Which text this
+        window hands over is its behaviour; whether Windows was free to take it is not."""
+        self._copied = None
         body = self.bodies()[index]
         body.event_generate("<Enter>")
-        self._pane.clipboard_clear()
         self._copier.event_generate("<Button-1>")
         self._pane.update()
-        return self._pane.clipboard_get()
+        return self._copied
 
     def _fill(self, shown):
         entry, holder, body = shown

@@ -82,9 +82,12 @@ async function post(where, body) {
   await fetch(where, { method: "POST", body: new URLSearchParams(body) });
 }
 
+const dictated = [];  // the chunks dictation put in the box, newest last, so "scratch that" can undo
+
 function send() {
   const text = draft.value.trim();
   draft.value = "";
+  dictated.length = 0;  // the box is empty; there is nothing left in it to take back
   if (text) post("/submit", { text });
 }
 
@@ -93,8 +96,22 @@ function dictate(chunks) {
   for (const chunk of chunks) {
     const so_far = draft.value;
     draft.value = so_far && !/[ \n]$/.test(so_far) ? `${so_far} ${chunk}` : so_far + chunk;
+    dictated.push(chunk);
   }
   if (chunks.length) draft.scrollTop = draft.scrollHeight;
+}
+
+/* "Scratch that" - take back what he just said, out of the box it was typed into. Only while the
+   chunk is still the end of what is in there: this is the box he also types in by hand, and
+   guessing at what to cut from something he has edited would take away words he wrote himself. */
+function retract(times) {
+  for (let i = 0; i < times; i++) {
+    const chunk = dictated[dictated.length - 1];
+    const box = draft.value.replace(/[ \t]+$/, "");
+    if (!chunk || !box.endsWith(chunk)) return;   // not taken off the stack unless it is used
+    dictated.pop();
+    draft.value = box.slice(0, box.length - chunk.length).replace(/[ \t]+$/, "");
+  }
 }
 
 /* What he is being heard saying, while he is still saying it. Replaced whole rather than appended
@@ -148,6 +165,7 @@ async function refresh() {
     listSessions(shown.sessions);
     showState(shown.state, shown.level);
     showHearing(shown.hearing || "");
+    retract(shown.retract || 0);  // before the words beside it, which are always newer
     dictate(shown.dictated || []);
     if (shown.send) send();   // dictation said "over"
   } finally {

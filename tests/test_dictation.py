@@ -46,6 +46,7 @@ class Ears:
         self.states = []
         self.levels = []
         self.submits = 0
+        self.retracted = 0
 
     def kwargs(self):
         return dict(
@@ -53,10 +54,14 @@ class Ears:
             on_state=self.states.append,
             on_level=self.levels.append,
             on_submit_request=self._submit,
+            on_retract=self._retract,
         )
 
     def _submit(self):
         self.submits += 1
+
+    def _retract(self):
+        self.retracted += 1
 
 
 def _burst_then_pause():
@@ -141,6 +146,39 @@ def test_stop_listening_mutes_and_keeps_the_words_before_it():
 
     assert ears.drafted == ["add eggs"]  # the phrase (and its comma) never lands in the draft
     assert ears.states[-1] == "muted"  # and the mic went off
+
+
+def test_scratch_that_takes_back_what_he_said_before_it_and_never_lands_in_the_draft():
+    # The other half of what he asked for: a spoken way to rewind and say it again. He says a
+    # sentence, sees it come out wrong, and takes it back without reaching for the keyboard.
+    ears = Ears()
+    dictation = Dictation(
+        FakeTranscriber("pick up the drive subfolder work", "scratch that",
+                        "pick up the Notecraft work"),
+        FakeMic(_burst_then_pause() * 3), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["pick up the drive subfolder work", "pick up the Notecraft work"]
+    assert ears.retracted == 1  # and the first of those is taken back off the box between them
+
+
+def test_scratch_that_in_the_same_breath_takes_back_the_words_in_that_breath():
+    # He catches it before he has even paused. What he is taking back is right there in the chunk,
+    # so none of it lands - and the sentence already in the box, which he did not object to, stays.
+    ears = Ears()
+    dictation = Dictation(
+        FakeTranscriber("pick up the Notecraft work",
+                        "and then merge to main, scratch that",
+                        "scratch that, ask me first"),
+        FakeMic(_burst_then_pause() * 3), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    # The last one is the whole gesture in one breath: take back the sentence before, say the new
+    # one. Taking a sentence back and starting the next is a single thing people say.
+    assert ears.drafted == ["pick up the Notecraft work", "ask me first"]
+    assert ears.retracted == 1
 
 
 def test_muted_speech_is_dropped_until_hey_entity():

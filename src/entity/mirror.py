@@ -112,6 +112,7 @@ class Mirror:
         self.hearing = ""
         self._typed = []      # dictation's words, waiting for the page to put them in the box
         self._send = False    # dictation said "over": the box is to be sent as it stands
+        self._retract = 0     # he said "scratch that": chunks already in the box to take back out
 
     def drain(self):
         """Take everything the conversation and the dictation pump have said since last time."""
@@ -124,18 +125,29 @@ class Mirror:
                 self.hearing = payload
             elif op == "draft":
                 self._typed.append(payload)
+            elif op == "retract":
+                # A chunk the page has not been handed yet is undone by never handing it over;
+                # only one that already reached the box has to be taken back out of it.
+                if self._typed:
+                    self._typed.pop()
+                else:
+                    self._retract += 1
             elif op == "submit":
                 self._send = True
             else:
                 self.model.apply(op, payload)
 
     def dictated(self):
-        """The words dictation has typed since the last poll, and whether to send the box.
+        """What dictation has done to the box since the last poll: how many chunks already in it to
+        take back out, the words to type into it, and whether to send it.
 
-        Taken, not read: handed over twice they would be typed into the box twice."""
+        Taken, not read: handed over twice they would be typed into the box twice. The retracts
+        come first because they can only ever refer to something older than the words beside them.
+        """
+        retract, self._retract = self._retract, 0
         typed, self._typed = self._typed, []
         send, self._send = self._send, False
-        return typed, send
+        return retract, typed, send
 
 
 def sessions(entries):

@@ -136,11 +136,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             mirror.drain()  # the page's poll is the pump; nothing runs while nothing is looking
         entries = model.entries
         since = min(request.args.get("since", 0, type=int), len(entries))
-        typed, send = mirror.dictated() if mirror is not None else ([], False)
+        retract, typed, send = mirror.dictated() if mirror is not None else (0, [], False)
         return _thread(entries, since) | {
             "state": mirror.state if mirror is not None else "muted",
             "level": mirror.level if mirror is not None else 0.0,
             "hearing": mirror.hearing if mirror is not None else "",
+            "retract": retract,
             "dictated": typed,
             "send": send,
         }

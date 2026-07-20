@@ -154,8 +154,11 @@ def _agent_protocol_note(roster, logs):
     )
 
 
-def _open_hearing(announce):
-    """The hardware half of hearing - transcriber, mic, recorder - shared by both voice modes."""
+def _open_ears(announce):
+    """The hardware half of listening - transcriber, mic, recorder - shared by both voice modes.
+
+    Not "hearing", which is `entity.hearing`: that module is the live line, and one name for both
+    would have the next reader looking for a screen in the microphone code."""
     import sounddevice as sd
 
     from entity.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
@@ -224,7 +227,7 @@ def _build_ears(text_mode, stop, interrupt, announce=print):
         return ConsoleSTT(), None, None
     from entity.stt_mic import MicSTT
 
-    transcriber, mic, recorder = _open_hearing(announce)
+    transcriber, mic, recorder = _open_ears(announce)
     cue = lambda: announce("  ✓ got it")  # visual "registered" the instant you say "over"
     stt = MicSTT(transcriber, mic, stop=stop, cue=cue, recorder=recorder, interrupt=interrupt)
     return stt, mic, recorder
@@ -261,21 +264,29 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     brain = SupervisingBrain(sdk_brain, desk)
     dictation = None
     playback = None
+    hearing = None
     if gui:
         # The window's mic is a STATE, not a walkie-talkie: continuous dictation into the editable
         # draft, controlled by voice ("hey entity" / "stop listening"), the mic button, and Submit.
         from entity.dictation import Dictation
+        from entity.hearing import Hearing
 
-        transcriber, mic, recorder = _open_hearing(announce)
+        transcriber, mic, recorder = _open_ears(announce)
         playback = _watch_playback(announce)  # what the PC plays, so the mic can discount it
+        # Words on screen while he is still saying them: the burst so far, read over and over on a
+        # worker of its own. The same transcriber, on purpose - one 2.4 GB model, loaded already,
+        # and onnxruntime will run it from both threads.
+        hearing = Hearing(transcriber, lambda t: feed.push("hearing", t))
+        hearing.start()
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
-            playback=playback,
+            playback=playback, hearing=hearing,
             muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
             on_level=lambda v: feed.push("level", v),
             on_submit_request=lambda: feed.push("submit", ""),
+            on_retract=lambda: feed.push("retract", ""),
         )
         if attach is not None:
             attach(dictation)  # the window is already up, waiting to be wired to a mic
@@ -371,6 +382,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 mic.close if mic is not None else None,
                 recorder.close if recorder is not None else None,
                 playback.close if playback is not None else None,
+                hearing.close if hearing is not None else None,
             ):
                 try:
                     if closer is not None:

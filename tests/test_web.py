@@ -175,6 +175,38 @@ def test_the_poll_carries_the_sentence_he_is_still_in_the_middle_of():
     assert client.get("/messages").get_json()["hearing"] == ""
 
 
+def test_taking_back_what_he_just_said_reaches_the_box_it_was_typed_into():
+    feed = TranscriptFeed()
+    mirror = Mirror(feed, clock=lambda: "12:00:00")
+    client = _client(mirror.model, mirror=mirror)
+
+    feed.push("draft", "pick up the drive subfolder work")
+    client.get("/messages")  # the page has it in the box now, so the box is where it is undone
+    feed.push("retract", "")
+    feed.push("draft", "pick up the Notecraft work")
+
+    shown = client.get("/messages").get_json()
+
+    assert (shown["retract"], shown["dictated"]) == (1, ["pick up the Notecraft work"])
+    assert client.get("/messages").get_json()["retract"] == 0  # taken, not read - undone once
+
+
+def test_a_chunk_taken_back_before_the_page_saw_it_is_never_typed_at_all():
+    # He caught it inside one poll. Undoing it in the box would mean putting it there first, so
+    # the page is simply never told about it.
+    feed = TranscriptFeed()
+    mirror = Mirror(feed, clock=lambda: "12:00:00")
+    client = _client(mirror.model, mirror=mirror)
+
+    feed.push("draft", "pick up the drive subfolder work")
+    feed.push("retract", "")
+    feed.push("draft", "pick up the Notecraft work")
+
+    shown = client.get("/messages").get_json()
+
+    assert (shown["retract"], shown["dictated"]) == (0, ["pick up the Notecraft work"])
+
+
 def test_dictation_saying_over_sends_the_box_as_it_stands():
     feed = TranscriptFeed()
     mirror = Mirror(feed, clock=lambda: "12:00:00")

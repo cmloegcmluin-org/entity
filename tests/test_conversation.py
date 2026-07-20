@@ -1488,6 +1488,42 @@ def test_a_brain_failure_says_what_actually_broke():
     assert any("the CLI exited with code 1" in line for line in tts.spoken)
 
 
+def test_a_failure_names_the_error_underneath_the_librarys_guess():
+    # The SDK raises "Claude Code not found at <path>" for ANY FileNotFoundError while spawning, so
+    # it blamed the CLI while the CLI sat there, 252MB, untouched - and that guess was the whole of
+    # what there was to go on. The real error is chained underneath it and says which file.
+    class BrokenBrain:
+        def respond(self, utterance):
+            try:
+                raise FileNotFoundError(2, "No such file or directory", "C:/gone/config.json")
+            except FileNotFoundError as underneath:
+                raise RuntimeError("Claude Code not found at: C:/present/claude.exe") from underneath
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None)
+
+    turn = convo.turn()
+
+    assert "Claude Code not found" in turn.said  # what the library claimed
+    assert "C:/gone/config.json" in turn.said  # and what had actually gone missing
+
+
+def test_a_failure_is_never_cut_short_of_its_cause():
+    # Truncating the one line that explains a wedged session is the same defect as not printing it.
+    class BrokenBrain:
+        def respond(self, utterance):
+            raise RuntimeError("a stack of detail " * 30)
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None,
+                         spoken_chars=60)
+
+    turn = convo.turn()
+
+    assert turn.said.rstrip().endswith("detail")  # all of it, not a sentence's worth
+    assert "…" not in turn.said
+
+
 def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():
     # He asked what he had to set up and heard "...here are the real steps, from the agent: 1." -
     # then nothing. The splitter reads "1." as the end of a sentence, so the cut fell between the

@@ -171,6 +171,27 @@ def _is_walkthrough(text):
     return len(_ENUMERATOR.findall(str(text))) >= 2
 
 
+def _cause(exc, depth=3):
+    """What broke, and what broke underneath that.
+
+    A library's top exception is often its GUESS at the cause: the agent SDK raises "Claude Code not
+    found at <path>" for ANY FileNotFoundError while spawning, so it blamed the CLI while the CLI sat
+    there untouched - and that guess was the whole of what there was to go on. Python chains the real
+    error underneath, and it knows which file. Bounded, because past the first few links a chain is
+    library plumbing rather than anything about what went wrong.
+    """
+    links, seen = [], set()
+    while exc is not None and len(links) < depth and id(exc) not in seen:
+        seen.add(id(exc))
+        detail = f"{type(exc).__name__}: {exc}"
+        missing = getattr(exc, "filename", None)
+        if missing and str(missing) not in detail:
+            detail += f" ({missing})"
+        links.append(detail)
+        exc = exc.__cause__ or exc.__context__
+    return ", caused by ".join(links)
+
+
 def _opening(text, limit):
     """The first sentence or two of `text`, whole sentences only, or all of it if it's already
     short. Never mid-word: a voice cut off mid-sentence sounds like a fault."""
@@ -339,18 +360,20 @@ class Conversation:
             if stop_watching is not None:
                 stop_watching()
 
-    def _speak_reply(self, text, *, known=False):
+    def _speak_reply(self, text, *, known=False, whole_thing=False):
         """Cut it to a length worth hearing, then show and say exactly that.
 
         They disliked reading a wall they'd only heard the start of, so what is on screen and what
         is in their ear are the same words - the cut happens once, up front, to both. Steps they
         asked for are exempt and go out whole (see `_is_walkthrough`): brevity is for chatter.
+        `whole_thing` is the other exemption - a failure, where cutting the one line that explains a
+        wedged session is the same defect as never printing it.
 
         `known` says the brain is already aware of this line - it composed it, or the persona tells
         it standingly that it goes out. Everything else joins the list it is told next turn.
         """
         whole = text
-        limit = None if _is_walkthrough(whole) else self._spoken_chars
+        limit = None if whole_thing or _is_walkthrough(whole) else self._spoken_chars
         text = _opening(text, limit)
         # Remember a cut so the next turn can say so: a limit nothing ever reports is not a limit
         # anything can learn from.
@@ -691,8 +714,8 @@ class Conversation:
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands
             return None
         except Exception as exc:  # tell them the real cause - it reaches them nowhere else
-            said = self.error_reply.format(cause=f"{type(exc).__name__}: {exc}")
-            self._speak_reply(said)
+            said = self.error_reply.format(cause=_cause(exc))
+            self._speak_reply(said, whole_thing=True)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
         if not said.strip():

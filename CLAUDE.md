@@ -85,8 +85,10 @@ reports whether it is recording so nothing speaks over the user. `gui.py` mirror
 one thread-safe feed into Tk; anything that can be wrong lives outside Tk and is tested without a
 display. `bubbles.py` is one tinted box per message — a real widget, because a Tk tag's background
 paints the whole line box. `agent_desk.py` holds each agent as a live session in-process (handles
-used to be lost to context resets) and streams its steps into its log. `brain_sdk.py` holds the
-persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
+used to be lost to context resets) and streams the whole exchange into its log; `steps.py` decides
+what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
+output as the machinery under them, capped at both ends with what was dropped counted in place.
+`brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. Tk touches only the main thread; the conversation, the dictation pump
@@ -116,6 +118,14 @@ one decision point, beside `carries_speech` where a burst ends. For whoever take
   playing, not to go deaf while it plays: gate on the mic correlating with the delay-aligned
   loopback, and measure that delay instead of assuming it. Its own voice is already handled by the
   `_speaking` flag, so what this buys is Chrome and the TV.
+
+Driving the fleet is most of the way there — an agent that needs him speaks up, his answer goes
+back with `[TELL]`, and nothing interrupts him mid-task. The unbuilt half is "when several are
+ready, tell him which and let him choose the order": today every waiting notice is joined into one
+utterance. It was left alone deliberately, because letting him CHOOSE means interpreting what he
+says, and the two ways of doing that are a real fork - matching agent names against the words in
+his reply (they are worktree slugs, and speech-to-text will not spell them), or a new brain
+directive (markers have leaked to him verbatim before). Ask him which before building either.
 
 ## How the user works
 

@@ -82,9 +82,11 @@ confirmation instead of the marker:
 - `[IMPROVE] <one line>` — file an enhancement into your profile, visible in the window at once.
 
 Each agent is a live session the desk can always reach, its roster is a file that survives a
-context reset, and every exchange is written to `runtime/agent-logs/<name>.log` — which the window
-tails as its own tab. Agents reach you by writing a line into `runtime/agent-inbox/`; the Entity
-speaks it at the next lull, and flags an agent that has gone quiet for too long.
+context reset, and the whole exchange is written to `runtime/agent-logs/<name>.log` — which the
+window tails as its own tab. Not just what the agent says: every command it runs and what came
+back, every edit and its diff, with a failure marked as one, so what an agent did can be read
+rather than taken on trust. Agents reach you by writing a line into `runtime/agent-inbox/`; the
+Entity speaks it at the next lull, and flags an agent that has gone quiet for too long.
 
 ## Architecture
 

@@ -80,8 +80,11 @@ Test fixtures use invented facts. When you add a comment here, write the failure
 
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 5-second handoff. `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
-transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, and it
-reports whether it is recording so nothing speaks over the user. The window is a local web app, the
+transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, `scratch
+that` to take back what was just said, and it reports whether it is recording so nothing speaks
+over the user. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
+a word shown only once two readings running have agreed on it — read its docstring before changing
+any number in it, because every one was measured off real captured sessions. The window is a local web app, the
 same shape as Notecraft: `mirror.py` is the conversation as a window shows it — the message model,
 the thread-safe feed everything crosses on, and where each session starts — with no window in it,
 so all of it is tested without a display; `web.py` serves it, `templates/` and `static/` are the
@@ -104,7 +107,7 @@ and the keyboard hook run on workers, and the page's own poll is what drains the
 ## Open work
 
 Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hearing only the user's
-voice, and a live word-by-word transcription display with a spoken codeword to rewind and re-say.
+voice.
 
 **Hearing only the user.** Loopback gating is built (`playback.py`); speaker enrollment is not. What
 remains is every voice that is NOT coming out of this PC's speakers — someone in the room, or audio
@@ -123,6 +126,15 @@ For whoever takes enrollment:
   dropping HIM makes the app deaf, which is the failure `NoiseFloor` already records twice. That
   asymmetry is what set the playback gate's threshold, and it should set this one's.
 - It belongs at the same decision point, in `Burst`, beside `carries_speech` and `echoes_playback`.
+
+**Printing as it listens is done.** Parakeet has no streaming door — `recognize` takes a waveform
+and reads all of it — so the burst so far is re-read as it grows, on a worker, because at 90 ms for
+one second of speech and 640 ms for twenty it is thirty times faster than real time but nowhere near
+cheap enough for the pump's thread. The readings are not fit to show raw: their tails are guesswork
+the next reading rewrites, and four times in one three-second sentence the model answered a stretch
+it could not place with nothing at all. Only what two readings running agree on goes up, and the line
+never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, his own
+sentences reached the screen 2 to 5 seconds before the draft box used to fill.
 
 Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
 rather than being read back out of the sentence, several ready at once are read out numbered, and

@@ -405,6 +405,50 @@ def test_a_late_answer_names_the_question_it_is_answering():
     assert late.endswith("That one didn't die - it finished hours ago and went idle.")
 
 
+def test_a_reply_with_nothing_to_say_says_nothing():
+    # A directive that succeeded with no aside comes back empty: the ack already confirmed receipt,
+    # and "collapsed into a single 'Got it.'" is what he asked for. An empty reply must not become
+    # a blank "entity>" line or an empty utterance.
+    lines = []
+
+    class SilentBrain:
+        def respond(self, utterance):
+            return ""
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["file that"]), SilentBrain(), tts, acknowledgement="Got it.",
+                         long_answer_chars=None, console=Console(echo=lines.append))
+
+    turn = convo.turn()
+
+    assert tts.spoken == ["Got it."]  # the one utterance he asked for
+    assert turn is not None and turn.said == ""  # the turn still completed
+    assert not any(line.startswith("entity>") for line in lines)  # and no blank reply line
+
+
+def test_a_late_empty_reply_is_not_announced_either():
+    # The same silence, when the directive was slow enough to detach: "I'll get back to you on
+    # that." followed later by an empty announcement would be worse than the stock phrases it
+    # replaces.
+    release = threading.Event()
+
+    class SlowSilentBrain:
+        def respond(self, utterance):
+            release.wait(2.0)
+            return ""
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["file that", ""]), SlowSilentBrain(), tts, acknowledgement="ACK",
+                         detach_after=0.05, patience=30, long_answer_chars=None)
+
+    convo.turn()  # detaches
+    release.set()
+    assert convo._background["done"].wait(2.0)
+    convo.turn()  # the lull: nothing to deliver, so nothing is said
+
+    assert [line for line in tts.spoken if "On \"" in line] == []
+
+
 def test_a_prompt_answer_is_not_prefaced_with_the_question():
     # Only a LATE one needs tying back. Repeating his question at him when he has just asked it
     # would be one more stock phrase in a conversation he already called a waste of his time.

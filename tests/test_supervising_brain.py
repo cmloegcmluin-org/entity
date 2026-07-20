@@ -108,7 +108,7 @@ def test_normal_replies_pass_straight_through():
     assert brain.respond("hi") == "just a normal spoken reply"
 
 
-def test_a_supervise_directive_starts_an_agent_per_worktree_and_says_so():
+def test_a_supervise_directive_starts_an_agent_per_worktree():
     desk = FakeDesk()
     brain = _brain(
         FakeInner("[SUPERVISE] /work/trees"), desk,
@@ -119,7 +119,7 @@ def test_a_supervise_directive_starts_an_agent_per_worktree_and_says_so():
 
     assert [name for name, _, _ in desk.started] == ["a", "b"]
     assert [cwd for _, cwd, _ in desk.started] == ["/work/trees/a", "/work/trees/b"]
-    assert "2" in said  # tells the user it started two
+    assert said == ""  # the ack covered it; the agents' tabs appear on their own
 
 
 def test_the_task_the_user_gave_travels_with_the_directive_to_the_agent():
@@ -156,7 +156,7 @@ def test_starting_agents_does_not_wait_for_any_of_them():
     said = brain.respond("go")
 
     assert desk.started  # it was dispatched
-    assert "Started" in said  # and answered immediately, with no report to wait for
+    assert said == ""  # and control came straight back, with no report to wait for
 
 
 def test_a_worktree_that_does_not_exist_yet_is_cut_fresh_first():
@@ -172,14 +172,14 @@ def test_a_worktree_that_does_not_exist_yet_is_cut_fresh_first():
     assert prepared == ["/definitely/not/here"]  # new work means a new worktree, cut before the agent
 
 
-def test_an_improve_directive_files_the_enhancement_and_says_so():
+def test_an_improve_directive_files_the_enhancement():
     filed = []
     brain = _brain(FakeInner("[IMPROVE] level meter should show clipping"), FakeDesk(), file_enhancement=filed.append)
 
     said = brain.respond("file a self-improvement: the level meter should show clipping")
 
     assert filed == ["level meter should show clipping"]
-    assert "Filed" in said
+    assert said == ""  # filed; the tab shows it landing, and the ack said it was heard
 
 
 def test_a_tell_directive_reaches_an_agent_already_running():
@@ -189,7 +189,7 @@ def test_a_tell_directive_reaches_an_agent_already_running():
     said = brain.respond("tell it I only need the folder")
 
     assert desk.sent == [("fixer", "folder level, not file level")]
-    assert "fixer" in said
+    assert said == ""  # delivered; only a failure to deliver would speak
 
 
 def test_what_the_brain_said_to_him_survives_a_directive():
@@ -237,13 +237,18 @@ def test_every_improvement_asked_for_is_filed_not_just_the_first():
     assert said == "On it."  # and no marker line is left in what he hears
 
 
-def test_a_directive_with_nothing_said_alongside_it_still_confirms():
-    # The canned lines remain the floor: silence would be worse than a terse confirmation.
+def test_a_directive_with_nothing_said_alongside_it_is_covered_by_the_ack():
+    # "Can you see how it's a waste of my time... this could all be collapsed into a single 'Got
+    # it.' within 5 seconds." The ack he hears at the top of every turn already confirms receipt,
+    # so a success with nothing else to say says nothing more - one "Got it." total, as he asked.
+    # Only a SUCCESS may be silent: failures below still speak.
     desk = FakeDesk(knows={"fixer"})
 
-    assert "Passed that to fixer" in _brain(FakeInner("[TELL] fixer: go"), desk).respond("tell it")
-    assert "Filed" in _brain(FakeInner("[IMPROVE] a thing"), FakeDesk(),
-                             file_enhancement=lambda item: None).respond("file it")
+    assert _brain(FakeInner("[TELL] fixer: go"), desk).respond("tell it") == ""
+    assert _brain(FakeInner("[IMPROVE] a thing"), FakeDesk(),
+                  file_enhancement=lambda item: None).respond("file it") == ""
+    assert _brain(FakeInner("[SUPERVISE] /work/trees"), FakeDesk(),
+                  resolve=lambda target: ["/work/trees/a"]).respond("go") == ""
 
 
 def test_a_malformed_marker_is_never_read_out_as_code():

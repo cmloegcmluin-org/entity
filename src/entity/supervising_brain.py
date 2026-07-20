@@ -2,7 +2,7 @@
 
 The Entity has no special "fleet mode": it's one program, and driving agents is just something
 asked for in conversation. The brain says so with a directive, this wrapper acts on it, and the
-user gets a short answer instead of the raw marker.
+user hears whatever the brain had to say - never the raw marker.
 
   [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
   <the task, any length>     following lines is the task that agent is given
@@ -14,8 +14,9 @@ user gets a short answer instead of the raw marker.
 Whatever the brain writes AROUND a directive is what the user hears; the marker never reaches them.
 That matters because a directive used to consume the whole reply, so any turn that filed or
 dispatched something answered the user with a canned "Filed." or "Passed that to <agent>." and
-their actual question went unanswered. With nothing written around it they still get the canned
-confirmation - that is the floor, not the intent.
+their actual question went unanswered. With nothing written around it, a SUCCESS says nothing at
+all: the spoken "Got it." at the top of the turn already confirmed receipt, and they counted the
+stock phrases per turn and asked for exactly one. Only failures always speak.
 
 The task travels WITH the directive on purpose. Without it the brain had no way to pass on what
 was actually asked for, so it would go and work the request out for itself first - forty-five
@@ -149,11 +150,14 @@ class SupervisingBrain:
 
     def respond(self, utterance):
         reply = self._inner.respond(utterance)
+        # A success with no aside returns "" - said aloud, a canned confirmation was one more stock
+        # phrase on top of the ack that already told him he was heard: "this could all be collapsed
+        # into a single 'Got it.'". Only successes may be silent; every failure below still speaks.
         improvements = parse_improvements(reply)
         if improvements:
             for item in improvements:
                 self._file_enhancement(item)
-            return _spoken_around_improvements(reply) or "Filed."
+            return _spoken_around_improvements(reply)
         told = parse_tell(reply)
         if told is not None:
             name, message = told
@@ -161,7 +165,7 @@ class SupervisingBrain:
                 # Never what it said alongside: that was written expecting the message to land, so
                 # speaking it would report a delivery that did not happen.
                 return f"I don't have an agent called {name} running."
-            return _spoken_before(reply, _TELL) or f"Passed that to {name}."
+            return _spoken_before(reply, _TELL)
         directive = parse_supervise(reply)
         if directive is None:
             return _plain(reply)
@@ -173,9 +177,7 @@ class SupervisingBrain:
             if not Path(path).exists():  # new work means a new worktree, cut from current origin/main
                 self._prepare(path)
             self._desk.start(Path(path).name, path, task or self._task)
-        count = len(paths)
-        return _spoken_before(reply, _SUPERVISE) or (
-            f"Started {count} agent{'' if count == 1 else 's'}. I'll pass on whatever they say.")
+        return _spoken_before(reply, _SUPERVISE)
 
     def interrupt(self):
         self._inner.interrupt()

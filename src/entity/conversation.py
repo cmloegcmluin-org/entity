@@ -509,7 +509,7 @@ class Conversation:
         to count the messages back to work out what it belonged to. Their own words are the preface
         that makes it land as an answer."""
         reply = background["outcome"].get("reply")
-        if reply is None:
+        if reply is None or not reply.strip():  # nothing to deliver - a silent success stays silent
             return None
         question = _opening(" ".join(background["question"].split()), LATE_QUESTION_CHARS)
         return LATE_ANSWER_PREFACE.format(question=question, answer=reply)
@@ -639,6 +639,10 @@ class Conversation:
             self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
+        if not said.strip():
+            # Nothing to say - a directive succeeded and the ack already confirmed receipt. The
+            # turn completed; a blank "entity>" line or an empty utterance would be noise.
+            return Turn(heard=heard, said="")
         if self._should_gate(said):
             return self._offer(heard, said)
         speak_start = time.monotonic()

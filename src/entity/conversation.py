@@ -440,8 +440,14 @@ class Conversation:
         self._wake.set()  # break the mic's lull so the loop cycles round and offers the answer
 
     def _collect_background(self):
-        """If a detached call has finished, take its answer and offer it (a failure is dropped - a
-        background best-effort, not worth surfacing as a glitch). Runs at the top of a turn."""
+        """If a detached call has finished, deliver its answer (a failure is dropped - a background
+        best-effort, not worth surfacing as a glitch). Runs at the top of a turn.
+
+        Delivered on the same terms as any other reply: short enough, and it is simply said. Offering
+        every collected answer regardless of size announced "I've got a longer answer for you" ahead
+        of a sixteen-character sentence, and he asked why - then the offer sat unclaimed for
+        twenty-one minutes, because an answer he has to say yes to is one more thing to notice.
+        """
         background = self._background
         if background is None or not background["done"].is_set():
             return
@@ -449,9 +455,13 @@ class Conversation:
             return  # they're talking; a finished answer waits, exactly as agent news does
         self._background = None
         reply = background["outcome"].get("reply")
-        if reply is not None and self._offered is None:
+        if reply is None or self._offered is not None:
+            return
+        if self._should_gate(reply):
             self._offered = reply
             self._speak_reply(self.ready_question)
+        else:
+            self._speak_reply(reply)
 
     def turn(self):
         if self._interrupt is not None:

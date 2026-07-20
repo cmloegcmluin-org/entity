@@ -267,7 +267,7 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
 
     tts = FakeTTS()
     convo = Conversation(
-        FakeSTT(["do the slow thing", "yes"]), SlowBrain(), tts,
+        FakeSTT(["do the slow thing", ""]), SlowBrain(), tts,
         acknowledgement="ACK", detach_after=0.05, patience=30,
     )
 
@@ -280,10 +280,10 @@ def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
     release.set()
     assert bg_done.wait(2.0)  # the background call finishes on its own thread
 
-    convo.turn()  # they come back; the answer is offered, and their "yes" releases it
+    convo.turn()  # the lull it woke: the answer goes out on its own
 
-    assert convo.ready_question in tts.spoken
-    assert "the finished long-running answer" in tts.spoken
+    assert "the finished long-running answer" in tts.spoken  # the promise is kept without being chased
+    assert convo.ready_question not in tts.spoken  # and there was nothing for them to say yes to
 
 
 def test_talking_again_cancels_the_detached_call_instead_of_deflecting_the_user():
@@ -437,6 +437,39 @@ def test_a_finished_background_answer_wakes_a_lull():
     assert not wake.is_set()
     release.set()
     assert wake.wait(2.0)  # when the answer lands, the lull is broken so it can be offered promptly
+
+
+def test_a_collected_answer_is_gated_on_its_length_like_any_other_reply():
+    # "That wasn't a very long message. Why did you say you had a longer answer for me?" - the
+    # background path announced EVERY answer it collected, however short, so a forty-character reply
+    # arrived as "I've got a longer answer for you - ready for it?" and then sat unclaimed for
+    # twenty-one minutes before he said yes to it. A collected answer is a reply like any other.
+    def collected(answer, **settings):
+        release = threading.Event()
+
+        class SlowBrain:
+            def respond(self, utterance):
+                release.wait(2.0)
+                return answer
+
+        tts = FakeTTS()
+        convo = Conversation(FakeSTT(["slow", ""]), SlowBrain(), tts, acknowledgement="ACK",
+                             detach_after=0.05, patience=30, **settings)
+        convo.turn()  # detaches
+        release.set()
+        assert convo._background["done"].wait(2.0)
+        convo.turn()  # collects
+        return convo, tts
+
+    convo, tts = collected("Started 1 agent.", long_answer_chars=100)
+
+    assert "Started 1 agent." in tts.spoken  # short enough to just say, so it is just said
+    assert convo.ready_question not in tts.spoken
+
+    convo, tts = collected("A wall of an answer. " * 20, long_answer_chars=100)
+
+    assert convo.ready_question in tts.spoken  # a genuinely big one is still offered first
+    assert convo._offered is not None
 
 
 def test_a_background_error_is_dropped_not_offered():

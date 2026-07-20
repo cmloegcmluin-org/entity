@@ -452,15 +452,15 @@ class Conversation:
 
     def _detach(self, done, outcome):
         """Leave the slow call running on its worker and remember it; a reaper breaks the next lull
-        the moment it lands, so the finished answer gets offered promptly rather than waiting for them
-        to speak first."""
+        the moment it lands, so the finished answer reaches them promptly rather than waiting for
+        them to speak first."""
         self._background = {"done": done, "outcome": outcome}
         if self._wake is not None:
             threading.Thread(target=self._reap, args=(done,), daemon=True).start()
 
     def _reap(self, done):
         done.wait()
-        self._wake.set()  # break the mic's lull so the loop cycles round and offers the answer
+        self._wake.set()  # break the mic's lull so the loop cycles round and delivers the answer
 
     def _collect_background(self):
         """If a detached call has finished, deliver its answer (a failure is dropped - a background

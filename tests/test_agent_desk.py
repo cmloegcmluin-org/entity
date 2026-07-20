@@ -133,6 +133,19 @@ def test_the_agents_reply_arrives_in_the_outbox_when_it_lands():
     desk.close()
 
 
+def test_the_news_an_agent_makes_says_which_agent_it_is_about():
+    # Several ready at once are read out by name so one can be picked. The name has to travel with
+    # the news: worked back out of the sentence it would be reading the label to find the thing.
+    desk, outbox, _ = _desk()
+
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+
+    assert _wait_for(lambda: bool(outbox))
+    [news] = outbox.drain()
+    assert news.about == "fixer"
+    desk.close()
+
+
 def test_a_follow_up_reaches_the_same_agent_not_a_new_one():
     # Four agents in a row were lost because there was no live handle to talk back to.
     desk, outbox, made = _desk()
@@ -189,7 +202,9 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
     desk.start("doomed", "/tmp/wt", "do a thing")
 
     assert _wait_for(lambda: bool(outbox))
-    assert any("doomed" in m and "session died" in m for m in outbox.drain())
+    said = outbox.drain()
+    assert any("doomed" in m and "session died" in m for m in said)
+    assert [news.about for news in said] == ["doomed"]  # a death is news about an agent too
     desk.close()
 
 

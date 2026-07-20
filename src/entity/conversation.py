@@ -8,6 +8,7 @@ from entity.console import Console
 from entity.phrases import canonical as _canonical
 from entity.phrases import ends_with_command as _ends_with_command
 from entity.phrases import wakes as _wakes
+from entity.waiting import chosen, roll_call
 
 DEFAULT_FAREWELLS = (
     "goodbye entity",
@@ -287,7 +288,8 @@ class Conversation:
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once they say yes to "ready for it?"
-        self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
+        self._waiting = []  # news drained from the outbox and not delivered yet
+        self._announced = 0  # how many were waiting when the roll call was last read out
         self._background = None  # a slow think handed off, still running: {"done", "outcome"}
         self._wake = wake  # event the mic waits on; set to break a lull when news is ready to speak
         self._acknowledgement = acknowledgement
@@ -391,11 +393,17 @@ class Conversation:
     def _deliver_outbox(self):
         """Say what the Entity has queued to say on its own - word from an agent.
 
-        Everything queued goes out as ONE utterance, so a single stop silences all of it; they had to
-        hit stop over and over while a report came at them line by line. It waits while they are
-        recording, because it once broke in mid-sentence while they were talking. And if it's long it
-        is OFFERED, not read out: a wall of an agent's own words is the thing they most want to be
-        insulated from.
+        ONE agent's news is spoken as it lands. SEVERAL arriving together are read out numbered and
+        then held, because run into one utterance they arrived as a wall - and a long enough one to
+        be offered as "ready for it?" rather than simply heard. What was asked for is the other
+        shape: when several are ready, say which, and let the order be chosen. Whichever is named
+        is spoken then (see `_take_pick`).
+
+        Whatever goes out goes out as ONE utterance, so a single stop silences all of it; they had
+        to hit stop over and over while a report came at them line by line. It waits while they are
+        recording, because it once broke in mid-sentence while they were talking. And a single
+        piece of news that is long is OFFERED, not read out: a wall of an agent's own words is the
+        thing they most want to be insulated from.
         """
         if self._outbox is None:
             return
@@ -403,17 +411,53 @@ class Conversation:
         # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
         # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
-        self._held_news.extend(self._outbox.drain())
-        if self._offered is not None or self._they_are_talking() or not self._held_news:
+        self._waiting.extend(self._outbox.drain())
+        if not self._waiting:
+            self._announced = 0  # nothing outstanding, so the next single item is simply spoken
             return
-        news = "\n\n".join(self._held_news)
-        self._held_news = []
+        if self._offered is not None or self._they_are_talking():
+            return
+        if self._announced:
+            # A list has been read out and not worked through. Say it again only if it has changed,
+            # or every trip round the loop would recite the same names at them.
+            if len(self._waiting) != self._announced:
+                self._announce()
+            return
+        if len(self._waiting) > 1:
+            self._announce()
+            return
+        news = self._waiting.pop()
         self._console.heads_up(news)  # shown in full, however it gets spoken
         if self._long_answer_chars is not None and len(news) > self._long_answer_chars:
             self._offered = news
             self._say(self.ready_question, record=False)
             return
         self._say(news, record=False)
+
+    def _announce(self):
+        """Read out who is waiting, numbered, so one of them can be named."""
+        self._announced = len(self._waiting)
+        line = roll_call(self._waiting)
+        self._console.heads_up(line)
+        self._say(line, record=False)
+
+    def _take_pick(self, heard):
+        """They answered the roll call by naming one: say that one, and what is still waiting.
+
+        A Turn if they were naming one, None if they were not - in which case this was an ordinary
+        thing to say and the list simply stands, the way a pending offer does. Only a terse answer
+        counts as naming one (see `waiting.chosen`), so a sentence that happens to carry an agent's
+        name is still their turn: answering it with a notice instead would lose the question.
+        """
+        place = chosen(heard, self._waiting)
+        if place is None:
+            return None
+        news = self._waiting.pop(place)
+        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
+        self._announced = len(self._waiting)
+        self._console.heads_up(said)
+        self._say(said, record=False)
+        return Turn(heard=heard, said=said)
 
     def _they_are_talking(self):
         """Are they part-way through saying something? While they are, the Entity says nothing of its
@@ -585,6 +629,10 @@ class Conversation:
             return Turn(heard=heard, said=self.suspend_reply)
         if self._offered is not None:  # they're answering "ready for it?" from a held long/slow reply
             return self._resolve_offer(heard)
+        if self._waiting:  # they may be naming one of the agents the roll call just read out
+            picked = self._take_pick(heard)
+            if picked is not None:
+                return picked
         if self._background is not None:
             self._settle_background()  # keep a promise that has come due; drop one that hasn't
         return self._answer(heard)

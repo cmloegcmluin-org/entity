@@ -23,7 +23,11 @@ def test_a_new_complete_line_is_pushed_to_the_outbox(tmp_path):
 
     watcher.poll_once()
 
-    assert outbox.drain() == ["auth-agent: I need your call: JWT or sessions?"]
+    [news] = outbox.drain()
+    assert news == "auth-agent: I need your call: JWT or sessions?"
+    # Named, so several landing together can be read out by name for one of them to be picked -
+    # rather than the name being worked back out of the sentence the agent happened to write.
+    assert news.about == "auth-agent"
 
 
 def test_content_written_before_watching_is_not_replayed(tmp_path):

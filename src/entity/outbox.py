@@ -9,15 +9,32 @@ import threading
 from collections import deque
 
 
+class News(str):
+    """One thing waiting to be said, and which agent it is about.
+
+    A string, because everything downstream speaks it, joins it and matches on it. But the agent's
+    name has to survive the queue too: when several agents are ready at once they are read out
+    numbered so one can be picked, and working the name back out of the message text would be
+    reading the label to find the thing - two of the four kinds of news the Entity queues do not
+    carry it in any fixed place at all."""
+
+    about = None  # the agent, when there is one
+
+    def __new__(cls, message, about=None):
+        news = super().__new__(cls, message)
+        news.about = about
+        return news
+
+
 class Outbox:
     def __init__(self):
         self._items = deque()
         self._lock = threading.Lock()
         self.arrived = threading.Event()  # set while something is waiting to be spoken
 
-    def push(self, message):
+    def push(self, message, about=None):
         with self._lock:
-            self._items.append(message)
+            self._items.append(News(message, about))
         self.arrived.set()
 
     def drain(self):

@@ -136,12 +136,13 @@ class AgentDesk:
             self._log(entry, f"(died: {exc})", prefix=AGENT_SAID)
             self._set_state(name, "failed")
             self._finished(name)  # already announced as dead; don't also announce it as quiet later
-            self._outbox.push(f"The {name} agent died: {exc}")
+            self._outbox.push(f"The {name} agent died: {exc}", about=name)
             return
         self._set_state(name, "idle", last_word=reply)
         self._finished(name)
-        # A notice, never the agent's own words - the full reply is in the log its tab reads.
-        self._outbox.push(notice(name, reply))
+        # A notice, never the agent's own words - the full reply is in the log its tab reads. Named,
+        # so that several landing together can be read out by name for one of them to be picked.
+        self._outbox.push(notice(name, reply), about=name)
 
     def _heard(self, name, message):
         """One message back from an agent - what it said AND what it did - logged as it arrives."""

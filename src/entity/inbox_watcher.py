@@ -53,7 +53,7 @@ class QuietMonitor:
             elapsed = now - last_seen
             if elapsed >= self._quiet_after:
                 self._warned.add(agent)
-                self._outbox.push(self._message(agent, elapsed))
+                self._outbox.push(self._message(agent, elapsed), about=agent)
 
     @staticmethod
     def _message(agent, elapsed):
@@ -124,8 +124,9 @@ class InboxWatcher:
         if not report:
             return False
         # A notice, never the file's contents: an agent overwrote this with thirty lines of its
-        # own internals and every word of it was read out at them.
-        self._outbox.push(notice(path.stem, report))
+        # own internals and every word of it was read out at them. Named, so that several landing
+        # together can be read out by name for one of them to be picked.
+        self._outbox.push(notice(path.stem, report), about=path.stem)
         return True
 
     def run(self):

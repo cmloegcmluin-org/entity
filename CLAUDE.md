@@ -89,6 +89,8 @@ paints the whole line box; it also underlines whatever a message names that can 
 used to be lost to context resets) and streams the whole exchange into its log; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
+`waiting.py` is what happens when several agents finish at once: they are read out numbered and
+held, and it says which one a reply just named.
 `brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
@@ -120,13 +122,10 @@ one decision point, beside `carries_speech` where a burst ends. For whoever take
   loopback, and measure that delay instead of assuming it. Its own voice is already handled by the
   `_speaking` flag, so what this buys is Chrome and the TV.
 
-Driving the fleet is most of the way there — an agent that needs him speaks up, his answer goes
-back with `[TELL]`, and nothing interrupts him mid-task. The unbuilt half is "when several are
-ready, tell him which and let him choose the order": today every waiting notice is joined into one
-utterance. It was left alone deliberately, because letting him CHOOSE means interpreting what he
-says, and the two ways of doing that are a real fork - matching agent names against the words in
-his reply (they are worktree slugs, and speech-to-text will not spell them), or a new brain
-directive (markers have leaked to him verbatim before). Ask him which before building either.
+Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
+rather than being read back out of the sentence, several ready at once are read out numbered, and
+whichever is named is the one spoken. He was asked and chose numbering over a new brain directive,
+because a marker is a thing that has reached him verbatim before.
 
 ## How the user works
 

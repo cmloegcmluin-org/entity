@@ -19,7 +19,9 @@ def test_warns_when_an_agent_is_silent_past_the_threshold():
     clock.now = 1200  # twenty minutes later, still nothing
     monitor.tick()
 
-    assert outbox.drain() == ["The drive-link agent hasn't checked in for 20 minutes."]
+    [news] = outbox.drain()
+    assert news == "The drive-link agent hasn't checked in for 20 minutes."
+    assert news.about == "drive-link"  # silence is news about an agent, and reads out by name too
 
 
 def test_stays_silent_before_the_threshold():

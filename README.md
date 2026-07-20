@@ -86,7 +86,9 @@ context reset, and the whole exchange is written to `runtime/agent-logs/<name>.l
 window tails as its own tab. Not just what the agent says: every command it runs and what came
 back, every edit and its diff, with a failure marked as one, so what an agent did can be read
 rather than taken on trust. Agents reach you by writing a line into `runtime/agent-inbox/`; the
-Entity speaks it at the next lull, and flags an agent that has gone quiet for too long.
+Entity speaks it at the next lull, and flags an agent that has gone quiet for too long. When
+several are ready at once it reads out their names, numbered, and waits — say a number or any word
+of a name and you get that one, then what is still waiting.
 
 ## Architecture
 

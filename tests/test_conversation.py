@@ -878,16 +878,86 @@ def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys
     assert "the deploy agent needs your call" in capsys.readouterr().out  # visible, not just audio
 
 
-def test_several_queued_messages_are_all_delivered_in_order():
+def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named():
+    # "when several are ready, tell him which and let him choose the order." Run together they
+    # arrived as a wall - and a long enough one to be offered as "ready for it?" rather than heard.
     outbox = Outbox()
-    outbox.push("first")
-    outbox.push("second")
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
 
     convo.turn()
 
-    assert tts.spoken[0].index("first") < tts.spoken[0].index("second")  # in order, in one breath
+    assert tts.spoken[0] == "Two waiting. One, fixer. Two, docs-sidebar. Which first?"
+    assert "the drive link is fixed" not in " ".join(tts.spoken)  # neither is read out unasked
+
+
+def test_naming_one_of_them_speaks_that_one_and_says_what_is_still_waiting():
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["two"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()  # the roll call goes out, then they answer it
+
+    spoken = "\n".join(tts.spoken)
+    assert "docs-sidebar: needs your call on the width" in spoken
+    assert "Still waiting: fixer." in spoken
+    assert "the drive link is fixed" not in spoken  # the one they didn't pick keeps waiting
+
+
+def test_a_list_already_read_out_is_not_recited_every_turn():
+    # It is checked before every listen. Announcing the same names each time round would be the
+    # nagging that made periodic progress updates worse than silence.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, long_answer_chars=None)
+
+    convo.turn()  # the roll call, then a question that names none of them
+    convo.turn()
+
+    assert len([line for line in tts.spoken if "Which first?" in line]) == 1
+
+
+def test_once_the_list_is_worked_through_the_next_single_notice_is_simply_spoken():
+    # The reset that matters. Left standing, the roll-call state would hold every later notice
+    # back waiting for a name that is never coming - news they are never told at all.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["one", "sidebar", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # the roll call, then they take the first
+    convo.turn()  # and then the last one, by name
+    outbox.push("drive-export: green and pushed", about="drive-export")
+    convo.turn()
+
+    assert "drive-export: green and pushed" in tts.spoken  # straight out, with nothing to choose
+
+
+def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said():
+    # Otherwise it sits silent behind a list that was read out before it existed, and the only
+    # sign of it is a tab they had no reason to open.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, long_answer_chars=None)
+
+    convo.turn()  # a roll call of two, then a question that names none of them
+    outbox.push("drive-export: green and pushed", about="drive-export")
+    convo.turn()
+
+    assert ("Three waiting. One, fixer. Two, docs-sidebar. Three, drive-export. Which first?"
+            in tts.spoken)
 
 
 def test_without_an_outbox_the_loop_is_unchanged():
@@ -1264,7 +1334,10 @@ def test_a_long_heads_up_is_offered_rather_than_read_out_in_full():
     assert not any(line.startswith("WALL.") for line in tts.spoken)  # nothing dumped
 
 
-def test_several_queued_messages_are_delivered_as_one_thing_to_stop():
+def test_whatever_the_outbox_has_to_say_is_one_utterance_to_stop():
+    # They had to hit stop over and over while a report came at them line by line. Whatever goes
+    # out - the roll call naming several, or one agent's news - is one utterance, so one stop ends
+    # it. An agent with no name to it falls back to its own words, which is what these are.
     outbox = Outbox()
     outbox.push("first agent finished")
     outbox.push("second agent finished")

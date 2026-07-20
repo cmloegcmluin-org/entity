@@ -158,6 +158,23 @@ def test_the_poll_is_the_pump_and_carries_the_mic_and_what_dictation_typed():
     assert client.get("/messages?since=1").get_json()["dictated"] == []
 
 
+def test_the_poll_carries_the_sentence_he_is_still_in_the_middle_of():
+    feed = TranscriptFeed()
+    mirror = Mirror(feed, clock=lambda: "12:00:00")
+    client = _client(mirror.model, mirror=mirror)
+
+    feed.push("hearing", "Then tell me exactly what")
+
+    # A state, not a hand-off: the line stands on screen until it grows or is taken down, so every
+    # poll has to carry it - unlike the draft chunks, which are typed into the box exactly once.
+    assert client.get("/messages").get_json()["hearing"] == "Then tell me exactly what"
+    assert client.get("/messages").get_json()["hearing"] == "Then tell me exactly what"
+
+    feed.push("hearing", "")
+
+    assert client.get("/messages").get_json()["hearing"] == ""
+
+
 def test_dictation_saying_over_sends_the_box_as_it_stands():
     feed = TranscriptFeed()
     mirror = Mirror(feed, clock=lambda: "12:00:00")

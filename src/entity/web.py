@@ -140,6 +140,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         return _thread(entries, since) | {
             "state": mirror.state if mirror is not None else "muted",
             "level": mirror.level if mirror is not None else 0.0,
+            "hearing": mirror.hearing if mirror is not None else "",
             "dictated": typed,
             "send": send,
         }

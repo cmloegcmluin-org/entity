@@ -107,6 +107,9 @@ class Mirror:
         self._feed = feed
         self.state = "muted"  # the mic starts off; nothing is heard until it is turned on
         self.level = 0.0
+        # The sentence he is still in the middle of. A state, not a hand-off: it stands on screen
+        # until it grows or is taken down, so every poll carries it.
+        self.hearing = ""
         self._typed = []      # dictation's words, waiting for the page to put them in the box
         self._send = False    # dictation said "over": the box is to be sent as it stands
 
@@ -117,6 +120,8 @@ class Mirror:
                 self.state = payload
             elif op == "level":
                 self.level = payload
+            elif op == "hearing":
+                self.hearing = payload
             elif op == "draft":
                 self._typed.append(payload)
             elif op == "submit":

@@ -25,7 +25,13 @@
     <button type="button" id="send" class="btn send">Submit</button>
   </div>
 
-  <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
+  <div class="saying">
+    {#- What he is being heard saying right now, above the box his finished sentence lands in, so
+        his eye is already where the words are going. A word goes up once two readings running have
+        agreed on it (see hearing.py); the line comes down as the sentence lands below it. -#}
+    <p id="hearing" aria-live="polite"></p>
+    <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
+  </div>
 
   <svg hidden>
     <symbol id="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"

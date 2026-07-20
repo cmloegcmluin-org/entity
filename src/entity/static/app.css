@@ -250,6 +250,21 @@ body.page { padding: 10px; }
 #meter { height: 10px; border-radius: 5px; background: var(--panel); overflow: hidden; }
 #level { height: 100%; width: 0; background: var(--accent); transition: width .06s linear; }
 
+/* What he is being heard saying, above the box his finished sentence lands in. Its height is
+   reserved whether or not anything is on it: a line that appeared and vanished with every burst
+   would walk the box up and down the window all through a conversation. A step back in colour, the
+   same step an earlier session's messages take, because these words are not his final ones. */
+.saying { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+#hearing {
+  margin: 0;
+  padding: 0 10px;
+  min-height: 1.45em;
+  max-height: 4.35em;   /* three lines; a burst between pauses has never run past two */
+  overflow-y: auto;
+  font-size: .92rem;
+  color: var(--past);
+}
+
 #draft {
   font: inherit;
   resize: none;

@@ -5,6 +5,7 @@ const thread = document.getElementById("thread");
 const contents = document.getElementById("contents");
 const copier = document.getElementById("copy");
 const draft = document.getElementById("draft");
+const hearing = document.getElementById("hearing");
 const mic = document.getElementById("mic");
 const level = document.getElementById("level");
 
@@ -96,6 +97,15 @@ function dictate(chunks) {
   if (chunks.length) draft.scrollTop = draft.scrollHeight;
 }
 
+/* What he is being heard saying, while he is still saying it. Replaced whole rather than appended
+   to, because the server sends the whole settled line each poll; it only ever grows, so the end is
+   where the new words are and where it is scrolled to. */
+function showHearing(text) {
+  if (hearing.textContent === text) return;
+  hearing.textContent = text;
+  hearing.scrollTop = hearing.scrollHeight;
+}
+
 document.getElementById("send").onclick = send;
 draft.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -137,6 +147,7 @@ async function refresh() {
     drawn = shown.total;
     listSessions(shown.sessions);
     showState(shown.state, shown.level);
+    showHearing(shown.hearing || "");
     dictate(shown.dictated || []);
     if (shown.send) send();   // dictation said "over"
   } finally {

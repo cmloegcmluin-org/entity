@@ -40,11 +40,17 @@ class _Desked:
 
 
 class AgentDesk:
-    def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None, clock=time.strftime):
+    def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
+                 monitor=None, clock=time.strftime):
         self._outbox = outbox
         self._factory = agent_factory or _real_agent
         self._roster_path = Path(roster_path) if roster_path else None
         self._log_dir = Path(log_dir) if log_dir else None
+        # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
+        # know nothing about agents: a note Entity wrote itself became an "agent" that then went
+        # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
+        # reported to the user as fact, and both were denied on the spot by someone reading the log.
+        self._monitor = monitor
         self._clock = clock
         self._desked = {}
         self._lock = threading.Lock()
@@ -105,6 +111,7 @@ class AgentDesk:
             return
         self._log(entry, message, prefix="ENTITY> ")
         self._set_state(name, "working")
+        self._alive(name)  # it has work in flight from this moment; the silence clock starts here
         try:
             # Every step goes to the log as it happens, so their tab shows the agent working rather
             # than an empty file that reads exactly like a dead one.
@@ -112,9 +119,11 @@ class AgentDesk:
         except Exception as exc:  # a dead agent is news, not something to swallow
             self._log(entry, f"(died: {exc})", prefix="AGENT> ")
             self._set_state(name, "failed")
+            self._finished(name)  # already announced as dead; don't also announce it as quiet later
             self._outbox.push(f"The {name} agent died: {exc}")
             return
         self._set_state(name, "idle", last_word=reply)
+        self._finished(name)
         # A notice, never the agent's own words - the full reply is in the log its tab reads.
         self._outbox.push(notice(name, reply))
 
@@ -126,6 +135,15 @@ class AgentDesk:
             self._log(entry, text, prefix="AGENT> ")
             entry.last_word = text[:120]
             entry.last_heard = self._clock("%Y-%m-%d %H:%M:%S")
+            self._alive(name)  # the same signal the roster records - anything it says is a sign of life
+
+    def _alive(self, name):
+        if self._monitor is not None:
+            self._monitor.checked_in(name)
+
+    def _finished(self, name):
+        if self._monitor is not None:
+            self._monitor.done(name)
 
     def _log(self, entry, text, *, prefix):
         if entry.log is not None:

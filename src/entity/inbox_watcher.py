@@ -38,6 +38,13 @@ class QuietMonitor:
         self._last_seen[agent] = self._clock()
         self._warned.discard(agent)
 
+    def done(self, agent):
+        """It finished, or died. Either way stop the clock: silence only means something while
+        there is work in flight, and calling a finished agent quiet reports a problem that isn't
+        there."""
+        self._last_seen.pop(agent, None)
+        self._warned.discard(agent)
+
     def tick(self):
         now = self._clock()
         for agent, last_seen in self._last_seen.items():
@@ -80,12 +87,11 @@ class InboxWatcher:
 
     def poll_once(self):
         for path in self._files():
-            active = path not in self._offsets  # a file first appearing counts as a check-in
-            if self._read_new_lines(path):
-                active = True
-            if active and self._monitor is not None:
-                self._monitor.checked_in(path.stem)
+            self._read_new_lines(path)
         if self._monitor is not None:
+            # Only the tick. Which agents exist, and when each last spoke, is the DESK's to say -
+            # a filename here is not an agent, and treating it as one invented two of them and
+            # announced both as having gone quiet.
             self._monitor.tick()
 
     def _read_new_lines(self, path):

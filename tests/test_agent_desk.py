@@ -28,7 +28,7 @@ class FakeAgent:
         self.closed = True
 
 
-def _desk(outbox=None, made=None, hold=None, roster=None):
+def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
@@ -37,7 +37,8 @@ def _desk(outbox=None, made=None, hold=None, roster=None):
         made.append(agent)
         return agent
 
-    return AgentDesk(outbox, agent_factory=factory, roster_path=roster), outbox, made
+    return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor),
+            outbox, made)
 
 
 def _wait_for(predicate, timeout=2.0):
@@ -47,6 +48,50 @@ def _wait_for(predicate, timeout=2.0):
             return True
         time.sleep(0.01)
     return False
+
+
+class SpyMonitor:
+    def __init__(self):
+        self.check_ins = []
+        self.finished = []
+
+    def checked_in(self, agent):
+        self.check_ins.append(agent)
+
+    def done(self, agent):
+        self.finished.append(agent)
+
+
+def test_the_desk_is_what_reports_whether_an_agent_is_alive():
+    # "Again, you're lying about that. I can see that the agent just checked in two minutes ago."
+    # Silence was measured off the inbox FILENAMES, so a file Entity had written itself became an
+    # agent that then "went quiet", and a real agent that hadn't happened to write to its inbox
+    # looked dead. The desk is the only thing that knows which agents exist and when each spoke.
+    monitor = SpyMonitor()
+    desk, _, _ = _desk(monitor=monitor)
+
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+
+    assert _wait_for(lambda: monitor.finished == ["fixer"])  # the clock stops when it's done
+    assert monitor.check_ins.count("fixer") >= 2  # dispatched, then again for what it narrated
+
+
+def test_an_agent_that_dies_stops_its_silence_clock_too():
+    # A dead agent is announced as dead; leaving its clock running would then also announce it as
+    # quiet twenty minutes later, which is the same non-news twice.
+    monitor = SpyMonitor()
+    desk = AgentDesk(Outbox(), agent_factory=lambda *a: _DyingAgent(), monitor=monitor)
+    desk.start("doomed", "/tmp/wt", "try")
+
+    assert _wait_for(lambda: monitor.finished == ["doomed"])
+
+
+class _DyingAgent:
+    def work(self, message, on_step=None):
+        raise RuntimeError("session lost")
+
+    def close(self):
+        pass
 
 
 def test_starting_an_agent_does_not_block_the_caller():

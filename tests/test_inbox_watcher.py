@@ -90,47 +90,19 @@ def test_blank_lines_are_ignored(tmp_path):
     assert outbox.drain() == ["agent: real message"]
 
 
-def test_a_check_in_is_reported_to_the_monitor_when_an_agent_writes(tmp_path):
-    monitor = SpyMonitor()
-    watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
-    (tmp_path / "auth-agent.txt").write_text("I hit a failing test\n", encoding="utf-8")
-
-    watcher.poll_once()
-
-    assert monitor.check_ins == ["auth-agent"]
-
-
 def test_each_poll_ticks_the_monitor(tmp_path):
+    # The watcher's only remaining business with the monitor: it is the cheap poll the silence
+    # check rides on. WHICH agents exist, and when each last spoke, comes from the desk - a
+    # filename in here is not an agent, and reading it as one invented two of them.
     monitor = SpyMonitor()
     watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
+    (tmp_path / "not-an-agent.txt").write_text("a note Entity wrote to itself\n", encoding="utf-8")
 
     watcher.poll_once()
     watcher.poll_once()
 
     assert monitor.ticks == 2
-
-
-def test_a_freshly_appearing_file_registers_the_agent_before_its_first_full_line(tmp_path):
-    # An agent that creates its inbox file and then hangs mid-sentence has written no complete
-    # line, but it must still be watched for silence — its appearance is the first check-in.
-    monitor = SpyMonitor()
-    watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
-    (tmp_path / "stalled.txt").write_text("starting work on the", encoding="utf-8")  # no newline
-
-    watcher.poll_once()
-
-    assert monitor.check_ins == ["stalled"]
-
-
-def test_files_present_before_startup_are_not_monitored(tmp_path):
-    # Stale inboxes from a previous run shouldn't trigger silence warnings for agents long gone.
-    (tmp_path / "old.txt").write_text("finished yesterday\n", encoding="utf-8")
-    monitor = SpyMonitor()
-    watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
-
-    watcher.poll_once()
-
-    assert monitor.check_ins == []
+    assert monitor.check_ins == []  # no agent was conjured out of a file
 
 
 def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):

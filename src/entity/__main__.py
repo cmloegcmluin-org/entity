@@ -221,7 +221,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
     # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
     # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
-    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS)
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor)
     brain = SupervisingBrain(sdk_brain, desk)
     dictation = None
     if gui:

@@ -78,6 +78,21 @@ def test_a_check_in_rearms_the_warning():
     assert outbox.drain() == ["The a agent hasn't checked in for 20 minutes."]
 
 
+def test_an_agent_that_has_finished_is_not_reported_silent():
+    # Silence only means something while there is work in flight. A finished agent isn't stalled,
+    # and saying it has "gone quiet" reads as news about a problem that does not exist.
+    outbox = Outbox()
+    clock = FakeClock(0.0)
+    monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
+    monitor.checked_in("a")
+    monitor.done("a")
+
+    clock.now = 5000
+    monitor.tick()
+
+    assert outbox.drain() == []
+
+
 def test_each_agent_is_tracked_independently():
     outbox = Outbox()
     clock = FakeClock(0.0)

@@ -130,10 +130,16 @@ class Dictation:
         self._armed = recording
         self._announce_state()
 
-    def is_recording(self):
-        """Is their mic live? The loop asks before ever speaking up on its own: while the mic is on,
-        they may be talking, and it once broke in mid-sentence."""
-        return self._armed
+    def is_mid_utterance(self):
+        """Are they part-way through saying something right now? The loop asks before speaking up on
+        its own, because it once broke in mid-sentence.
+
+        Being ARMED is not the answer: the mic here is a state they leave on for the whole
+        conversation, so "is it armed" is yes from the moment they start until they stop, and taking
+        that for "they are talking" left the Entity unable to say anything unprompted ever again.
+        A burst that has started and not yet ended is the real thing to keep out of.
+        """
+        return self._mid_burst
 
     def begin_speaking(self):
         """The Entity has started talking: stop taking dictation until it's done."""

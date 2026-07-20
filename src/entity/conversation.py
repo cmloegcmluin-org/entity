@@ -338,7 +338,7 @@ class Conversation:
         # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
         self._held_news.extend(self._outbox.drain())
-        if self._offered is not None or self._mic_is_live() or not self._held_news:
+        if self._offered is not None or self._they_are_talking() or not self._held_news:
             return
         news = "\n\n".join(self._held_news)
         self._held_news = []
@@ -349,12 +349,18 @@ class Conversation:
             return
         self._say(news, record=False)
 
-    def _mic_is_live(self):
-        """Is their mic live? While it is, the Entity says nothing of its own accord - it once broke
-        in while they were mid-sentence. A mic that can't report (the terminal's) never blocks: it
-        only yields between turns anyway."""
-        recording = getattr(self._stt, "is_recording", None)
-        return bool(recording and recording())
+    def _they_are_talking(self):
+        """Are they part-way through saying something? While they are, the Entity says nothing of its
+        own accord - it once broke in while they were mid-sentence.
+
+        The question used to be "is their mic on", which was the same question when the mic was a
+        walkie-talkie: it was only live while they held a turn. The window's mic is a STATE and stays
+        armed for the whole conversation, so that reading answered yes forever and nothing unprompted
+        - agent news, a collected answer - could ever be said at all. A mic that can't report (the
+        terminal's) never blocks: it only yields between turns anyway.
+        """
+        talking = getattr(self._stt, "is_mid_utterance", None)
+        return bool(talking and talking())
 
     def _think(self, heard):
         """Ask the brain off the main thread so a slow reply can't read as a crash. The first
@@ -451,8 +457,8 @@ class Conversation:
         background = self._background
         if background is None or not background["done"].is_set():
             return
-        if self._mic_is_live():
-            return  # they're talking; a finished answer waits, exactly as agent news does
+        if self._they_are_talking():
+            return  # mid-sentence; a finished answer waits, exactly as agent news does
         self._background = None
         reply = background["outcome"].get("reply")
         if reply is None or self._offered is not None:

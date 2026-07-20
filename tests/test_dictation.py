@@ -312,14 +312,30 @@ def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
     assert ears.states[-1] == "muted"  # and it did go quiet, as they asked
 
 
-def test_it_reports_whether_the_mic_is_live():
-    # The loop asks this before ever speaking up on its own: while their mic is on, it stays quiet.
+def test_it_reports_whether_they_are_part_way_through_a_sentence():
+    # The loop asks this before ever speaking up on its own. Being ARMED must not read as talking:
+    # they leave the mic armed for a whole conversation, and taking that for "they are speaking" left
+    # the Entity unable to say anything unprompted for the entire session.
     ears = Ears()
-    dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
+    held = []
+    seen = []
 
-    assert dictation.is_recording() is False
-    dictation.set_recording(True)
-    assert dictation.is_recording() is True
+    class MicThatWatches:
+        def frames(self):
+            for frame in _burst_then_pause():
+                seen.append(held[0].is_mid_utterance())
+                yield frame
+
+    dictation = Dictation(FakeTranscriber("a sentence"), MicThatWatches(),
+                          pause_frames=3, **ears.kwargs())
+    held.append(dictation)
+
+    assert dictation.is_mid_utterance() is False  # armed from the start, but they haven't spoken yet
+
+    dictation.pump()
+
+    assert True in seen  # it did say so while a burst was still in the air
+    assert dictation.is_mid_utterance() is False  # and stopped once they paused - mic still armed
 
 
 def test_the_sounds_he_makes_while_thinking_never_reach_the_draft():

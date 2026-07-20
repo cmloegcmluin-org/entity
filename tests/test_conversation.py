@@ -1209,26 +1209,66 @@ def test_news_held_back_is_delivered_once_it_can_be():
     assert any("fixer" in line for line in tts.spoken)  # held, not lost
 
 
-def test_it_stays_quiet_while_the_mic_is_on():
+def test_it_stays_quiet_while_they_are_mid_sentence():
     outbox = Outbox()
     outbox.push("the fixer agent has news")
     tts = FakeTTS()
 
     class MicSTT(FakeSTT):
-        on = True
+        talking = True
 
-        def is_recording(self):
-            return self.on
+        def is_mid_utterance(self):
+            return self.talking
 
     stt = MicSTT(["", "goodbye entity"])
     convo = Conversation(stt, FakeBrain(), tts, outbox=outbox, long_answer_chars=None)
 
     convo.turn()
-    assert not any("fixer" in line for line in tts.spoken)  # their mic is on; it does not speak
+    assert not any("fixer" in line for line in tts.spoken)  # they're talking; it does not break in
 
-    stt.on = False
+    stt.talking = False
     convo.turn()
     assert any("fixer" in line for line in tts.spoken)
+
+
+def test_a_finished_answer_goes_out_while_the_mic_sits_armed():
+    # The window's mic is a STATE, not a walkie-talkie - it stays armed for a whole conversation. Read
+    # as "their mic is on", the quiet-while-they-talk guard silenced every unprompted line and every
+    # collected answer for the entire session, so a detached call could not be delivered at all: the
+    # guard's meaning drifted when the mic changed shape underneath it while its words stayed the
+    # same. What it protects against is talking OVER them, and that is being mid-sentence.
+    release = threading.Event()
+
+    class SlowBrain:
+        def respond(self, utterance):
+            release.wait(2.0)
+            return "the finished answer"
+
+    class WindowMic(FakeSTT):
+        armed = True  # they turned the mic on at the start and left it on, as the window intends
+        talking = False
+
+        def is_mid_utterance(self):
+            return self.talking
+
+    stt = WindowMic(["slow", "", ""])
+    tts = FakeTTS()
+    convo = Conversation(stt, SlowBrain(), tts, acknowledgement="ACK",
+                         detach_after=0.05, patience=30, long_answer_chars=None)
+
+    convo.turn()  # detaches
+    release.set()
+    assert convo._background["done"].wait(2.0)
+
+    stt.talking = True
+    convo.turn()
+
+    assert "the finished answer" not in tts.spoken  # mid-sentence: it waits, exactly as it always has
+
+    stt.talking = False
+    convo.turn()
+
+    assert "the finished answer" in tts.spoken  # they've stopped - armed mic and all, it speaks
 
 
 def test_a_long_reply_is_cut_short_rather_than_half_read():

@@ -900,7 +900,8 @@ def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
     turn = convo.turn()
 
     assert turn.error is True
-    assert tts.spoken[0] == "ACK" and tts.spoken[-1] == convo.error_reply  # off-thread error re-raised
+    assert tts.spoken[0] == "ACK"
+    assert "hiccup after a pause" in tts.spoken[-1]  # the off-thread error re-raised, and named
 
 
 class TerminatedEmptySTT:
@@ -1006,7 +1007,7 @@ def test_brain_failure_is_spoken_and_loop_survives():
 
     convo.run()
 
-    assert convo.error_reply in tts.spoken
+    assert any("network hiccup" in line for line in tts.spoken)
     assert tts.spoken[-1] == convo.farewell_reply
 
 
@@ -1292,6 +1293,27 @@ def test_a_long_reply_is_cut_short_rather_than_half_read():
     assert spoken in shown  # the same words on screen as in their ear
     assert "Padding. Padding. Padding." not in shown  # the wall never reaches them at all
     assert convo.ready_question not in tts.spoken  # and they were never asked
+
+
+def test_a_brain_failure_says_what_actually_broke():
+    # "It has never said that and recovered. I would prefer at that point that the underlying error
+    # just be leaked. No sense acting uncannily human about it if you can't back it up with anything
+    # useful." The cause WAS being surfaced - to stderr, which under pythonw does not exist at all,
+    # so the one line that could explain a session wedged for good went nowhere and every failure
+    # looked like the same momentary hiccup.
+    class BrokenBrain:
+        def respond(self, utterance):
+            raise RuntimeError("the CLI exited with code 1")
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None)
+
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert "the CLI exited with code 1" in turn.said  # the real cause, not a mood
+    assert "RuntimeError" in turn.said  # and what kind, so a repeat is recognisable
+    assert any("the CLI exited with code 1" in line for line in tts.spoken)
 
 
 def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():

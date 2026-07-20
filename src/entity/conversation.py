@@ -21,7 +21,13 @@ DEFAULT_FAREWELLS = (
 DEFAULT_SUSPENDS = ("suspend", "stop listening")
 DEFAULT_RESUMES = ("resume", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Be seeing you."
-DEFAULT_ERROR_REPLY = "Sorry, my mind glitched for a second - say that again?"
+# What they hear when the brain call fails, with `{cause}` filled in. The cause is IN the sentence
+# because it used to go to stderr - and the windowed run is launched by pythonw, which has no stderr
+# at all, so the one line that could explain the failure went nowhere. Every failure then sounded
+# like the same momentary hiccup, including the ones that had wedged the session permanently: "it
+# has never said that and recovered". Sounding human about a fault you can't explain is worth less
+# than the fault.
+DEFAULT_ERROR_REPLY = "Something's broken in my head: {cause}"
 # They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
 # repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
@@ -571,10 +577,10 @@ class Conversation:
             return None
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands
             return None
-        except Exception as exc:  # surface the real cause instead of a silent "glitch"
-            print(f"[brain error] {exc!r}", file=sys.stderr)
-            self._speak_reply(self.error_reply)
-            return Turn(heard=heard, said=self.error_reply, error=True)
+        except Exception as exc:  # tell them the real cause - it reaches them nowhere else
+            said = self.error_reply.format(cause=f"{type(exc).__name__}: {exc}")
+            self._speak_reply(said)
+            return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
         if self._should_gate(said):
             return self._offer(heard, said)

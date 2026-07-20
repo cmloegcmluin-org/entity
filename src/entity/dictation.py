@@ -9,6 +9,12 @@ and keeps the words before it; "hey Entity" turns it back on and keeps the words
 window's button does the same by hand. Muted, the room is heard but dropped - only the wake phrase
 gets through.
 
+A chunk only reaches the draft box once a PAUSE has ended it, which is the wait he complained of -
+nothing printed until he stopped talking. So while a burst is still growing it is also handed to
+`hearing`, which reads it over and over on a worker of its own and puts the settled words on a live
+line as they settle. That line is a preview and nothing more: the draft box is still filled by the
+one authoritative reading taken when the burst ends, and the line comes down as it lands.
+
 The pump runs on its own thread for the whole session. It reports through callbacks (draft text,
 mic state, level for the meter, submit requests) so the window can mirror it without this module
 knowing anything about Tk. `listen()` is the Conversation-facing half: it blocks until the window
@@ -64,6 +70,7 @@ class Dictation:
         interrupt=None,
         recorder=None,
         playback=None,
+        hearing=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -85,6 +92,9 @@ class Dictation:
         # What this PC is sending to its speakers, if it is being captured. Without it every burst
         # reads as "the machine was silent", which discounts nothing - the console has no capture.
         self._playback = playback
+        # The live line: the burst so far, read over and over on its own worker, so words appear
+        # while he is still talking rather than only once a pause ends the sentence.
+        self._hearing = hearing
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
@@ -202,6 +212,10 @@ class Dictation:
                     continue
                 started = True
             burst.add(frame, speech=speech, level=level, playing=playing)
+            if self._hearing is not None and self.taking_dictation():
+                # Only what he is being heard saying: the room while the mic is off, and the
+                # Entity's own voice through his speakers, have no business on screen as his words.
+                self._hearing.follow(burst)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over
             if ended or self._finish_burst:  # ...or they muted while still mid-sentence
@@ -216,6 +230,8 @@ class Dictation:
         """Hand one finished burst to the transcriber - unless nobody said it. A burst with no
         sustained sound is a tap or a creak and the model answers those with invented words; one
         whose loudness follows the speakers is what this PC is playing, not them."""
+        if self._hearing is not None:
+            self._hearing.rest()  # the finished sentence is about to land; the live line makes way
         if burst.carries_speech() and not burst.echoes_playback():
             self._absorb(burst.audio(), armed=self._armed or self._finish_burst)
         self._finish_burst = False

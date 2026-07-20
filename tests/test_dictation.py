@@ -4,6 +4,7 @@ import time
 import numpy as np
 
 from entity.dictation import Dictation
+from entity.hearing import Hearing
 
 LOUD = 0.05
 QUIET = 0.001
@@ -73,6 +74,62 @@ def test_speech_while_recording_lands_in_the_draft():
 
     assert ears.drafted == ["add eggs to the list"]
     assert ears.submits == 0  # nothing submitted - the draft just accumulates
+
+
+class MicWithAWorkerBeside:
+    """A mic whose frames arrive while the hearing worker reads the snapshots they leave - which is
+    what its own thread does in the app, without a thread to go wrong in a test."""
+
+    def __init__(self, frames, hearing):
+        self._frames = list(frames)
+        self._hearing = hearing
+
+    def frames(self):
+        for frame in self._frames:
+            yield frame
+            self._hearing.step()
+
+
+def test_his_words_reach_the_window_while_he_is_still_saying_them():
+    # The complaint itself: "it doesn't actually print out what it's hearing me say until I stop
+    # speaking". The burst is only transcribed once a pause ends it, so the wait he saw was the
+    # pause. Now the burst so far is read as it grows, and the settled words go up as they settle.
+    ears = Ears()
+    heard = []
+    hearing = Hearing(
+        FakeTranscriber("Pick up the", "Pick up the drive", "Pick up the drive work",
+                        "Pick up the drive work."),
+        heard.append, every=2)
+    frames = [_sil()] * 2 + [_sp()] * 6 + [_sil()] * 4
+    dictation = Dictation(FakeTranscriber("Pick up the drive work."),
+                          MicWithAWorkerBeside(frames, hearing), pause_frames=3,
+                          hearing=hearing, **ears.kwargs())
+
+    dictation.pump()
+
+    assert heard == ["Pick up the", "Pick up the drive", "Pick up the drive work.", ""]
+    # ...and the finished sentence still lands in the draft box, which the live line makes way for.
+    assert ears.drafted == ["Pick up the drive work."]
+
+
+def test_the_live_line_never_puts_the_entitys_own_voice_up_as_his_words():
+    # His draft box once opened with "I do for you" - the tail of Entity's own greeting, heard back
+    # through his speakers. A line that printed as it listened would put that on screen a word at a
+    # time, and faster.
+    ears = Ears()
+    heard = []
+    hearing = Hearing(FakeTranscriber("I'm ready. What can", "I'm ready. What can I do"),
+                      heard.append, every=2)
+    frames = [_sil()] * 2 + [_sp()] * 6 + [_sil()] * 4
+    dictation = Dictation(FakeTranscriber("I'm ready. What can I do for you?"),
+                          MicWithAWorkerBeside(frames, hearing), pause_frames=3,
+                          hearing=hearing, **ears.kwargs())
+    dictation.begin_speaking()
+
+    dictation.pump()
+
+    assert heard == []
+    assert ears.drafted == []
 
 
 def test_stop_listening_mutes_and_keeps_the_words_before_it():

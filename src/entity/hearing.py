@@ -78,8 +78,9 @@ class Hearing:
         with self._lock:
             self._burst += 1  # a reading still in the air belongs to a burst nobody is in now
             self._waiting = None
-        self._previous = self._line = ""
-        self._on_hearing("")
+        standing, self._previous, self._line = self._line, "", ""
+        if standing:  # every pause ends a burst, including the ones nobody was listening to
+            self._on_hearing("")
 
     # ---- the worker ----------------------------------------------------------------------------
 

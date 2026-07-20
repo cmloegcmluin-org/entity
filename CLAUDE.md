@@ -141,6 +141,15 @@ it could not place with nothing at all. Only what two readings running agree on 
 never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, his own
 sentences reached the screen 2 to 5 seconds before the draft box used to fill.
 
+**Printing as it listens is done.** Parakeet has no streaming door — `recognize` takes a waveform
+and reads all of it — so the burst so far is re-read as it grows, on a worker, because at 90 ms for
+one second of speech and 640 ms for twenty it is thirty times faster than real time but nowhere near
+cheap enough for the pump's thread. The readings are not fit to show raw: their tails are guesswork
+the next reading rewrites, and four times in one three-second sentence the model answered a stretch
+it could not place with nothing at all. Only what two readings running agree on goes up, and the line
+never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, his own
+sentences reached the screen 2 to 5 seconds before the draft box used to fill.
+
 Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
 rather than being read back out of the sentence, several ready at once are read out numbered, and
 whichever is named is the one spoken. He was asked and chose numbering over a new brain directive,

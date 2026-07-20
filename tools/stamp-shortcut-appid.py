@@ -1,9 +1,15 @@
-"""Stamp the Start Menu shortcut with Entity's AppUserModelID, so a pin and the running window
-are the same taskbar button.
+"""Stamp every Entity shortcut with the app's AppUserModelID, so a pin and the running window are
+the same taskbar button.
 
-Windows matches a pinned shortcut to a running window by AppUserModelID. The Entity process
-declares one (entity.mirror.APP_ID); without the same id on the .lnk, pinning it gives a second,
-separate button - the pin sitting inert while the running app lights up somewhere else entirely. Run once after install-start-menu.ps1, and again if that shortcut is ever recreated.
+Windows matches a shortcut to a running window by AppUserModelID. The Entity process declares one
+(entity.mirror.APP_ID); without the same id on the .lnk, launching it gives a second, separate
+button - the pin sitting inert while the running app lights up somewhere else entirely, and
+pinning THAT one pins the interpreter, generic icon and all.
+
+Both copies have to carry it. Pinning does not link to the Start Menu shortcut, it takes a COPY of
+it, and that copy keeps whatever id it was made with - so a pin made before this ran, or before the
+id last changed, still holds the old one. Run after install-start-menu.ps1, after re-pinning, and
+whenever APP_ID changes.
 """
 
 import sys
@@ -18,8 +24,11 @@ from entity.mirror import APP_ID  # noqa: E402  - the one definition of the id, 
 
 STGM_READWRITE = 0x00000002  # loading a .lnk read-only makes every write Access Denied
 
-SHORTCUT = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-    Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Entity.lnk"
+# Where Windows keeps the two copies of a shortcut: the one in the menu, and the one a pin made.
+SHORTCUTS = (
+    Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Entity.lnk",
+    Path.home() / ("AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/"
+                   "TaskBar/Entity.lnk"),
 )
 
 
@@ -45,5 +54,12 @@ def read_back(path):
 
 
 if __name__ == "__main__":
-    stamp(SHORTCUT, APP_ID)
-    print(f"{SHORTCUT} now declares AppUserModelID={read_back(SHORTCUT)!r}")
+    # An explicit path wins; otherwise both copies, and one that isn't there is simply said so -
+    # he may have pinned it and not put it in the Start Menu, or the other way round.
+    wanted = [Path(sys.argv[1])] if len(sys.argv) > 1 else list(SHORTCUTS)
+    for shortcut in wanted:
+        if not shortcut.exists():
+            print(f"{shortcut} - not there, nothing to stamp")
+            continue
+        stamp(shortcut, APP_ID)
+        print(f"{shortcut} now declares AppUserModelID={read_back(shortcut)!r}")

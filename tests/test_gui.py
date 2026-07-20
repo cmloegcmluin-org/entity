@@ -66,10 +66,14 @@ def test_the_contents_list_names_each_session_by_the_day_and_time_it_opened():
 
     # A session break carries no date of its own - the day is the last one above it, and the time
     # is the first thing said in the session, since that is what a contents line has to point at.
-    assert [label for label, _ in sessions(model.entries)] == [
+    found = sessions(model.entries)
+    assert [label for label, _ in found] == [
         "2026-07-18 02:41", "2026-07-18 16:30", "2026-07-19 03:39",
     ]
-    assert [entry["role"] for _, entry in sessions(model.entries)] == ["day", "session", "session"]
+    # Where each opens, not which entry: the breaks are identical dicts, so anything that looked
+    # one up by value found the first one and sent every contents row to the same place.
+    assert [at for _, at in found] == [0, 3, 5]
+    assert [model.entries[at]["role"] for _, at in found] == ["day", "session", "session"]
 
 
 def test_an_overwrite_run_collapses_onto_one_entry_like_the_terminal():

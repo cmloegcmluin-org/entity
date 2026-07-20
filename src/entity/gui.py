@@ -132,19 +132,23 @@ class TranscriptModel:
 
 
 def sessions(entries):
-    """Each recorded session in the thread, as (label, the entry it opens with).
+    """Each recorded session in the thread, as (label, where it opens).
 
     What the contents list offers, and what clicking one scrolls to. A session break carries no
     date of its own: the day is the last day break above it, and the time is the first thing said
-    inside it, since a session with nothing said in it is not somewhere to be sent."""
+    inside it, since a session with nothing said in it is not somewhere to be sent.
+
+    Where, not which: every session break is the same dict as every other - no stamp, the same
+    text - so handing back the entry meant anything looking it up by value found the first one in
+    the thread, and every row in the contents led to the same place."""
     found, day = [], ""
-    opening = entries[0] if entries else None
-    for entry in entries:
+    opening = 0 if entries else None
+    for at, entry in enumerate(entries):
         role = entry["role"]
         if role == "day":
             day = entry["stamp"]
         elif role == "session":
-            opening = entry
+            opening = at
         elif role in SIDES and opening is not None:
             found.append((f"{day} {entry['stamp'][:5]}".strip(), opening))
             opening = None
@@ -644,7 +648,7 @@ class EntityWindow:
         """A row was clicked: scroll to the session it names, however far back it is held."""
         chosen = self._contents.curselection()
         if chosen:
-            self._thread.reveal(self._listed[chosen[0]][1])
+            self._thread.reveal(self._model.entries[self._listed[chosen[0]][1]])
 
     def _refresh_agent_tabs(self):
         """Each agent's exchange, read back the same way the conversation is - who said what,

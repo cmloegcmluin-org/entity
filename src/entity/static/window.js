@@ -24,7 +24,7 @@ function element(entry) {
     row.className = entry.role;
     const mark = document.createElement("span");
     mark.className = "mark";
-    mark.append(entry.role === "day" ? entry.stamp : "• • •");
+    mark.append(entry.role === "day" ? entry.stamp : entry.label);
     row.append(mark);
     return row;
   }
@@ -47,6 +47,10 @@ function element(entry) {
 }
 
 function draw(fresh, at) {
+  // Nothing new means nothing to do. Following the live end on an EMPTY poll re-pinned the
+  // thread to the bottom four times a second, which quietly cancelled every scroll the contents
+  // started - the jump happened and was undone before it could be seen.
+  if (!fresh.length) return;
   const atEnd = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
   fresh.forEach((entry, index) => {
     const node = element(entry);
@@ -65,7 +69,16 @@ function listSessions(found) {
     row.append(session.label);
     row.onclick = () => {
       const target = thread.querySelector(`[data-at="${session.at}"]`);
-      if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
+      if (!target) return;
+      // Straight there, not smoothly: the archive is tens of thousands of pixels tall, and a
+      // smooth scroll across that either takes seconds of blur or - as it did here - is dropped
+      // on the floor, leaving the click looking like it did nothing at all.
+      thread.scrollTop = target.offsetTop - 16;
+      // Landing on a dim rule at the top edge is indistinguishable from not having moved, so the
+      // destination says it is the destination for a moment.
+      for (const was of thread.querySelectorAll(".landed")) was.classList.remove("landed");
+      void target.offsetWidth;  // restarts the animation when the same session is clicked twice
+      target.classList.add("landed");
       for (const other of contents.children) other.removeAttribute("aria-current");
       row.setAttribute("aria-current", "true");
     };
@@ -95,12 +108,17 @@ function offer(node, entries) {
   copier.classList.add("showing");
   // Beside what is drawn: a message's box, or a break's mark - never the full-width row a
   // break sits in, which would put the button out at the far edge of an empty stretch.
+  // Placed against the THREAD, since that is what it now hangs inside: viewport coordinates
+  // would leave it behind the moment the thread scrolled under it.
   const drawnPart = node.querySelector(".box, .mark") || node;
   const spot = drawnPart.getBoundingClientRect();
-  copier.style.top = `${spot.top + spot.height / 2 - copier.offsetHeight / 2}px`;
+  const within = thread.getBoundingClientRect();
+  const top = spot.top - within.top + thread.scrollTop;
+  copier.style.top = `${top + spot.height / 2 - copier.offsetHeight / 2}px`;
+  const left = spot.left - within.left + thread.scrollLeft;
   copier.style.left = node.classList.contains("right")
-    ? `${spot.left - copier.offsetWidth - 8}px`
-    : `${spot.right + 8}px`;
+    ? `${left - copier.offsetWidth - 8}px`
+    : `${left + spot.width + 8}px`;
 }
 
 function withdraw() {
@@ -115,6 +133,7 @@ copier.addEventListener("click", async () => {
 });
 
 thread.addEventListener("mouseover", (event) => {
+  if (copier.contains(event.target)) return;  // reaching for it must not move it out from under
   const node = event.target.closest(".said, .day, .session");
   if (node && node.dataset.at !== undefined) offer(node, latest);
 });

@@ -7,28 +7,29 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
-  {#- The contents stands beside the conversation, not under it: it is a way into the thread,
-      so it belongs alongside the thread rather than in the row of things to do with talking. -#}
+  {#- Four quadrants, unequally sized: the contents and the conversation across the top, and
+      under each of them the thing that belongs there - the controls under the contents, the box
+      to say something in under the conversation it will join. -#}
   <aside id="contents" aria-label="Sessions"></aside>
 
-  <main id="thread" aria-live="polite"></main>
+  <main id="thread" aria-live="polite">
+    {#- The one control that follows the pointer: it is only ever wanted in one place at a time,
+        and one per message would be a button built for every line of every session ever. It
+        lives INSIDE the thread, because a button sitting over the thread but parented outside it
+        means the pointer reaching for it leaves the thread - and the button flees the mouse. -#}
+    <button type="button" id="copy" class="copy" hidden aria-label="Copy">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
+      <span class="copied">Copied</span>
+    </button>
+  </main>
 
-  {#- Everything to do with talking, together along the bottom. -#}
-  <footer id="controls">
-    <div class="column">
-      <button type="button" id="mic" class="btn">○ mic off</button>
-      <div id="meter"><div id="level"></div></div>
-      <button type="button" id="send" class="btn send">Submit</button>
-    </div>
-    <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
-  </footer>
+  <div class="column">
+    <button type="button" id="mic" class="btn">○ mic off</button>
+    <div id="meter"><div id="level"></div></div>
+    <button type="button" id="send" class="btn send">Submit</button>
+  </div>
 
-  {#- The one control that follows the pointer: it is only ever wanted in one place at a time,
-      and one per message would be a button built for every line of every session ever. -#}
-  <button type="button" id="copy" class="copy" hidden aria-label="Copy">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
-    <span class="copied">Copied</span>
-  </button>
+  <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
   <svg hidden><symbol id="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
        stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
     <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>

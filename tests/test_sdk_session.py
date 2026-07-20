@@ -1,6 +1,8 @@
 import threading
+from pathlib import Path
 
-from claude_agent_sdk import ResultMessage
+import pytest
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage
 
 from entity.sdk_session import SdkSession, _context_tokens, extract_text
 
@@ -111,7 +113,7 @@ def test_every_message_reaches_the_caller_whole_as_it_streams():
     # It used to boil each message down to its text right here, so the tool calls, the diffs and
     # the command output were gone before anything downstream could write them anywhere.
     client = StreamingClient()
-    session = SdkSession(object(), client_factory=lambda options: client)
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
     seen = []
 
     reply = session.ask("do the thing", on_message=seen.append)
@@ -123,7 +125,7 @@ def test_every_message_reaches_the_caller_whole_as_it_streams():
 
 def test_interrupt_runs_the_clients_interrupt_on_the_session_loop():
     client = FakeClient()
-    session = SdkSession(object(), client_factory=lambda options: client)
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
 
     session.interrupt()
 
@@ -136,7 +138,7 @@ def test_a_closed_session_refuses_work_instead_of_hanging_on_it_forever():
     # queued and never run - so `.result()` waits for something that cannot happen. Anything holding
     # a closed session then stops answering ALTOGETHER rather than failing: no reply, no error, no
     # end to the wait. A brain rebuild that fails leaves exactly that session in place.
-    session = SdkSession(object(), client_factory=lambda options: FakeClient())
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: FakeClient())
     session.close()
 
     outcome = []
@@ -153,3 +155,60 @@ def _ask_quietly(session):
         return session.ask("are you there")
     except Exception as exc:
         return exc
+
+
+def _capturing_factory(seen):
+    def factory(*, options):
+        seen.append(options)
+        return FakeClient()
+    return factory
+
+
+def test_a_system_prompt_is_handed_over_as_a_file_rather_than_spelled_out():
+    # The SDK writes the system prompt out on the CLI's command line, and Windows refuses a command
+    # line over 32767 characters - as a FileNotFoundError, which the SDK reports as the CLI being
+    # missing. So a persona that outgrew that budget made EVERY session fail to start, saying
+    # "Claude Code not found at: ...claude.exe" about a file that was sitting right there. A path
+    # is a few dozen characters however long the persona gets.
+    persona = "x" * 40000
+    seen = []
+    session = SdkSession(ClaudeAgentOptions(system_prompt=persona),
+                         client_factory=_capturing_factory(seen))
+
+    handed = seen[0].system_prompt
+    assert handed["type"] == "file"
+    assert Path(handed["path"]).read_text(encoding="utf-8") == persona
+    session.close()
+
+
+def test_the_spilled_system_prompt_is_cleaned_up_when_the_session_ends():
+    # The brain builds a fresh session on every compaction and every reconnect, so a file left
+    # behind each time is an accumulating pile of copies of the user's own standing profile.
+    seen = []
+    session = SdkSession(ClaudeAgentOptions(system_prompt="who you are"),
+                         client_factory=_capturing_factory(seen))
+    spilled = Path(seen[0].system_prompt["path"])
+
+    session.close()
+
+    assert not spilled.exists()
+
+
+def test_a_session_that_never_connects_takes_its_spilled_prompt_back_with_it():
+    # The failure path is the one that repeats: a brain whose session died rebuilds on every turn,
+    # and a rebuild that also fails never reaches close(). Thirty-four minutes of that is thirty-four
+    # minutes of dropping copies of the user's profile into the temp directory.
+    class RefusingClient(FakeClient):
+        async def connect(self):
+            raise RuntimeError("the CLI would not start")
+
+    seen = []
+
+    def factory(*, options):
+        seen.append(options)
+        return RefusingClient()
+
+    with pytest.raises(RuntimeError):
+        SdkSession(ClaudeAgentOptions(system_prompt="who you are"), client_factory=factory)
+
+    assert not Path(seen[0].system_prompt["path"]).exists()

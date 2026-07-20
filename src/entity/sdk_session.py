@@ -3,10 +3,17 @@
 The SDK is async; this wraps one `ClaudeSDKClient` so the rest of the app can talk to it with
 a plain synchronous `ask(prompt) -> text`. Shared by the companion brain (`SdkBrain`) and the
 supervised coding agents (`SupervisedAgent`) - they differ only in the options they pass in.
+
+It is also where a session's system prompt is kept off the command line - see
+`_spill_system_prompt`, which exists because Windows put a ceiling on how long a persona could get.
 """
 
 import asyncio
+import os
+import tempfile
 import threading
+from dataclasses import replace
+from pathlib import Path
 
 from claude_agent_sdk import ClaudeSDKClient, ResultMessage
 
@@ -43,14 +50,43 @@ def _context_tokens(usage):
     )
 
 
+def _spill_system_prompt(options):
+    """Put the system prompt in a file and hand the SDK that path instead of the text.
+
+    The SDK spells the system prompt out on the CLI's command line, and Windows refuses a command
+    line longer than 32767 characters. It refuses it as a FileNotFoundError, which the SDK reports
+    as `CLINotFoundError: Claude Code not found at: ...claude.exe` - so a persona that outgrew that
+    budget failed EVERY session with a complaint about a 252MB file that was sitting right there,
+    and the conversation could not recover, because each rebuild had the same prompt to pass.
+
+    A path costs a few dozen characters however long the persona grows, which it does on its own:
+    the profile the persona is composed from gains a line every time an enhancement is filed.
+
+    Returns the options to use and the file to delete when the session is done with it.
+    """
+    if not isinstance(options.system_prompt, str):  # an agent carries no persona of its own
+        return options, None
+    handle, path = tempfile.mkstemp(prefix="entity-persona-", suffix=".txt", text=True)
+    with os.fdopen(handle, "w", encoding="utf-8") as spilled:
+        spilled.write(options.system_prompt)
+    return replace(options, system_prompt={"type": "file", "path": path}), path
+
+
 class SdkSession:
     def __init__(self, options, *, client_factory=ClaudeSDKClient):
+        options, self._prompt_file = _spill_system_prompt(options)
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         self._closed = False
         self._client = client_factory(options=options)
-        self._submit(self._client.connect())
+        try:
+            self._submit(self._client.connect())
+        except BaseException:
+            # A session that never opened is never closed, so this is its only chance to tidy up -
+            # and it's the path that REPEATS, since a brain whose session died rebuilds every turn.
+            self._discard_spilled_prompt()
+            raise
         self.last_context_tokens = 0  # size of the context the most recent ask processed
 
     def _submit(self, coro):
@@ -111,3 +147,11 @@ class SdkSession:
             self._run(self._client.disconnect())
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
+            self._discard_spilled_prompt()
+
+    def _discard_spilled_prompt(self):
+        """Take the persona's copy back off disk. A fresh session is built on every compaction and
+        every reconnect, so one left behind each time is a growing pile of the user's own profile."""
+        if self._prompt_file is not None:
+            Path(self._prompt_file).unlink(missing_ok=True)
+            self._prompt_file = None

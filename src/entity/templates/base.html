@@ -1,0 +1,25 @@
+{#- The chrome every page shares, so nothing jumps when you move between them. The tab strip is
+    gone: these are pages with a bar above them, the way Notecraft does it. -#}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entity{% block title %}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="{% block shape %}page{% endblock %}">
+  <nav class="topbar">
+    {%- for path, name in [("/", "Conversation"), ("/profile", "Profile"),
+                           ("/persona", "Persona"), ("/memory", "Memory"),
+                           ("/agents", "Agents")] %}
+    <a class="btn topbtn{{ ' here' if here == path }}" href="{{ path }}">{{ name }}</a>
+    {%- endfor %}
+    <span class="saved" id="saved" aria-live="polite"></span>
+  </nav>
+
+  {% block content %}{% endblock %}
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

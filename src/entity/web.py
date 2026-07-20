@@ -1,23 +1,36 @@
 """The window, as a local web app - the same shape as Notecraft, which this is moving to join.
 
-The page lives in `templates/`, its look in `static/app.css`, its behaviour in `static/window.js`;
-this module is the routes between them and the conversation. Nothing here draws: it hands over
-entries that already know who said them, and takes back what was typed.
+The pages live in `templates/`, their look in `static/app.css`, their behaviour in the scripts
+beside it; this module is the routes between them and the conversation. Nothing here draws: it
+hands over entries that already know who said them, and takes back what was typed.
 
 Why a browser engine rather than Tk: half of what a message thread wants - a box that hugs its
 words, a hover that answers, a column beside the conversation - is a line of CSS and a fight with
 a text widget. The measuring that Tk needed is simply gone.
+
+There is no tab strip. What were tabs are pages with a bar above them: the conversation, the
+profile's four sections down one page, the persona, what has been learned, and the agents.
 """
+
+from pathlib import Path
 
 from flask import Flask, render_template, request
 
 from entity.bubbles import SIDES
-from entity.gui import sessions
+from entity.gui import TranscriptModel, sessions
+from entity.memory import profile_sections, save_learned, save_section
+from entity.tailing import LogTail, discover
 
 SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 
+# The profile's own categories, in its own numbering, minus the one the conversation itself is.
+# Each names only the stem of its heading, because a profile glosses its headings however it likes
+# ("Enhancements he wants for you (roadmap, not now)").
+SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
+            ("Goals", "Goals"), ("Projects", "Projects"))
 
-def _said(entry, label=""):
+
+def _said(entry, label="", speakers=SPEAKERS):
     """One entry as the page needs it: who said it, when, and whether it is a message at all.
 
     `label` is a session's name, which the break itself does not carry - it is worked out from
@@ -25,7 +38,7 @@ def _said(entry, label=""):
     the contents shows, so the two read as the same thing rather than as a rule and some dots."""
     return {
         "role": entry["role"],
-        "name": SPEAKERS.get(entry["role"], ""),
+        "name": speakers.get(entry["role"], ""),
         "stamp": entry["stamp"],
         "text": entry["text"],
         "label": label,
@@ -35,12 +48,101 @@ def _said(entry, label=""):
     }
 
 
-def create_app(model, *, on_submit, on_stop=None, on_mic=None, state=None):
+def _thread(entries, since, speakers=SPEAKERS):
+    """A stretch of conversation as the page draws it, from `since` on."""
+    found = sessions(entries)
+    # By position, never by value: every session break is the same dict as every other, so
+    # looking one up by equality sent all of them to the first one in the thread.
+    named = {at: label for label, at in found}
+    return {
+        "entries": [_said(entry, named.get(since + offset, ""), speakers)
+                    for offset, entry in enumerate(entries[since:])],
+        "at": since,
+        "total": len(entries),
+        "sessions": [{"label": label, "at": at} for label, at in found],
+    }
+
+
+class Mirror:
+    """What the pages show: the conversation, the mic's state, and what dictation has typed.
+
+    The Tk window drained the feed on a timer of its own. Here the page's poll is the timer, so
+    nothing is pumped while nothing is looking - and the ops arrive in the order they were sent,
+    because one place drains them."""
+
+    def __init__(self, feed, *, clock=None):
+        self.model = TranscriptModel(clock=clock) if clock else TranscriptModel()
+        self._feed = feed
+        self.state = "muted"  # the mic starts off; nothing is heard until it is turned on
+        self.level = 0.0
+        self._typed = []      # dictation's words, waiting for the page to put them in the box
+        self._send = False    # dictation said "over": the box is to be sent as it stands
+
+    def drain(self):
+        """Take everything the conversation and the dictation pump have said since last time."""
+        for op, payload in self._feed.drain():
+            if op == "state":
+                self.state = payload
+            elif op == "level":
+                self.level = payload
+            elif op == "draft":
+                self._typed.append(payload)
+            elif op == "submit":
+                self._send = True
+            else:
+                self.model.apply(op, payload)
+
+    def dictated(self):
+        """The words dictation has typed since the last poll, and whether to send the box.
+
+        Taken, not read: handed over twice they would be typed into the box twice."""
+        typed, self._typed = self._typed, []
+        send, self._send = self._send, False
+        return typed, send
+
+
+class Agents:
+    """Every agent's log, read back as the exchange it is rather than as lines.
+
+    An agent's thread is the same shape as the conversation, with the speakers swapped: the
+    Entity is the one asking, and the agent answers."""
+
+    def __init__(self, directory, clock):
+        self._directory = Path(directory) if directory else None
+        self._clock = clock
+        self._read = {}  # name -> (LogTail, TranscriptModel)
+
+    def names(self):
+        return sorted(discover(self._directory)) if self._directory else []
+
+    def entries(self, name):
+        if name not in self._read:
+            self._read[name] = (LogTail(self._directory / f"{name}.log"),
+                                TranscriptModel(clock=self._clock))
+        tail, model = self._read[name]
+        for line in tail.poll().splitlines():
+            model.apply("history", line)
+        return model.entries
+
+
+def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None, mirror=None,
+               profile_path=None, learned_path=None, persona="", agent_logs_dir=None,
+               clock=None):
+    """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
+    is a live session behind it - without one the model is whatever was put in it."""
     app = Flask(__name__)
+    profile_path = Path(profile_path) if profile_path else None
+    learned_path = Path(learned_path) if learned_path else None
+    agents = Agents(agent_logs_dir, clock)
+
+    def _profile_text():
+        if profile_path is None or not profile_path.exists():
+            return {}
+        return profile_sections(profile_path.read_text(encoding="utf-8"))
 
     @app.get("/")
     def window():
-        return render_template("window.html")
+        return render_template("window.html", here="/")
 
     @app.get("/messages")
     def messages():
@@ -49,19 +151,16 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, state=None):
         `since` is how much it already holds, so a poll four times a second carries a few bytes
         rather than every session ever recorded. The contents list is small and its numbering
         shifts as the conversation grows, so that goes whole each time."""
+        if mirror is not None:
+            mirror.drain()  # the page's poll is the pump; nothing runs while nothing is looking
         entries = model.entries
         since = min(request.args.get("since", 0, type=int), len(entries))
-        # By position, never by value: every session break is the same dict as every other, so
-        # looking one up by equality sent all of them to the first one in the thread.
-        found = sessions(entries)
-        named = {at: label for label, at in found}
-        return {
-            "entries": [_said(entry, named.get(since + offset, ""))
-                        for offset, entry in enumerate(entries[since:])],
-            "at": since,
-            "total": len(entries),
-            "sessions": [{"label": label, "at": at} for label, at in found],
-            "state": (state or (lambda: "muted"))(),
+        typed, send = mirror.dictated() if mirror is not None else ([], False)
+        return _thread(entries, since) | {
+            "state": mirror.state if mirror is not None else "muted",
+            "level": mirror.level if mirror is not None else 0.0,
+            "dictated": typed,
+            "send": send,
         }
 
     @app.post("/submit")
@@ -80,5 +179,64 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, state=None):
         if on_stop is not None:
             on_stop()
         return ("", 204)
+
+    @app.post("/auto-listen")
+    def auto_listen():
+        """Whether the mic re-arms itself after each reply, rather than being pressed each time."""
+        if on_auto_listen is not None:
+            on_auto_listen(request.form["on"] == "true")
+        return ("", 204)
+
+    # ---- the pages that were tabs -------------------------------------------------------------
+
+    @app.get("/profile")
+    def profile():
+        """The four sections, down one page. Matched by prefix, since a profile glosses its own
+        headings, and shown in the profile's order rather than ours where both agree."""
+        found = _profile_text()
+        sections = []
+        for title, stem in SECTIONS:
+            heading = next((head for head in found if head.lower().startswith(stem.lower())), None)
+            if heading is not None:
+                sections.append({"title": title, "heading": heading, "body": found[heading]})
+        return render_template("profile.html", here="/profile", sections=sections)
+
+    @app.post("/profile")
+    def write_profile():
+        """Save one section back, keeping what was there when the page was drawn - so a save can
+        tell an edit from a change the brain made underneath it."""
+        if profile_path is not None:
+            heading = request.form["heading"]
+            save_section(profile_path, heading, request.form["body"],
+                         keeping=_profile_text().get(heading, ""))
+        return ("", 204)
+
+    @app.get("/persona")
+    def show_persona():
+        return render_template("persona.html", here="/persona", persona=persona)
+
+    @app.get("/memory")
+    def memory():
+        learned = learned_path.read_text(encoding="utf-8") if (
+            learned_path is not None and learned_path.exists()) else ""
+        return render_template("memory.html", here="/memory", learned=learned)
+
+    @app.post("/memory")
+    def write_memory():
+        if learned_path is not None:
+            save_learned(request.form["body"], learned_path)
+        return ("", 204)
+
+    @app.get("/agents")
+    def show_agents():
+        return render_template("agents.html", here="/agents", names=agents.names())
+
+    @app.get("/agents/<name>")
+    def agent_thread(name):
+        if name not in agents.names():  # never read a path that did not come from the log folder
+            return ({"entries": [], "at": 0, "total": 0, "sessions": []}, 404)
+        # In an agent's thread the Entity is the one asking and the agent answers.
+        return _thread(agents.entries(name), request.args.get("since", 0, type=int),
+                       {"you": "Entity", "entity": name, "heads-up": "Entity · heads-up"})
 
     return app

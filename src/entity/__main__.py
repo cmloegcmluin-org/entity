@@ -399,10 +399,11 @@ def main(argv=None):
     import anyio
 
     from entity.chord import ChordListener, SubmitChord, foreground_is_ours
-    from entity.gui import EntityWindow
+    from entity.desktop import open_window
     from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_PROFILE_PATH
     from entity.no_console import silence_child_consoles
     from entity.transcript import past_lines
+    from entity.web import Mirror, create_app
 
     # With no console of its own to lend them, Windows gives each console child a new window: the
     # Claude CLI the brain runs was turning up as a second window on their desktop.
@@ -411,30 +412,37 @@ def main(argv=None):
     for line in past_lines(TRANSCRIPTS, current=None):
         feed.push("history", line)  # yesterday's sessions, above the divider - no more amnesia
     feed.push("line", "───────  this session  ───────")
-    window = EntityWindow(
-        feed, on_stop=barge_in.set, on_close=stop.set,
-        profile_path=DEFAULT_PROFILE_PATH, agent_logs_dir=AGENT_LOGS, persona=_persona(),
-        learned_path=DEFAULT_LEARNED_PATH,
-        icon=Path(__file__).resolve().parents[2] / "assets" / "entity.ico",
-        # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
-        # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
-        chord=ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
-                                        focused=foreground_is_ours)),
+
+    mirror = Mirror(feed)
+    # The window is up before the model has loaded, so the mic does not exist yet; whatever is
+    # pressed in that gap is dropped rather than raising at a page that cannot know.
+    mic = {}
+
+    app = create_app(
+        mirror.model, mirror=mirror,
+        on_submit=lambda text: mic.get("submit", lambda _: None)(text),
+        on_stop=barge_in.set,
+        on_mic=lambda recording: mic.get("set_recording", lambda _: None)(recording),
+        on_auto_listen=lambda on: mic.get("set_auto_listen", lambda _: None)(on),
+        profile_path=DEFAULT_PROFILE_PATH, learned_path=DEFAULT_LEARNED_PATH,
+        persona=_persona(), agent_logs_dir=AGENT_LOGS,
     )
-    done = threading.Event()
+    # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
+    # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
+    ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
+                              focused=foreground_is_ours)).start()
 
     def worker():
         try:
-            _session(attach=lambda d: window.attach_mic(submit=d.submit,
-                                                        set_recording=d.set_recording,
-                                                        set_auto_listen=d.set_auto_listen),
-                     **running)
+            _session(attach=lambda d: mic.update(submit=d.submit,
+                                                 set_recording=d.set_recording,
+                                                 set_auto_listen=d.set_auto_listen), **running)
         finally:
-            done.set()
+            stop.set()
 
-    window.close_when(done)
     threading.Thread(target=worker, daemon=True).start()
-    window.run()
+    open_window(app, icon=str(Path(__file__).resolve().parents[2] / "assets" / "entity.ico"))
+    stop.set()  # the window was closed: ask the loop to wind down, as closing the Tk one did
 
 
 if __name__ == "__main__":

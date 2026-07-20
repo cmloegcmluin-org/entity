@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %} · Agents{% endblock %}
+
+{% block content %}
+{#- One home for the agents, however many are being driven at once. Each exchange reads the way
+    the conversation does - who asked, who answered, and when - rather than as a wall of log
+    lines. In an agent's thread the Entity is the one asking and the agent answers. -#}
+<main id="content" class="reading">
+  {% for name in names %}
+  <section class="section">
+    <h2>{{ name }}</h2>
+    <div class="agent thread" data-agent="{{ name }}"></div>
+  </section>
+  {% else %}
+  <p class="empty">No agent is running. When Entity starts one, its work appears here.</p>
+  {% endfor %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='thread.js') }}"></script>
+  <script src="{{ url_for('static', filename='agents.js') }}"></script>
+{% endblock %}

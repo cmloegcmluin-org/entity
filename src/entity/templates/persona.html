@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %} · Persona{% endblock %}
+
+{% block content %}
+{#- Everything Entity has been told about how to be, in the words it actually reads. Read-only:
+    this is assembled at startup out of the profile and what it has learned, not typed here. -#}
+<main id="content" class="reading">
+  <section class="section tall">
+    <h2>What Entity has been told</h2>
+    <pre class="persona">{{ persona }}</pre>
+  </section>
+</main>
+{% endblock %}

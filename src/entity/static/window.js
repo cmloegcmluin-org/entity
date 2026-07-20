@@ -1,8 +1,5 @@
-/* The window's behaviour: draw the conversation, follow the pointer with the copy button, and
-   send what was typed.
-
-   The server hands over entries that already know who said them and which side they belong on,
-   so nothing here parses a transcript line. */
+/* The conversation page: draw the thread, follow the pointer with the copy button, and send what
+   was said. The drawing itself is thread.js, which the agents' page uses too. */
 
 const thread = document.getElementById("thread");
 const contents = document.getElementById("contents");
@@ -14,51 +11,7 @@ const level = document.getElementById("level");
 let drawn = 0;          // how many entries are already on the page
 let offers = null;      // what the copy button would copy, and the element it belongs to
 
-/* ---- drawing ------------------------------------------------------------------------------ */
-
-function element(entry) {
-  // A break is a full-width row so it can be hovered anywhere along it, holding an inner mark
-  // that is only as wide as what is drawn - which is what the copy button has to sit beside.
-  if (entry.role === "day" || entry.role === "session") {
-    const row = document.createElement("div");
-    row.className = entry.role;
-    const mark = document.createElement("span");
-    mark.className = "mark";
-    mark.append(entry.role === "day" ? entry.stamp : entry.label);
-    row.append(mark);
-    return row;
-  }
-  if (!entry.bubble) {
-    const aside = document.createElement("div");
-    aside.className = "aside";
-    aside.append(entry.text);
-    return aside;
-  }
-  const said = document.createElement("div");
-  said.className = `said ${entry.side}${entry.historical ? " historical" : ""}`;
-  const who = document.createElement("div");
-  who.className = "who";
-  who.append(`${entry.name} · ${entry.stamp}`);
-  const box = document.createElement("div");
-  box.className = "box";
-  box.append(entry.text);
-  said.append(who, box);
-  return said;
-}
-
-function draw(fresh, at) {
-  // Nothing new means nothing to do. Following the live end on an EMPTY poll re-pinned the
-  // thread to the bottom four times a second, which quietly cancelled every scroll the contents
-  // started - the jump happened and was undone before it could be seen.
-  if (!fresh.length) return;
-  const atEnd = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
-  fresh.forEach((entry, index) => {
-    const node = element(entry);
-    node.dataset.at = at + index;
-    thread.append(node);
-  });
-  if (atEnd) thread.scrollTop = thread.scrollHeight;
-}
+/* ---- the contents ------------------------------------------------------------------------- */
 
 function listSessions(found) {
   if (contents.childElementCount === found.length) return;
@@ -74,7 +27,7 @@ function listSessions(found) {
       // smooth scroll across that either takes seconds of blur or - as it did here - is dropped
       // on the floor, leaving the click looking like it did nothing at all.
       thread.scrollTop = target.offsetTop - 16;
-      // Landing on a dim rule at the top edge is indistinguishable from not having moved, so the
+      // Landing on a break at the top edge is indistinguishable from not having moved, so the
       // destination says it is the destination for a moment.
       for (const was of thread.querySelectorAll(".landed")) was.classList.remove("landed");
       void target.offsetWidth;  // restarts the animation when the same session is clicked twice
@@ -88,19 +41,6 @@ function listSessions(found) {
 
 /* ---- the copy button ---------------------------------------------------------------------- */
 
-/* What copying this element means: a message is its own words; a break is the whole session it
-   heads, up to the next break. */
-function whatToCopy(node, entries) {
-  const at = Number(node.dataset.at);
-  if (entries[at].bubble) return entries[at].text;
-  const said = [];
-  for (const entry of entries.slice(at + 1)) {
-    if (entry.role === "session" || entry.role === "day") break;
-    said.push(entry.bubble ? `${entry.name} · ${entry.stamp}\n${entry.text}` : entry.text);
-  }
-  return said.join("\n");
-}
-
 function offer(node, entries) {
   offers = { node, text: whatToCopy(node, entries) };
   copier.hidden = false;
@@ -108,8 +48,8 @@ function offer(node, entries) {
   copier.classList.add("showing");
   // Beside what is drawn: a message's box, or a break's mark - never the full-width row a
   // break sits in, which would put the button out at the far edge of an empty stretch.
-  // Placed against the THREAD, since that is what it now hangs inside: viewport coordinates
-  // would leave it behind the moment the thread scrolled under it.
+  // Placed against the THREAD, since that is what it hangs inside: viewport coordinates would
+  // leave it behind the moment the thread scrolled under it.
   const drawnPart = node.querySelector(".box, .mark") || node;
   const spot = drawnPart.getBoundingClientRect();
   const within = thread.getBoundingClientRect();
@@ -119,10 +59,6 @@ function offer(node, entries) {
   copier.style.left = node.classList.contains("right")
     ? `${left - copier.offsetWidth - 8}px`
     : `${left + spot.width + 8}px`;
-}
-
-function withdraw() {
-  copier.classList.remove("showing");
 }
 
 copier.addEventListener("click", async () => {
@@ -137,7 +73,7 @@ thread.addEventListener("mouseover", (event) => {
   const node = event.target.closest(".said, .day, .session");
   if (node && node.dataset.at !== undefined) offer(node, latest);
 });
-thread.addEventListener("mouseleave", withdraw);
+thread.addEventListener("mouseleave", () => copier.classList.remove("showing"));
 
 /* ---- talking ------------------------------------------------------------------------------ */
 
@@ -149,6 +85,15 @@ function send() {
   const text = draft.value.trim();
   draft.value = "";
   if (text) post("/submit", { text });
+}
+
+/* Dictation types into the same box that is typed into by hand, joined readably. */
+function dictate(chunks) {
+  for (const chunk of chunks) {
+    const so_far = draft.value;
+    draft.value = so_far && !/[ \n]$/.test(so_far) ? `${so_far} ${chunk}` : so_far + chunk;
+  }
+  if (chunks.length) draft.scrollTop = draft.scrollHeight;
 }
 
 document.getElementById("send").onclick = send;
@@ -163,10 +108,17 @@ mic.onclick = () => {
   post("/mic", { recording: !mic.classList.contains("recording") });
 };
 
-function showState(state) {
+const auto = document.getElementById("auto");
+auto.onchange = () => post("/auto-listen", { on: auto.checked });
+
+const LEVEL_FULL = 0.06;  // the meter tops out around loud speech, so ordinary talk moves it
+
+function showState(state, loudness) {
   mic.className = `btn ${state === "muted" ? "" : state}`;
   mic.textContent = { recording: "● listening", muted: "○ mic off", speaking: "◼ stop" }[state];
-  if (state !== "recording") level.style.width = "0";
+  level.style.width = state === "recording"
+    ? `${Math.min(1, loudness / LEVEL_FULL) * 100}%`
+    : "0";
 }
 
 /* ---- the poll ------------------------------------------------------------------------------ */
@@ -181,10 +133,12 @@ async function refresh() {
   try {
     const shown = await (await fetch(`/messages?since=${drawn}`)).json();
     latest.push(...shown.entries);
-    draw(shown.entries, shown.at);
+    drawInto(thread, shown.entries, shown.at);
     drawn = shown.total;
     listSessions(shown.sessions);
-    showState(shown.state);
+    showState(shown.state, shown.level);
+    dictate(shown.dictated || []);
+    if (shown.send) send();   // dictation said "over"
   } finally {
     polling = false;
   }

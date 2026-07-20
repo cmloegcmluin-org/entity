@@ -908,7 +908,12 @@ class EntityWindow:
         return self._thread.hover_gap(index)
 
     def hover_copies(self, index):
-        """What pressing the copy button a hovered bubble offers puts on the clipboard."""
+        """What pressing the copy button a hovered bubble offers puts on the clipboard.
+
+        Emptied first, for the same reason `copy_from_bubble` empties it: the clipboard is the
+        machine's, not this window's, so whatever was last copied anywhere on it would otherwise
+        be read back as though this button had produced it."""
+        self._tk.clipboard_clear()
         return self._thread.hover_copies(index)
 
     def copy_from_bubble(self, index, start, end):

@@ -1,41 +1,46 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entity</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
+{% block shape %}conversation{% endblock %}
+
+{% block content %}
   {#- Four quadrants, unequally sized: the contents and the conversation across the top, and
       under each of them the thing that belongs there - the controls under the contents, the box
       to say something in under the conversation it will join. -#}
   <aside id="contents" aria-label="Sessions"></aside>
 
   <main id="thread" aria-live="polite">
-    {#- The one control that follows the pointer: it is only ever wanted in one place at a time,
-        and one per message would be a button built for every line of every session ever. It
-        lives INSIDE the thread, because a button sitting over the thread but parented outside it
-        means the pointer reaching for it leaves the thread - and the button flees the mouse. -#}
+    {#- Two icons of the same size, one shown at a time: saying "Copied" in words made the button
+        grow in both directions, and it grew over the message it belonged to. It lives INSIDE the
+        thread, because a button sitting over the thread but parented outside it means the pointer
+        reaching for it leaves the thread - and the button flees the mouse. -#}
     <button type="button" id="copy" class="copy" hidden aria-label="Copy">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
-      <span class="copied">Copied</span>
+      <svg class="mark-copy" viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
+      <svg class="mark-done" viewBox="0 0 16 16" aria-hidden="true"><use href="#done-icon"></use></svg>
     </button>
   </main>
 
   <div class="column">
     <button type="button" id="mic" class="btn">○ mic off</button>
     <div id="meter"><div id="level"></div></div>
+    <label class="switch"><input type="checkbox" id="auto"> auto-listen</label>
     <button type="button" id="send" class="btn send">Submit</button>
   </div>
 
   <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>
-  <svg hidden><symbol id="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-       stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
-    <path d="M10.5 2.5h-8v8"></path>
-  </symbol></svg>
 
+  <svg hidden>
+    <symbol id="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
+      <path d="M10.5 2.5h-8v8"></path>
+    </symbol>
+    <symbol id="done-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 8.5l3.5 3.5L13 4.5"></path>
+    </symbol>
+  </svg>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='thread.js') }}"></script>
   <script src="{{ url_for('static', filename='window.js') }}"></script>
-</body>
-</html>
+{% endblock %}

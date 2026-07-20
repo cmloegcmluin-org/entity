@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %} · Profile{% endblock %}
+
+{% block content %}
+{#- The four sections that were four tabs. They are the same kind of thing - a list under a
+    heading - so they read down one page instead of hiding each other. Edited in place and saved
+    when typing stops: a document you have to remember to save is one you lose. -#}
+<main id="content" class="reading">
+  {% for section in sections %}
+  <section class="section">
+    <h2>{{ section.title }}</h2>
+    <textarea class="writing" data-heading="{{ section.heading }}"
+              aria-label="{{ section.title }}">{{ section.body }}</textarea>
+  </section>
+  {% else %}
+  <p class="empty">No profile is loaded, so there is nothing here to edit.</p>
+  {% endfor %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='writing.js') }}"></script>
+{% endblock %}

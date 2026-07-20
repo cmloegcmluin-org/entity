@@ -28,23 +28,64 @@
    otherwise take a cell of the grid and push the box to say something in out of its quadrant. */
 [hidden] { display: none !important; }
 
-/* Four quadrants, unequally sized: a narrow left column and a tall top row.
-     top-left  the contents      top-right  the conversation
-     bottom-left the controls    bottom-right the box to say something in */
 body {
   margin: 0;
-  height: 100vh;
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  grid-template-rows: 1fr auto;
-  gap: 10px;
-  padding: 10px;
+  min-height: 100vh;
   background: var(--bg);
   color: var(--fg);
   font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.45;
 }
+
+/* The conversation is four quadrants, unequally sized, under the bar:
+     top-left  the contents      top-right  the conversation
+     bottom-left the controls    bottom-right the box to say something in */
+body.conversation {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  padding: 10px;
+}
+body.conversation .topbar { grid-column: 1 / -1; }
+
+/* Every other page is a bar and a column of things to read or write. */
+body.page { padding: 10px; }
+
+/* ---- the bar that replaced the tabs -------------------------------------------------------- */
+
+.topbar { display: flex; align-items: center; gap: 8px; }
+.topbtn { font-size: .85rem; padding: 5px 12px; text-decoration: none; }
+.topbtn.here { color: var(--accent); border-color: rgba(127, 255, 0, .45); }
+/* A save nobody can see is a save nobody trusts. */
+.saved { margin-left: auto; font-size: .78rem; color: var(--accent); opacity: 0; transition: opacity .2s; }
+.saved.showing { opacity: 1; }
+
+/* ---- the pages that were tabs -------------------------------------------------------------- */
+
+.reading { max-width: 920px; margin: 12px auto 0; display: flex; flex-direction: column; gap: 16px; }
+.section { background: var(--panel); border-radius: 10px; padding: 12px 14px; }
+.section h2 { margin: 0 0 8px; font-size: .82rem; font-weight: 600; color: var(--dim);
+              letter-spacing: .06em; text-transform: uppercase; }
+.writing {
+  width: 100%;
+  min-height: 120px;
+  font: inherit;
+  resize: vertical;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.writing:focus { outline: none; border-color: var(--line); }
+.section.tall .writing, .persona { min-height: 60vh; }
+.persona { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere;
+           font: inherit; color: var(--past); }
+.empty { color: var(--dim); text-align: center; padding: 40px 0; }
+.agent.thread { height: 340px; }
 
 /* ---- the contents, above the controls ----------------------------------------------------- */
 
@@ -72,7 +113,7 @@ body {
 
 /* ---- the conversation --------------------------------------------------------------------- */
 
-#thread {
+#thread, .agent.thread {
   position: relative;   /* so a session's offsetTop is measured against the thread, for the contents */
   overflow-y: auto;
   background: var(--panel);
@@ -117,9 +158,10 @@ body {
 .day .mark::before, .day .mark::after { content: ""; height: 1px; width: 84px; background: var(--line); }
 
 /* A session says exactly what its row in the contents says, so the two are recognisably the same
-   thing, and says it larger with room around it - three dots named nothing and read as noise. */
+   thing. Prominence comes from size and room around it, not from colour - it stays the same grey
+   every other mark in the thread is. */
 .session { padding: 26px 0 14px; }
-.session .mark { font-size: 1.02rem; color: var(--fg); letter-spacing: .04em; }
+.session .mark { font-size: 1.02rem; letter-spacing: .04em; }
 .session .mark::before, .session .mark::after {
   content: ""; height: 1px; width: 56px; background: var(--line);
 }
@@ -128,49 +170,52 @@ body {
    that is the line that reads as a session's heading. */
 .day, .session, .said { position: relative; }
 
-/* Where the contents just sent us. A dim rule arriving at the top edge is indistinguishable
-   from not having moved at all, so the destination says it is the destination for a moment. */
+/* Where the contents just sent us. A break arriving at the top edge is indistinguishable from
+   not having moved at all, so the destination says so for a moment - and only for a moment: the
+   whole highlight is one animation that ends at nothing, leaving no mark left glowing behind. */
 @keyframes landing {
   from { background: rgba(127, 255, 0, .16); }
   to   { background: transparent; }
 }
 .landed { animation: landing 1.6s ease-out; border-radius: 8px; }
-.landed .mark { color: var(--accent); transition: color 1.6s ease-out; }
-.landed .mark::before, .landed .mark::after { background: var(--accent); }
 
 /* ---- the copy button ---------------------------------------------------------------------- */
 
+/* One fixed square, whatever it is saying. Answering a press with the word "Copied" made it grow
+   in both directions, and what it grew over was the message it had just copied. */
 .copy {
   position: absolute;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font: inherit;
-  font-size: .72rem;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
   color: var(--dim);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 3px 7px;
   cursor: pointer;
   opacity: 0;
   transition: opacity .12s, color .12s, border-color .12s;
 }
-.copy[hidden] { display: none; }
 .copy.showing { opacity: 1; }
 /* It answers the pointer, and it answers the press. Neither did anything in the Tk build:
    the button sat there at one brightness whether it had been hovered, clicked, or ignored. */
 .copy:hover { color: var(--accent); border-color: var(--accent); }
 .copy:active { background: rgba(127, 255, 0, .12); }
 .copy svg { width: 13px; height: 13px; display: block; }
-.copied { display: none; }
+.mark-done { display: none; }
 .copy.done { color: var(--accent); border-color: var(--accent); }
-.copy.done svg { display: none; }
-.copy.done .copied { display: inline; }
+.copy.done .mark-copy { display: none; }
+.copy.done .mark-done { display: block; }
 
 /* ---- talking ------------------------------------------------------------------------------ */
 
 .column { display: flex; flex-direction: column; gap: 6px; }
+.switch { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--dim);
+          cursor: pointer; }
+.switch input { accent-color: var(--accent); margin: 0; }
 
 .btn {
   font: inherit;

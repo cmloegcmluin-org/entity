@@ -183,6 +183,7 @@ class MicSTT:
         self._flush_mic()
         segments = []  # transcribed text so far, one entry per pause-delimited chunk
         segment = []  # frames captured since the last pause - only this chunk gets transcribed
+        voiced = []  # the per-frame speech verdicts for this chunk, to tell a word from a tap
         silence_run = 0
         started = False
         for frame in self._mic.frames():
@@ -199,23 +200,29 @@ class MicSTT:
                 else:
                     continue
             segment.append(frame)
+            voiced.append(speech)
             silence_run = 0 if speech else silence_run + 1
             if silence_run == self._pause_frames:  # you paused - did you say "over"?
-                done = self._absorb(segments, segment)
-                segment = []  # this chunk is now text; the next one starts fresh
+                done = self._absorb(segments, segment, voiced)
+                segment, voiced = [], []  # this chunk is now text; the next one starts fresh
                 if done is not None:
                     return done
         if segment:  # a finite source ran out mid-chunk (a real mic never does)
-            done = self._absorb(segments, segment)
+            done = self._absorb(segments, segment, voiced)
             if done is not None:
                 return done
         return " ".join(segments).strip()
 
-    def _absorb(self, segments, chunk):
+    def _absorb(self, segments, chunk, voiced):
         """Transcribe one pause-delimited chunk, append it to the running transcript, and return
         the finished turn if the transcript now ends with the terminator - else None to keep
         listening. Only this chunk is transcribed, never the whole turn, so the work per pause
-        stays flat however long the turn runs."""
+        stays flat however long the turn runs.
+
+        A chunk with no sustained sound in it holds no word (see carries_speech), so it isn't
+        transcribed at all - the model would answer it with something invented."""
+        if not carries_speech(voiced):
+            return None
         text = self._transcriber.transcribe(np.concatenate(chunk)).strip()
         if text and not _is_backchannel(text, self._terminator):
             segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence

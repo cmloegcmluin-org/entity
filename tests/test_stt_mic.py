@@ -74,6 +74,17 @@ def test_pure_backchannel_noise_is_dropped_from_the_turn():
     assert stt.listen() == "hello there"  # the hallucinated chunk was dropped, only real speech kept
 
 
+def test_a_burst_with_no_sustained_sound_never_reaches_the_transcriber():
+    # A tap clears the speech bar and then the burst waits out a whole pause, so the model is handed
+    # near silence and invents a word for it. Nothing spoken is that brief - don't even ask.
+    mic = FakeMic([_sil()] * 2 + [_sp()] + [_sil()] * 3 + [_sp()] * 4 + [_sil()] * 3)
+    transcriber = FakeTranscriber("hello there over")
+    stt = MicSTT(transcriber, mic, pause_frames=3, threshold=0.01)
+
+    assert stt.listen() == "hello there"
+    assert len(transcriber.got) == 7 * FRAME  # the real burst - not the 4-frame tap ahead of it
+
+
 def test_a_bare_over_ends_an_empty_turn_but_is_flagged_as_terminated():
     # they said only "over" - the transcript strips to nothing, but the terminator WAS caught, so the
     # caller can tell this apart from a lull and still let them know it registered.
@@ -432,8 +443,8 @@ def test_every_captured_frame_is_recorded_to_disk():
         def write(self, frame):
             written.append(frame)
 
-    mic = FakeMic([_sp()] * 3 + [_sil()] * 3)
+    mic = FakeMic([_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, threshold=0.01, recorder=Rec())
 
     assert stt.listen() == "hi"
-    assert len(written) == 6  # every frame read went to the recorder, before anything else
+    assert len(written) == 7  # every frame read went to the recorder, before anything else

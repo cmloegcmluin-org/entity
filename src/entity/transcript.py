@@ -49,8 +49,8 @@ def past_lines(directory, *, current):
     it changes, and a session mark goes between files - one says which day, the other says a new
     conversation began.
 
-    Unbounded on purpose: the whole archive is a few hundred kilobytes of text, and the window
-    holds it rather than building it - see `bubbles.hold_back`.
+    Unbounded on purpose: the whole archive is a few hundred kilobytes of text, and the page draws
+    only the part of it that is scrolled to.
     The filenames sort chronologically, so sorting them is sorting the history."""
     directory = Path(directory)
     if not directory.is_dir():

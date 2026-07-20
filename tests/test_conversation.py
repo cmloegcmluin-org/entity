@@ -92,6 +92,23 @@ def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
     assert events.index(printed) < events.index("say:reply to hi")  # they can read it before/while it speaks
 
 
+def test_a_path_is_shown_whole_and_spoken_the_way_a_person_would_say_it():
+    # He wants the real path on screen - it is what he clicks - and he does not want a minute of
+    # "see colon backslash users backslash" out of the speaker. The two are not the same words.
+    class PathBrain:
+        def respond(self, utterance):
+            return r"It's in C:\Users\ada\workspace\entity\runtime\profile.md."
+
+    tts, shown = FakeTTS(), []
+    convo = Conversation(FakeSTT(["where"]), PathBrain(), tts, acknowledgement="ACK",
+                         console=Console(echo=shown.append))
+
+    convo.turn()
+
+    assert any(r"C:\Users\ada\workspace\entity\runtime\profile.md" in line for line in shown)
+    assert tts.spoken == ["ACK", "It's in profile.md."]
+
+
 def test_timings_prints_a_think_and_speak_readout_when_enabled():
     lines = []
     convo = Conversation(

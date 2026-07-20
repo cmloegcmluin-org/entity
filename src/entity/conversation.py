@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 
 from entity.console import Console
+from entity.links import as_spoken
 from entity.phrases import canonical as _canonical
 from entity.phrases import ends_with_command as _ends_with_command
 from entity.phrases import wakes as _wakes
@@ -350,7 +351,10 @@ class Conversation:
             self._console.spoke(text)
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
-            self._tts.speak(text, interrupt=self._interrupt)
+            # Said, not written: an address becomes "the link" and a path becomes its filename. The
+            # line above already showed the real thing, which is what he reads and clicks - this is
+            # only the difference between what is on the screen and what a person would say aloud.
+            self._tts.speak(as_spoken(text), interrupt=self._interrupt)
         except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
             self._console.spoke(f"(voice failed: {exc!r})")
         else:

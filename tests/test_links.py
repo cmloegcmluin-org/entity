@@ -1,4 +1,4 @@
-from entity.links import link_in, open_link
+from entity.links import as_spoken, link_in, open_link
 
 
 def test_a_web_address_and_a_path_on_this_machine_are_both_openable():
@@ -14,6 +14,21 @@ def test_the_sentence_keeps_its_own_punctuation():
     assert link_in(r"C:\ada\notes.md.") == r"C:\ada\notes.md"
     assert link_in("(https://example.com/a)") == "https://example.com/a"
     assert link_in("https://example.com/a,") == "https://example.com/a"
+
+
+def test_a_web_address_is_not_read_out_aloud():
+    # Nobody says "aitch tee tee pee colon slash slash" - they say "the link" and expect the thing
+    # itself to be on the screen, which it is: only what is SPOKEN is stood in for.
+    assert as_spoken("It's at https://example.com/a/b?c=d if you want it.") == \
+        "It's at the link if you want it."
+
+
+def test_a_path_is_said_the_way_a_person_says_it_and_the_sentence_keeps_its_punctuation():
+    # The last part is what anyone would actually say - "it's in profile.md" - and it still tells
+    # him WHICH file, which "that file" would not. The full stop after it is the sentence's.
+    assert as_spoken(r"I put it in C:\Users\ada\workspace\entity\runtime\profile.md.") == \
+        "I put it in profile.md."
+    assert as_spoken(r"Look in (C:\Users\ada\workspace\entity) for it.") == "Look in (entity) for it."
 
 
 def test_an_address_goes_to_the_browser_and_a_file_to_the_machine(tmp_path):

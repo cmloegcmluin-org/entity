@@ -1,17 +1,22 @@
-"""What a message names that can be opened: a web address, or a path on this machine.
+"""What a message names that can be opened: a web address, or a path on this machine - what counts
+as one, what opens it, and how it is said aloud.
 
 He is not technical outside code, so the useful behaviour is not that a path is coloured - it is
 that it OPENS. Entity writes real Windows paths into the conversation constantly, and reading one
 off the screen to type somewhere else is exactly the friction the window exists to remove.
 
-What counts as one is decided here, purely, so it is settled without a display; `bubbles.py` only
-paints what this finds.
+Spoken is the other half of the same question, and the same answer serves both: a thing worth
+turning into a link is a thing nobody reads out. What is written stays whole on the page, and
+`as_spoken` is what the voice gets instead.
+
+All of it is decided here, purely, so it is settled without a display; the page only paints what
+this finds.
 """
 
 import os
 import re
 import webbrowser
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # A drive-letter path, a UNC share, or an http(s) address. Nothing looser: a bare `src/entity` is
 # indistinguishable from "and/or" or "he/she", and a wrong thing offered as openable is worse than
@@ -30,6 +35,39 @@ def link_in(word):
     not offered rather than offered wrong."""
     target = word.strip().lstrip(_LEADING).rstrip(_TRAILING)
     return target if _LINK.fullmatch(target) else None
+
+
+# What a person says instead of reading an address out. A stand-in rather than nothing: dropping
+# it would leave a sentence that no longer says there IS anything to open, and he has already
+# objected to hearing less than what was written.
+SPOKEN_ADDRESS = "the link"
+
+
+def as_spoken(text):
+    """`text` as it should be SAID - the written form stays on screen untouched.
+
+    Nobody reads an address out character by character, and a Windows path read aloud is a minute
+    of "backslash". What is on screen is still the real thing, so it can be read and clicked."""
+    return " ".join(_said_aloud(word) for word in text.split())
+
+
+def _said_aloud(word):
+    """One word, with the sentence's own punctuation left around whatever stands in for it."""
+    core = word.lstrip(_LEADING)
+    lead = word[:len(word) - len(core)]
+    kept = len(core.rstrip(_TRAILING))
+    core, trail = core[:kept], core[kept:]
+    if link_in(core) is None:
+        return word
+    return lead + _stand_in(core) + trail
+
+
+def _stand_in(target):
+    """An address is "the link"; a path is its last part, which is the part a person would say -
+    "it's in profile.md", never the eight folders above it."""
+    if target.startswith(("http://", "https://")):
+        return SPOKEN_ADDRESS
+    return PureWindowsPath(target).name or SPOKEN_ADDRESS
 
 
 def _on_this_machine(where):

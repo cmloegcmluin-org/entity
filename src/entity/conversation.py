@@ -81,9 +81,11 @@ _AFFIRMATIVES = (
 _NEGATIVES = ("no", "nope", "nah", "not", "dont", "later", "wait", "hold", "stop", "skip")
 
 # Spoken the instant a turn is heard, before the brain even starts - so the user never talks into
-# dead air waiting to find out they were heard. One plain line they asked for by name (the varied ones
-# came out as awkward TTS - "Mm-hm." read aloud as "m m").
-DEFAULT_ACK = "Message received."
+# dead air waiting to find out they were heard. One plain line they asked for by name (the varied
+# ones came out as awkward TTS - "Mm-hm." read aloud as "m m"). This is their word too: they
+# counted the stock phrases they were getting per turn, called the variety and the length of them a
+# waste of their time, and said a single minimal "Got it." was all that should have been necessary.
+DEFAULT_ACK = "Got it."
 
 # Waiting is answered ONCE, by handing the question to the background (see DEFAULT_DETACH_AFTER) -
 # not by a stream of "still working" updates, which they found annoying rather than reassuring. These

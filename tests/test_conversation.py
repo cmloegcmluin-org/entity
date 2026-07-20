@@ -837,7 +837,9 @@ def test_the_default_acknowledgement_is_the_plain_line_he_asked_for():
 
     convo.turn()
 
-    assert tts.spoken[0] == "Message received."  # not "Mm-hm." et al, which read aloud as "m m"
+    # His own word for it, after counting the stock phrases he was getting per turn and calling
+    # them a waste of his time. Not "Mm-hm." et al either, which read aloud as "m m".
+    assert tts.spoken[0] == "Got it."
 
 
 def test_a_slow_reply_checks_in_so_it_does_not_read_as_a_crash():

@@ -30,8 +30,10 @@ class FakeTranscriber:
 
     def __init__(self, *texts):
         self._texts = list(texts)
+        self.calls = 0
 
     def transcribe(self, audio):
+        self.calls += 1
         return self._texts.pop(0) if self._texts else ""
 
 
@@ -121,6 +123,22 @@ def test_the_level_meter_sees_the_mic_only_while_recording():
     Dictation(FakeTranscriber(""), FakeMic([_sp(0.04)]), pause_frames=3, **ears2.kwargs()).pump()
 
     assert ears2.levels and ears2.levels[0] > 0.01  # recording: the real level
+
+
+def test_a_burst_with_no_sustained_sound_is_never_even_transcribed():
+    # Replayed from his own session audio: a single tap or creak clears the speech bar, the burst
+    # then has to wait out a whole pause before it ends, and Parakeet - handed a second of near
+    # silence - answers with the likeliest thing anyone ever says ("Thank you.", "Okay."). Some 90
+    # times in 20 minutes. Nothing a person says is that brief, so the burst never goes to the model.
+    ears = Ears()
+    transcriber = FakeTranscriber("Thank you.")
+    dictation = Dictation(transcriber, FakeMic([_sil()] * 2 + [_sp()] + [_sil()] * 4),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == []
+    assert transcriber.calls == 0  # not transcribed-then-dropped: never asked in the first place
 
 
 def test_hallucinated_backchannel_chunks_stay_out_of_the_draft():

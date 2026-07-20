@@ -24,6 +24,7 @@ import numpy as np
 
 FRAME = 480  # 30 ms at 16 kHz
 PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
+MIN_VOICED_RUN = 4  # 120 ms - shorter than any syllable, so a burst under it holds no word
 SPEECH_RATIO = 2.5  # this many times the room's quiet level counts as speech
 FLOOR_MIN = 0.0008  # the floor never drops below this, so digital silence can't set an absurd bar
 FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
@@ -59,6 +60,29 @@ def _is_stop_bark(text, words):
         return False
     canonical = " ".join(said)
     return any(re.search(rf"\b{word}\b", canonical) for word in words)
+
+
+def carries_speech(voiced, min_run=MIN_VOICED_RUN):
+    """Did this burst hold one UNBROKEN stretch of sound long enough to be a syllable?
+
+    `voiced` is the per-frame speech/not-speech verdict for one burst. The energy gate only decides
+    where a burst starts and ends; it says nothing about whether a word is inside it. A single tap,
+    creak or breath clears the bar, and the burst then has to wait out a whole pause before it can
+    end - so the model gets a second of near silence and, rather than nothing, returns the likeliest
+    thing anyone ever says. Replaying his own sessions, that was some 90 chunks per 20 minutes, all
+    of them invented: "Okay.", "Yeah.", "Thank you."
+
+    Continuity is what separates the two, not loudness: speech carries syllables, ~150 ms of sound
+    that does not let up, while noise hovering near the bar sputters - isolated frames scattered
+    through silence. Across two replayed sessions nothing actually spoken (his voice, the Entity's
+    own through the room) ran under 6 frames, and the invented chunks sat at 1-4.
+    """
+    run = 0
+    for speech in voiced:
+        run = run + 1 if speech else 0
+        if run >= min_run:
+            return True
+    return False
 
 
 def _is_backchannel(text, terminator):

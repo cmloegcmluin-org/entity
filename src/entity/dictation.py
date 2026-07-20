@@ -36,6 +36,7 @@ from entity.stt_mic import (
     _is_backchannel,
     _is_stop_bark,
     _strip_terminator,
+    carries_speech,
     rms,
 )
 
@@ -168,6 +169,7 @@ class Dictation:
         its own thread against a real mic; tests run it inline against a finite one."""
         floor = NoiseFloor()
         chunk = []
+        voiced = []  # the per-frame speech verdicts for this burst, to tell a word from a tap
         silence = 0
         started = False
         for frame in self._mic.frames():
@@ -183,17 +185,24 @@ class Dictation:
                     continue
                 started = True
             chunk.append(frame)
+            voiced.append(speech)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over
             if ended or self._finish_burst:  # ...or they muted while still mid-sentence
-                self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
-                self._finish_burst = False
-                chunk, silence, started = [], 0, False
+                self._end_burst(chunk, voiced)
+                chunk, voiced, silence, started = [], [], 0, False
             self._mid_burst = started
         if chunk:  # a finite source ran out mid-burst (a real mic never does)
-            self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
-            self._finish_burst = False
+            self._end_burst(chunk, voiced)
         self._mid_burst = False
+
+    def _end_burst(self, chunk, voiced):
+        """Hand one finished burst to the transcriber - unless there was no word in it. A burst with
+        no sustained sound is a tap or a creak, and the model answers those with invented words (see
+        carries_speech), so it never gets asked."""
+        if carries_speech(voiced):
+            self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
+        self._finish_burst = False
 
     def _absorb(self, audio, *, armed=None):
         armed = self._armed if armed is None else armed

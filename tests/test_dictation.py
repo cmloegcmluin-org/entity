@@ -125,6 +125,19 @@ def test_over_carries_a_short_answer_through_instead_of_reading_it_as_filler():
     assert ears.submits == 1
 
 
+def test_over_ends_the_recording_as_well_as_submitting():
+    # Both halves of what he asked for: "over" is the whole gesture for "I'm done talking", so it
+    # hands the turn over AND puts the mic down, rather than leaving it live on the room.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("send the report over"), FakeMic(_burst_then_pause()),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.submits == 1
+    assert ears.states[-1] == "muted"
+
+
 def test_the_level_meter_sees_the_mic_only_while_recording():
     ears = Ears()
     dictation = Dictation(FakeTranscriber(""), FakeMic([_sp(0.04), _sp(0.04)]),

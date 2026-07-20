@@ -2,11 +2,12 @@
 
 The walkie-talkie model (talk, say "over", the turn is sent) made them repeat themselves and forced
 every thought to be final. In the window the mic is a STATE, not a turn: while it's on, everything
-they say is transcribed chunk-by-chunk into the draft box - which they can edit - and nothing is sent
-until they click Submit (or say "over", which still works). "Stop listening" turns the mic off
-mid-stream and keeps the words before it; "hey Entity" turns it back on and keeps the words after
-it; the window's button does the same by hand. Muted, the room is heard but dropped - only the
-wake phrase gets through.
+they say is transcribed chunk-by-chunk into the draft box - which they can edit - and nothing is
+sent until they click Submit, or until they say "over", which is still the whole gesture for "I'm
+done": it hands the turn over AND puts the mic down. "Stop listening" turns the mic off mid-stream
+and keeps the words before it; "hey Entity" turns it back on and keeps the words after it; the
+window's button does the same by hand. Muted, the room is heard but dropped - only the wake phrase
+gets through.
 
 The pump runs on its own thread for the whole session. It reports through callbacks (draft text,
 mic state, level for the meter, submit requests) so the window can mirror it without this module
@@ -18,8 +19,9 @@ phrases) and whether the Entity is SPEAKING. It only takes dictation when armed 
 because a mic that is live while the Entity talks hears the Entity: their very first draft box opened
 with "I do for you", the tail of its own spoken greeting. Chunks heard while it speaks are checked
 for a stop BARK instead, which is the barge-in. Arming survives a reply, so a conversation flows
-without touching the button; only cutting it off mid-sentence disarms, since a stop should not turn
-straight around and start recording their next breath.
+without touching the button; only they can end it - by saying "over" or "stop listening", or by
+cutting the Entity off mid-sentence, since a stop should not turn straight around and start
+recording their next breath.
 """
 
 import queue
@@ -238,6 +240,7 @@ class Dictation:
             if without_over:
                 self._on_draft(without_over)
             self._on_submit_request()  # "over" still submits - old muscle memory, same meaning
+            self.set_recording(False)  # ...and it is the whole gesture: turn handed over, mic down
             return
         if _is_invented(text, self._terminator):
             return  # Parakeet's hallucinated filler on near-silence, not them

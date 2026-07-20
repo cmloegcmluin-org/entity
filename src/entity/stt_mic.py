@@ -101,29 +101,20 @@ class Burst:
         self.frames = []
         self._voiced = []
         self._heard = []
-        self._played = []
 
     def __len__(self):
         return len(self.frames)
 
-    def add(self, frame, *, speech, level, playing=0.0):
+    def add(self, frame, *, speech, level):
         self.frames.append(frame)
         self._voiced.append(speech)
         self._heard.append(level)
-        self._played.append(playing)
 
     def audio(self):
         return np.concatenate(self.frames)
 
     def carries_speech(self):
         return carries_speech(self._voiced)
-
-    def echoes_playback(self):
-        """Was this only what the PC itself was playing? False wherever no playback is captured -
-        `playing` then stays at zero, which reads as silent speakers and discounts nothing."""
-        from entity.playback import echoes_playback  # imported here: the console path never captures
-
-        return echoes_playback(self._heard, self._played)
 
 
 def _is_invented(text, terminator):

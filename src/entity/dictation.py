@@ -77,7 +77,6 @@ class Dictation:
         stop=None,
         interrupt=None,
         recorder=None,
-        playback=None,
         hearing=None,
     ):
         self._transcriber = transcriber
@@ -99,9 +98,6 @@ class Dictation:
         self._stop = stop
         self._interrupt = interrupt
         self._recorder = recorder
-        # What this PC is sending to its speakers, if it is being captured. Without it every burst
-        # reads as "the machine was silent", which discounts nothing - the console has no capture.
-        self._playback = playback
         # The live line: the burst so far, read over and over on its own worker, so words appear
         # while he is still talking rather than only once a pause ends the sentence.
         self._hearing = hearing
@@ -216,12 +212,11 @@ class Dictation:
             level = rms(frame)
             self._on_level(level if self.taking_dictation() else 0.0)
             speech = floor.is_speech(level)
-            playing = self._playback.level() if self._playback is not None else 0.0
             if not started:
                 if not speech:
                     continue
                 started = True
-            burst.add(frame, speech=speech, level=level, playing=playing)
+            burst.add(frame, speech=speech, level=level)
             if self._hearing is not None and self.taking_dictation():
                 # Only what he is being heard saying: the room while the mic is off, and the
                 # Entity's own voice through his speakers, have no business on screen as his words.
@@ -237,12 +232,12 @@ class Dictation:
         self._mid_burst = False
 
     def _end_burst(self, burst):
-        """Hand one finished burst to the transcriber - unless nobody said it. A burst with no
-        sustained sound is a tap or a creak and the model answers those with invented words; one
-        whose loudness follows the speakers is what this PC is playing, not them."""
+        """Hand one finished burst to the transcriber - unless there was no word in it. A burst
+        with no sustained sound is a tap or a creak, and the model answers those with invented
+        words (see carries_speech), so it never gets asked."""
         if self._hearing is not None:
             self._hearing.rest()  # the finished sentence is about to land; the live line makes way
-        if burst.carries_speech() and not burst.echoes_playback():
+        if burst.carries_speech():
             self._absorb(burst.audio(), armed=self._armed or self._finish_burst)
         self._finish_burst = False
 

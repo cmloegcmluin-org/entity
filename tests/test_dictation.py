@@ -264,58 +264,6 @@ def test_a_burst_with_no_sustained_sound_is_never_even_transcribed():
     assert transcriber.calls == 0  # not transcribed-then-dropped: never asked in the first place
 
 
-class FakePlayback:
-    """Hands out the scripted output levels, one per frame the pump reads."""
-
-    def __init__(self, *levels):
-        self._levels = list(levels)
-        self._at = 0
-
-    def level(self):
-        value = self._levels[min(self._at, len(self._levels) - 1)]
-        self._at += 1
-        return value
-
-
-# A burst that rises and falls rather than sitting at one level - a flat burst has no shape to
-# match, and shape is the whole signal here.
-SHAPE = (0.001, 0.001, 0.05, 0.09, 0.04, 0.08, 0.03, 0.001, 0.001, 0.001, 0.001)
-
-
-def _shaped(levels):
-    return [_sp(level) for level in levels]
-
-
-def test_a_burst_that_is_only_what_the_speakers_are_playing_never_reaches_the_transcriber():
-    # A streamer in Chrome reaches the mic as ordinary, well-formed speech - one session had a card
-    # game's commentary typed into the draft word for word. What gives it away is that the same
-    # sound is going out of the speakers, 90 ms earlier.
-    ears = Ears()
-    transcriber = FakeTranscriber("I don't think any of the other ninjas are artifact creatures")
-    dictation = Dictation(transcriber, FakeMic(_shaped(SHAPE)), pause_frames=3,
-                          playback=FakePlayback(*[level * 8 for level in SHAPE]), **ears.kwargs())
-
-    dictation.pump()
-
-    assert ears.drafted == []
-    assert transcriber.calls == 0  # never asked: the machine was playing it
-
-
-def test_his_voice_over_the_playback_still_reaches_the_draft():
-    # The failure that matters. He talks WHILE the stream runs, so the mic carries both, and his
-    # own shape is nothing like the playback's. Measured over a real talk-over capture with the
-    # stream at full volume, his bursts scored -0.26 to +0.58 against it and the stream's 0.38-0.96.
-    ears = Ears()
-    steady_stream = [0.02] * len(SHAPE)
-    dictation = Dictation(FakeTranscriber("don't forget to file that ticket"),
-                          FakeMic(_shaped(SHAPE)), pause_frames=3,
-                          playback=FakePlayback(*steady_stream), **ears.kwargs())
-
-    dictation.pump()
-
-    assert ears.drafted == ["don't forget to file that ticket"]
-
-
 def test_hallucinated_backchannel_chunks_stay_out_of_the_draft():
     ears = Ears()
     dictation = Dictation(FakeTranscriber("Mm-hmm. Yeah."), FakeMic(_burst_then_pause()),

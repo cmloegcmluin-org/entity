@@ -8,9 +8,6 @@ dependencies = [
     "claude-agent-sdk>=0.2",     # persistent Claude session on the Max plan (the brain)
     "onnx-asr[cpu,hub]>=0.11",   # local Parakeet speech-to-text
     "sounddevice>=0.4",          # microphone capture
-    # What the PC itself is playing, so the mic can discount it. sounddevice's PortAudio build has
-    # no WASAPI loopback - no flag, no loopback devices - so the capture needs its own library.
-    "soundcard>=0.4",
     "numpy>=1.26",               # audio frames + energy VAD
     "flask>=3",                  # the window is a local web app, as in Notecraft
     "pywebview>=5",              # ...shown in its own native window rather than a browser tab

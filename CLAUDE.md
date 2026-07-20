@@ -109,23 +109,28 @@ and the keyboard hook run on workers, and the page's own poll is what drains the
 Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hearing only the user's
 voice.
 
-**Hearing only the user.** Loopback gating is built (`playback.py`); speaker enrollment is not. What
-remains is every voice that is NOT coming out of this PC's speakers — someone in the room, or audio
-routed to a device that isn't the Windows default.
+**Hearing only the user.** Nothing is built. Loopback gating WAS built and was taken back out the
+same day, because it went deaf to him — the meter moved with his voice and not a word reached the
+draft. That is the whole lesson, and it cost him an hour of a broken app: a false negative here is
+far worse than a false positive, and the threshold that produced it had been fitted to a single
+four-minute sample. Read `git log` for `playback.py` before rebuilding it. What was measured and
+still holds:
 
-Replay `runtime/audio/*.wav` through the real pump and the real Parakeet before designing anything —
-that is how the phantom "thank you"s were found and how every number in `playback.py` was set. For a
-paired measurement (mic and speakers at once) you need the user to actually be playing something and
-talking over it; there is no way to synthesise that honestly.
+- WASAPI loopback capture works, but not through `sounddevice` — its PortAudio build (19.7.0-devel)
+  has no loopback flag and enumerates no loopback devices. `soundcard` does it.
+- Speaker → air → mic on his machine is 90 ms, a clean correlation peak (r = .83 there, .47 either
+  side). Comparing per-frame LOUDNESS survives the room; the waveform does not. Plain envelope
+  correlation beat log and sqrt on labelled data.
+- On one four-minute capture — his stream loud, him talking over it — the stream's bursts scored
+  +0.38 to +0.96 against the delayed playback and his own −0.26 to +0.58. Replayed, a 0.6 bar took
+  75 s of streamer-only from 7 draft lines to 0 and kept all twelve of his.
+- And it still ate him live. So that sample did not generalise, the margin above his worst (0.583)
+  was 0.017, and no bar fitted to one recording should be trusted. Whatever comes next needs paired
+  captures across several sessions and volumes, and must fail toward hearing him.
 
-For whoever takes enrollment:
-
-- A voiceprint is personal: `runtime/`, never the source. Bootstrapping is free — the chunks that
-  became submitted turns in past sessions are labelled samples of his voice.
-- A false negative costs far more than a false positive. Dropping a stray burst costs nothing;
-  dropping HIM makes the app deaf, which is the failure `NoiseFloor` already records twice. That
-  asymmetry is what set the playback gate's threshold, and it should set this one's.
-- It belongs at the same decision point, in `Burst`, beside `carries_speech` and `echoes_playback`.
+Speaker enrollment is untouched. A voiceprint is personal: `runtime/`, never the source, and
+bootstrapping is free — the chunks that became submitted turns in past sessions are labelled samples
+of his voice. Same asymmetry, same decision point: `Burst`, beside `carries_speech`.
 
 **Printing as it listens is done.** Parakeet has no streaming door — `recognize` takes a waveform
 and reads all of it — so the burst so far is re-read as it grows, on a worker, because at 90 ms for

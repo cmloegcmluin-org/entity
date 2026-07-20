@@ -112,8 +112,10 @@ def test_a_day_header_reads_back_as_a_break_that_can_be_seen():
 
     role, _, text = parse_line("===== 2026-07-18 =====")
 
-    # Scrolling back through every session is unreadable without a mark where one day ends.
-    assert role == "status" and "2026-07-18" in text
+    # Scrolling back through every session is unreadable without a mark where one day ends. Its
+    # own role, like the session break's: the contents list reads which day a session falls under
+    # off these, and hunting for a date in the display text would be reading the label.
+    assert role == "day" and "2026-07-18" in text
 
 
 def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():

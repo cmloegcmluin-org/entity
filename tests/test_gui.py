@@ -29,10 +29,32 @@ def test_past_sessions_read_back_as_the_conversation_they_were():
     model.apply("history", "[03:41:20] entity> Gone quiet since yesterday.")
 
     assert [(e["role"], e["stamp"], e["historical"]) for e in model.entries] == [
-        ("status", "2026-07-18", True),
+        ("day", "2026-07-18", True),
         ("you", "03:41:12", True),
         ("entity", "03:41:20", True),
     ]
+
+
+def test_the_contents_list_names_each_session_by_the_day_and_time_it_opened():
+    from entity.gui import sessions
+
+    model = _model()
+    for line in ("===== 2026-07-18 =====",
+                 "[02:41:38] you said: morning",
+                 "[02:42:10] entity> Morning.",
+                 "===== session =====",
+                 "[16:30:34] you said: back",
+                 "===== session =====",
+                 "===== 2026-07-19 =====",
+                 "[03:39:22] you said: next day"):
+        model.apply("history", line)
+
+    # A session break carries no date of its own - the day is the last one above it, and the time
+    # is the first thing said in the session, since that is what a contents line has to point at.
+    assert [label for label, _ in sessions(model.entries)] == [
+        "2026-07-18 02:41", "2026-07-18 16:30", "2026-07-19 03:39",
+    ]
+    assert [entry["role"] for _, entry in sessions(model.entries)] == ["day", "session", "session"]
 
 
 def test_an_overwrite_run_collapses_onto_one_entry_like_the_terminal():
@@ -161,10 +183,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         window._drain_once()
         assert window.waiting() == 80 and len(window.bubble_geometry()) == 41
 
-        # Scrolling back to the top builds the page above it, in order, until there is no more.
+        # Scrolling back to the top builds the page above it - a page, not everything.
         window.scroll_to_top()
         assert window.waiting() == 40 and len(window.bubble_geometry()) == 81
-        window.scroll_to_top()
+
+        # The contents list names each session, and clicking one goes there, building whatever of
+        # the held past stands between here and it.
+        assert window.contents() == ["03:00"]
+        window.click_contents(0)
         assert window.waiting() == 0 and len(window.bubble_geometry()) == 121
         assert window.bubble_text(0) == "old 0"  # the oldest, at the top, where it belongs
         assert window.bubble_text(-1) == "still here"  # and the newest still last
@@ -188,6 +214,13 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert all(x + width >= pane - 14 for role, x, width in placed if role == "you")
         assert all(x <= 14 for role, x, _ in placed if role == "entity")
 
+        # Hovering a message offers a copy button beside the bubble - never over it. The two
+        # sides are worked out differently, and `place` measures from inside the pane's padding
+        # while the bubble's own position reads from outside it, so both are checked.
+        assert window.hover_gap(-3) > 0  # a message of his, on the right
+        assert window.hover_gap(-1) > 0  # one of Entity's, on the left
+        assert window.hover_copies(-3) == "pick up the drive work"
+
         # And the words can still be got back out: dragging inside a bubble and hitting Ctrl-C
         # copies that message - the bubbles are where the conversation's text lives now.
         assert window.copy_from_bubble(-3, "1.0", "1.4") == "pick"
@@ -200,8 +233,10 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
 
         # The level meter spans its column. Fixed at 110px it stopped short of the buttons above
         # and below it, which are sized in characters and come out wider.
-        mic, meter, submit = window.control_widths()
-        assert meter == mic == submit
+        # The level meter spans its column, and so does the contents list above it. Fixed at
+        # 110px the meter stopped short of the buttons, which are sized in characters.
+        mic, meter, submit, contents = window.control_widths()
+        assert meter == mic == submit == contents
 
         # Dragging the window narrower re-measures every box, because a width fixed in pixels
         # stops being half of anything the moment the pane changes size.

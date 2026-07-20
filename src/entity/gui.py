@@ -21,7 +21,7 @@ import queue
 import time
 from pathlib import Path
 
-from entity.bubbles import Thread
+from entity.bubbles import NAME_FONT, SIDES, Thread
 from entity.memory import find_heading, profile_sections, save_learned, save_section
 from entity.tailing import LogTail, discover
 from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
@@ -101,6 +101,26 @@ class TranscriptModel:
             return
         self._add("status", body)
         self._counter = len(self.entries) - 1
+
+
+def sessions(entries):
+    """Each recorded session in the thread, as (label, the entry it opens with).
+
+    What the contents list offers, and what clicking one scrolls to. A session break carries no
+    date of its own: the day is the last day break above it, and the time is the first thing said
+    inside it, since a session with nothing said in it is not somewhere to be sent."""
+    found, day = [], ""
+    opening = entries[0] if entries else None
+    for entry in entries:
+        role = entry["role"]
+        if role == "day":
+            day = entry["stamp"]
+        elif role == "session":
+            opening = entry
+        elif role in SIDES and opening is not None:
+            found.append((f"{day} {entry['stamp'][:5]}".strip(), opening))
+            opening = None
+    return found
 
 
 class TranscriptFeed:
@@ -315,17 +335,29 @@ class EntityWindow:
         return pane
 
     def _build_controls(self, tk):
-        """Everything to do with talking, together in one row along the bottom."""
+        """Everything to do with talking, together in one row along the bottom, with the contents
+        of the conversation above it in the same column."""
         row = tk.Frame(self._tk, bg=BG)
         row.pack(fill="x", padx=8, pady=(0, 8))
         left = tk.Frame(row, bg=BG)
         left.pack(side="left", fill="y", padx=(0, 8))
+        # Every session, oldest first, as somewhere to jump to. Its width is the column's, which
+        # the buttons below size; its height is a few rows, and it scrolls past that.
+        self._contents = tk.Listbox(left, height=4, width=13, font=NAME_FONT, bg=PANEL, fg=DIM,
+                                    selectbackground=SELECTION, selectforeground=FG,
+                                    borderwidth=0, highlightthickness=0, activestyle="none",
+                                    cursor="hand2", exportselection=False)
+        self._contents.pack(fill="both", expand=True, pady=(0, 6))
+        self._contents.bind("<<ListboxSelect>>", lambda event: self._go_to_session())
+        self._listed = []  # the entries the rows point at, in the same order
         self._mic_button = tk.Button(left, text="", width=13, command=self._press_mic, relief="flat",
                                      cursor="hand2", bg=PANEL, activebackground=PANEL)
         self._mic_button.pack(fill="x")
-        # Height only: the width comes from the column, which the buttons above and below size in
-        # characters. Fixed at 110px the meter stopped visibly short of both of them.
-        self._level = tk.Canvas(left, height=10, bg=PANEL, highlightthickness=0)
+        # The width comes from the column, which the buttons above and below size in characters:
+        # fixed at 110px the meter stopped visibly short of both of them. It still has to ask for
+        # something, and asking for nothing means asking for a canvas's default 378px, which then
+        # sets the column's width itself and takes a third of the window off the draft box.
+        self._level = tk.Canvas(left, width=1, height=10, bg=PANEL, highlightthickness=0)
         self._level.pack(fill="x", pady=(6, 0))
         self._level_bar = self._level.create_rectangle(0, 0, 0, 10, fill=ACCENT, width=0)
         self._submit = tk.Button(left, text="Submit", width=13, relief="flat", cursor="hand2",
@@ -452,6 +484,23 @@ class EntityWindow:
         self._thread.show(self._model.entries[self._rendered:])
         self._thread.pane.see("end")
         self._rendered = len(self._model.entries)
+        self._list_sessions()
+
+    def _list_sessions(self):
+        """Re-fill the contents, which only ever gains rows as the conversation goes on."""
+        listed = sessions(self._model.entries)
+        if [label for label, _ in listed] == [label for label, _ in self._listed]:
+            return
+        self._listed = listed
+        self._contents.delete(0, "end")
+        for label, _ in listed:
+            self._contents.insert("end", label)
+
+    def _go_to_session(self):
+        """A row was clicked: scroll to the session it names, however far back it is held."""
+        chosen = self._contents.curselection()
+        if chosen:
+            self._thread.reveal(self._listed[chosen[0]][1])
 
     def _refresh_agent_tabs(self):
         """Each agent's exchange, read back the same way the conversation is - who said what,
@@ -589,10 +638,21 @@ class EntityWindow:
         self._tk.update()
 
     def control_widths(self):
-        """The mic button, the level meter and Submit, as they actually laid out."""
+        """The bottom-left column as it actually laid out: mic, meter, Submit, contents."""
         self._tk.update_idletasks()
         return (self._mic_button.winfo_width(), self._level.winfo_width(),
-                self._submit.winfo_width())
+                self._submit.winfo_width(), self._contents.winfo_width())
+
+    def contents(self):
+        """The sessions the contents list is offering."""
+        return list(self._contents.get(0, "end"))
+
+    def click_contents(self, row):
+        """Click a row of the contents, as a reader would, and let what that pulls in settle."""
+        self._contents.selection_clear(0, "end")
+        self._contents.selection_set(row)
+        self._contents.event_generate("<<ListboxSelect>>")
+        self._tk.update()
 
     def menu_labels(self):
         """What the right-click menu offers."""
@@ -609,6 +669,14 @@ class EntityWindow:
     def bubble_text(self, index):
         """The words actually sitting in one bubble, read off the widget."""
         return self._thread.bodies()[index].get("1.0", "end-1c")
+
+    def hover_gap(self, index):
+        """How far clear of a bubble the copy button lands when that bubble is hovered."""
+        return self._thread.hover_gap(index)
+
+    def hover_copies(self, index):
+        """What pressing the copy button a hovered bubble offers puts on the clipboard."""
+        return self._thread.hover_copies(index)
 
     def copy_from_bubble(self, index, start, end):
         """Select part of one bubble and press Ctrl-C, the way a reader would, and read the

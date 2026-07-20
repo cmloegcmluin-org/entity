@@ -115,8 +115,9 @@ def parse_line(line):
     day = day_of(line)
     if day is not None:
         # The date each file writes once a day. Scrolling back through every session ever is a
-        # wall without it, so it comes back as the break it marks rather than as nothing.
-        return "status", day, DAY_BREAK.format(day)
+        # wall without it, so it comes back as the break it marks rather than as nothing. Its own
+        # role, so the date is read off the entry rather than back out of the line it draws.
+        return "day", day, DAY_BREAK.format(day)
     if not line.startswith("[") or "] " not in line:
         return None
     stamp, _, body = line[1:].partition("] ")

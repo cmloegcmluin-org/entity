@@ -11,13 +11,15 @@ The measuring is pure and lives at the top of this file, so what decides a bubbl
 tested without a display; the Tk half below only builds what those numbers describe.
 """
 
-from entity.theme import DIM, FG, ITS, MINE, PAST, SELECTION
+from entity.theme import DIM, FG, ITS, MINE, PANEL, PAST, SELECTION
 
 SHARE = 0.55  # of the pane a bubble may take - about half, the way a message thread reads
 PAD_X = 10
 PAD_Y = 6
 NAME_FONT = ("Segoe UI", 8)
 PAGE = 40  # messages built at a time - what a screenful needs, and what a scroll back adds
+COPY_ICON = "⧉"  # two joined squares - the copy glyph, in the font the window already uses
+REACH_MS = 250  # how long the copy button waits after the pointer leaves, to be reachable
 
 # Who sits where, and in what tint. A heads-up is Entity talking out of turn, so it takes Entity's
 # side and color and says so in the name.
@@ -115,6 +117,9 @@ class Thread:
         self._waiting = []  # older entries, held until they are scrolled back to
         self._growing = False  # building prepends, which scrolls, which would build again
         self._fitted = None  # the pane width the boxes were last measured for
+        self._marks = {}  # id(entry) -> a Tk mark on its line, for the ones with no widget
+        self._offered = None  # the entry the copy button currently belongs to
+        self._withdrawing = None  # a pending hide, cancelled if the pointer reaches the button
         for role, (side, _) in SIDES.items():
             pane.tag_configure(role, justify=side)
             pane.tag_configure(f"{role}:name", justify=side, foreground=DIM, font=NAME_FONT,
@@ -128,6 +133,22 @@ class Thread:
         # Chained, not replaced - the scrollbar still needs telling where it is. This is how we
         # hear that the top has been reached and more of the past is wanted than is built.
         pane.configure(yscrollcommand=lambda first, last: self._scrolled(pane.vbar, first, last))
+        self._copier = self._build_copier(pane)
+
+    def _build_copier(self, pane):
+        """ONE copy button, moved to whatever the pointer is over. One per message would be
+        thousands of widgets built for the archive, for a thing only ever visible in one place."""
+        import tkinter as tk
+
+        copier = tk.Label(pane, text=COPY_ICON, font=NAME_FONT, bg=PANEL, fg=DIM,
+                          cursor="hand2", padx=4, pady=1)
+        copier.bind("<Button-1>", lambda event: self._take_copy())
+        # Reaching for the button leaves the message, and a hide on that would take the button
+        # away before it could be clicked - so the hide waits, and arriving here cancels it.
+        copier.bind("<Enter>", lambda event: self._keep_offered())
+        copier.bind("<Leave>", lambda event: self._withdraw_copy())
+        copier.bind("<MouseWheel>", self._wheel)
+        return copier
 
     @property
     def pane(self):
@@ -160,6 +181,90 @@ class Thread:
         """How much of the past is held but not built yet."""
         return len(self._waiting)
 
+    def reveal(self, entry):
+        """Scroll to `entry`, building back through the held past until it exists to scroll to."""
+        while any(held is entry for held in self._waiting):
+            self.grow()
+        for shown, holder, _ in self._shown:
+            if shown is entry:
+                self._pane.see(holder if holder is not None else self._marks[id(entry)])
+                return
+
+    # ---- the copy button -------------------------------------------------------------------
+
+    def _offer_copy(self, entry):
+        """Put the copy button beside whatever the pointer is over."""
+        if self._withdrawing is not None:
+            self._pane.after_cancel(self._withdrawing)
+            self._withdrawing = None
+        self._offered = entry
+        spot = self._beside_bubble(entry) if entry["role"] in SIDES else self._beside_line(entry)
+        if spot is None:
+            self._copier.place_forget()
+            return
+        # `place` measures from inside the pane's own padding while `winfo_x` and `bbox` report
+        # from outside it, so a position worked out from those lands one padding to the right -
+        # over the edge of a right-hand bubble, which is the side the button sits against.
+        pad = int(self._pane.cget("padx"))
+        self._copier.place(x=spot[0] - pad, y=spot[1] - int(self._pane.cget("pady")), anchor="w")
+        self._copier.lift()
+
+    def _keep_offered(self):
+        if self._withdrawing is not None:
+            self._pane.after_cancel(self._withdrawing)
+            self._withdrawing = None
+
+    def _withdraw_copy(self):
+        """Take it away - but not instantly, or reaching for it is what removes it."""
+        if self._withdrawing is None:
+            self._withdrawing = self._pane.after(REACH_MS, self._copier.place_forget)
+
+    def _take_copy(self):
+        """What was hovered, on the clipboard: one message, or a whole session."""
+        entry = self._offered
+        if entry is None:
+            return
+        text = entry["text"] if entry["role"] in SIDES else self.session_text(entry)
+        self._pane.clipboard_clear()
+        self._pane.clipboard_append(text)
+
+    def _beside_bubble(self, entry):
+        """Just outside the bubble's near edge, so it never sits over the words."""
+        for shown, holder, _ in self._shown:
+            if shown is entry and holder is not None:
+                self._copier.update_idletasks()
+                width = self._copier.winfo_reqwidth()
+                if SIDES[entry["role"]][0] == "right":
+                    return holder.winfo_x() - width - 6, holder.winfo_y() + holder.winfo_height() // 2
+                return (holder.winfo_x() + holder.winfo_width() + 6,
+                        holder.winfo_y() + holder.winfo_height() // 2)
+        return None
+
+    def _beside_line(self, entry):
+        """Just right of a centred break's own text, rather than out at the pane's edge."""
+        mark = self._marks.get(id(entry))
+        if mark is None:
+            return None
+        box = self._pane.bbox(f"{mark} lineend -1c")
+        if box is None:
+            return None  # scrolled out of view; there is nothing to sit beside
+        x, y, width, height = box
+        return x + width + 8, y + height // 2
+
+    def session_text(self, entry):
+        """Everything said in the session this break opens, up to where the next one starts."""
+        every = self._waiting + [shown for shown, _, _ in self._shown]
+        try:
+            start = next(index for index, held in enumerate(every) if held is entry)
+        except StopIteration:
+            return ""
+        said = []
+        for following in every[start + 1:]:
+            if following["role"] == "session":
+                break
+            said.append(self._as_text(following))
+        return "".join(said)
+
     def _scrolled(self, bar, first, last):
         bar.set(first, last)
         if self._waiting and not self._growing and float(first) <= 0.01:
@@ -171,9 +276,7 @@ class Thread:
 
         role, faded = entry["role"], ("historical",) if entry["historical"] else ()
         if role not in SIDES:
-            self._pane.insert("1.0" if prepend else "end", entry["text"] + "\n",
-                              ("status",) + faded)
-            self._remember((entry, None, None), prepend)
+            self._build_line(entry, prepend, faded)
             return
         colour = SIDES[role][1]
         holder = tk.Frame(self._pane, bg=colour)
@@ -199,8 +302,31 @@ class Thread:
             self._pane.insert("end", "\n")
             self._pane.tag_add(role, start, "end-1c")  # justify puts the box on its side
         shown = (entry, holder, body)
+        for hoverable in (holder, body):
+            hoverable.bind("<Enter>", lambda event, e=entry: self._offer_copy(e))
+            hoverable.bind("<Leave>", lambda event: self._withdraw_copy())
         self._remember(shown, prepend)
         self._fill(shown)
+
+    def _build_line(self, entry, prepend, faded):
+        """A centred remark with no bubble - a status line, a day, or a session break.
+
+        Every one gets a mark, because a line has no widget to scroll to the way a bubble does,
+        and the contents list scrolls to the line a session opens with. A session break also
+        gets a tag, so hovering it can offer to copy the whole session."""
+        where = "1.0" if prepend else "end"
+        start = "1.0" if prepend else self._pane.index("end-1c")
+        self._pane.insert(where, entry["text"] + "\n", ("status",) + faded)
+        mark = f"line{id(entry)}"  # no hyphen: a mark name is parsed as part of an index expression
+        self._pane.mark_set(mark, start)
+        self._pane.mark_gravity(mark, "left")
+        self._marks[id(entry)] = mark
+        if entry["role"] == "session":
+            tag = f"break-{id(entry)}"
+            self._pane.tag_add(tag, start, f"{start} lineend")
+            self._pane.tag_bind(tag, "<Enter>", lambda event, e=entry: self._offer_copy(e))
+            self._pane.tag_bind(tag, "<Leave>", lambda event: self._withdraw_copy())
+        self._remember((entry, None, None), prepend)
 
     def _remember(self, shown, prepend):
         if prepend:
@@ -235,6 +361,25 @@ class Thread:
     def bodies(self):
         """The widgets holding each message's words - what a selection is made in."""
         return [body for _, holder, body in self._shown if holder is not None]
+
+    def hover_gap(self, index):
+        """Hover one bubble and measure how far clear of it the copy button lands. Negative would
+        mean the button sitting over the message it offers to copy."""
+        entry, holder, body = [shown for shown in self._shown if shown[1] is not None][index]
+        body.event_generate("<Enter>")
+        self._pane.update_idletasks()
+        if SIDES[entry["role"]][0] == "right":
+            return holder.winfo_x() - (self._copier.winfo_x() + self._copier.winfo_width())
+        return self._copier.winfo_x() - (holder.winfo_x() + holder.winfo_width())
+
+    def hover_copies(self, index):
+        """Hover one bubble, press its copy button, and hand back what reached the clipboard."""
+        body = self.bodies()[index]
+        body.event_generate("<Enter>")
+        self._pane.clipboard_clear()
+        self._copier.event_generate("<Button-1>")
+        self._pane.update()
+        return self._pane.clipboard_get()
 
     def _fill(self, shown):
         entry, holder, body = shown

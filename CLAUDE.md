@@ -92,7 +92,9 @@ used to be lost to context resets) and streams the whole exchange into its log; 
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named.
+held, and it says which one a reply just named. `playback.py` captures what this PC is sending to
+its own speakers, so a burst whose loudness follows it can be discounted — a streamer in Chrome is
+otherwise indistinguishable from the user.
 `brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
@@ -101,28 +103,26 @@ and the keyboard hook run on workers, and the page's own poll is what drains the
 
 ## Open work
 
-Nothing is assigned. Outstanding, unstarted, both in the profile's Enhancements: hearing only the
-user's voice, and a live word-by-word transcription display with a spoken codeword to rewind and
-re-say.
+Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hearing only the user's
+voice, and a live word-by-word transcription display with a spoken codeword to rewind and re-say.
 
-**Hearing only the user.** Replay `runtime/audio/*.wav` through the real pump and the real Parakeet
-before designing anything — that is how the phantom "thank you"s were found, and it already says
-what else is in there. One 20-minute session carried the Entity's own spoken replies back in through
-the mic at the same level as his voice; another carried half an hour of a TV show, transcribed
-verbatim. Neither is him and neither is silence, so `carries_speech` cannot see them.
+**Hearing only the user.** Loopback gating is built (`playback.py`); speaker enrollment is not. What
+remains is every voice that is NOT coming out of this PC's speakers — someone in the room, or audio
+routed to a device that isn't the Windows default.
 
-Speaker enrollment and loopback gating answer the same question — *is this him?* — so they belong at
-one decision point, beside `carries_speech` where a burst ends. For whoever takes them:
+Replay `runtime/audio/*.wav` through the real pump and the real Parakeet before designing anything —
+that is how the phantom "thank you"s were found and how every number in `playback.py` was set. For a
+paired measurement (mic and speakers at once) you need the user to actually be playing something and
+talking over it; there is no way to synthesise that honestly.
+
+For whoever takes enrollment:
 
 - A voiceprint is personal: `runtime/`, never the source. Bootstrapping is free — the chunks that
   became submitted turns in past sessions are labelled samples of his voice.
-- A false negative costs far more than a false positive. Dropping a phantom costs nothing; dropping
-  HIM makes the app deaf, which is the failure `NoiseFloor` already records twice.
-- Loopback is WASAPI through `sounddevice`, opened on the machine's *output* device — check the
-  current API rather than writing against a remembered one. The point is to discount what the PC is
-  playing, not to go deaf while it plays: gate on the mic correlating with the delay-aligned
-  loopback, and measure that delay instead of assuming it. Its own voice is already handled by the
-  `_speaking` flag, so what this buys is Chrome and the TV.
+- A false negative costs far more than a false positive. Dropping a stray burst costs nothing;
+  dropping HIM makes the app deaf, which is the failure `NoiseFloor` already records twice. That
+  asymmetry is what set the playback gate's threshold, and it should set this one's.
+- It belongs at the same decision point, in `Burst`, beside `carries_speech` and `echoes_playback`.
 
 Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
 rather than being read back out of the sentence, several ready at once are read out numbered, and

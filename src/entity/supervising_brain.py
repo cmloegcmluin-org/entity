@@ -64,6 +64,25 @@ def _spoken_around_improvements(reply):
     return "\n".join(line for line in reply.splitlines() if _IMPROVE not in line).strip()
 
 
+def _plain(reply):
+    """A reply with no directive in it, safe to say aloud.
+
+    Usually that is the reply itself. But a marker it FUMBLED - no colon after the agent name, an
+    empty target, a blank item - parses as no directive at all and used to fall through to here and
+    be read out bracket and all: "I don't appreciate how you're speaking to me in code. We're
+    supposed to be having a conversation as human like Entities." So the marker lines are dropped,
+    and what's left is what he hears. If that leaves nothing, say the attempt failed rather than
+    going quiet - silence would leave him believing something was filed or sent when it wasn't.
+    """
+    if not any(marker in reply for marker in (_SUPERVISE, _TELL, _IMPROVE)):
+        return reply
+    kept = "\n".join(
+        line for line in reply.splitlines()
+        if not any(marker in line for marker in (_SUPERVISE, _TELL, _IMPROVE))
+    ).strip()
+    return kept or "I fumbled that one - it didn't go through. Say it again?"
+
+
 def parse_improvements(reply):
     """Every `[IMPROVE] <one line>` in the reply, in the order they were written.
 
@@ -145,7 +164,7 @@ class SupervisingBrain:
             return _spoken_before(reply, _TELL) or f"Passed that to {name}."
         directive = parse_supervise(reply)
         if directive is None:
-            return reply
+            return _plain(reply)
         target, task = directive
         paths = self._resolve(target)
         if not paths:

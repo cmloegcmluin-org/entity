@@ -246,6 +246,29 @@ def test_a_directive_with_nothing_said_alongside_it_still_confirms():
                              file_enhancement=lambda item: None).respond("file it")
 
 
+def test_a_malformed_marker_is_never_read_out_as_code():
+    # "I don't appreciate how you're speaking to me in code. We're supposed to be having a
+    # conversation as human like Entities." A marker it fumbled - no colon after the agent, an empty
+    # target, a blank item - parsed as nothing, fell past every branch, and the raw reply went out
+    # bracket and all. Whatever else happens, marker syntax is not something he hears.
+    desk = FakeDesk(knows={"fixer"})
+
+    for fumbled in ("[TELL] fixer no colon here", "[SUPERVISE]\nsome task", "[IMPROVE]"):
+        said = _brain(FakeInner(fumbled), desk, file_enhancement=lambda item: None).respond("go")
+
+        assert "[" not in said and "]" not in said, fumbled
+
+
+def test_a_fumbled_marker_admits_it_rather_than_going_quiet():
+    # Silently swallowing it would be worse than the code: he'd be left believing the thing was
+    # filed or sent, and find out much later that nothing had happened at all.
+    brain = _brain(FakeInner("[TELL] fixer no colon here"), FakeDesk(knows={"fixer"}))
+
+    said = brain.respond("tell it to stop")
+
+    assert said and "didn't" in said.lower()
+
+
 def test_a_tell_to_an_agent_that_is_not_running_says_so_rather_than_pretending():
     desk = FakeDesk()
     brain = _brain(FakeInner("[TELL] ghost: are you there"), desk)

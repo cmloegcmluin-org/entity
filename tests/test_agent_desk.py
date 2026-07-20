@@ -46,7 +46,7 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
-    def factory(name, cwd, decide):
+    def factory(name, cwd, decide, **choice):
         agent = FakeAgent(name, cwd, decide, hold=hold)
         made.append(agent)
         return agent
@@ -94,7 +94,7 @@ def test_an_agent_that_dies_stops_its_silence_clock_too():
     # A dead agent is announced as dead; leaving its clock running would then also announce it as
     # quiet twenty minutes later, which is the same non-news twice.
     monitor = SpyMonitor()
-    desk = AgentDesk(Outbox(), agent_factory=lambda *a: _DyingAgent(), monitor=monitor)
+    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(), monitor=monitor)
     desk.start("doomed", "/tmp/wt", "try")
 
     assert _wait_for(lambda: monitor.finished == ["doomed"])
@@ -106,6 +106,41 @@ class _DyingAgent:
 
     def close(self):
         pass
+
+
+def test_agents_start_on_the_model_he_chose_defaulting_to_opus_on_high():
+    # "Sonnet's not so hot either. I usually use Opus... It should default to Opus 4.8 on High, but
+    # I should be able to ask it for Fable Max for example if I want." It was hardcoded to Sonnet
+    # and invisible - he asked what his agents were running and could not be told.
+    started = []
+
+    def factory(name, cwd, decide, *, model, effort):
+        started.append((model, effort))
+        return FakeAgent(name, cwd, decide)
+
+    desk = AgentDesk(Outbox(), agent_factory=factory)
+
+    desk.start("first", "/tmp/wt", "go")
+    assert desk.choose("claude-fable-5", "max") == "Fable on max"  # and it says what it will be
+    desk.start("second", "/tmp/wt2", "go")
+
+    assert _wait_for(lambda: len(started) == 2)
+    assert started == [("claude-opus-4-8", "high"), ("claude-fable-5", "max")]
+
+
+def test_changing_the_model_leaves_an_agent_already_working_where_it_is():
+    # A session's model is fixed when it opens, so a change can only govern the next agent. Saying
+    # otherwise would be the kind of claim he checks and finds false.
+    started = []
+    desk = AgentDesk(Outbox(), agent_factory=lambda name, cwd, decide, *, model, effort:
+                     started.append((name, model)) or FakeAgent(name, cwd, decide))
+
+    desk.start("already-running", "/tmp/wt", "go")
+    assert _wait_for(lambda: len(started) == 1)
+    desk.choose("claude-fable-5", None)
+
+    assert started == [("already-running", "claude-opus-4-8")]  # untouched by the later change
+    assert desk.running_on() == "Fable on high"  # effort left alone, since he only named a model
 
 
 def test_starting_an_agent_does_not_block_the_caller():
@@ -197,7 +232,7 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
         def close(self):
             pass
 
-    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: Exploding())
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice: Exploding())
 
     desk.start("doomed", "/tmp/wt", "do a thing")
 
@@ -233,7 +268,7 @@ def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
     outbox = Outbox()
     made = []
 
-    def factory(name, cwd, decide):
+    def factory(name, cwd, decide, **choice):
         agent = FakeAgent(name, cwd, decide)
         made.append(agent)
         return agent
@@ -281,7 +316,7 @@ def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
         def close(self):
             pass
 
-    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: NarratingAgent(),
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice: NarratingAgent(),
                      log_dir=tmp_path)
     desk.start("fixer", "/tmp/wt", "do the thing")
     assert _wait_for(lambda: bool(outbox))
@@ -309,7 +344,7 @@ def test_what_an_agent_ran_and_what_came_back_reach_its_log(tmp_path):
         def close(self):
             pass
 
-    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: Working(), log_dir=tmp_path)
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice: Working(), log_dir=tmp_path)
     desk.start("fixer", "/tmp/wt", "make it green")
     assert _wait_for(lambda: bool(outbox))
 
@@ -332,7 +367,7 @@ def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
         def close(self):
             pass
 
-    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: NarratingAgent(),
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice: NarratingAgent(),
                      roster_path=roster, log_dir=tmp_path, clock=lambda fmt: "2026-07-19 08:20:15")
     desk.start("fixer", "/tmp/wt", "do the thing")
     assert _wait_for(lambda: bool(outbox))

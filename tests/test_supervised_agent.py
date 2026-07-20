@@ -19,7 +19,7 @@ class FakeSession:
 
 
 def test_agent_runs_approval_gated_and_isolated_from_the_global_config():
-    opts = _agent_options("C:/work/tree", "sonnet", can_use_tool=lambda *a: None)
+    opts = _agent_options("C:/work/tree", "claude-opus-4-8", "high", can_use_tool=lambda *a: None)
 
     assert opts.cwd == "C:/work/tree"
     # nothing runs without a decision: approvals stay ON and every request routes to can_use_tool

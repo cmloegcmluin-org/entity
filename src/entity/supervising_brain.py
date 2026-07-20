@@ -7,6 +7,7 @@ user hears whatever the brain had to say - never the raw marker.
   [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
   <the task, any length>     following lines is the task that agent is given
   [TELL] <name>: <message>   say something more to an agent already running
+  [MODEL] <what he said>     put the NEXT agent on that model/effort ("fable max", "opus high")
   [IMPROVE] <one line>       file a self-improvement that was asked for - it lands in the
                              profile's Enhancements section, which the window shows live
                              (one line per item, and every one of them is filed)
@@ -33,6 +34,7 @@ import re
 from pathlib import Path
 
 from entity.memory import append_enhancement
+from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
 DEFAULT_TASK = (
@@ -44,6 +46,15 @@ DEFAULT_TASK = (
 _SUPERVISE = "[SUPERVISE]"
 _TELL = "[TELL]"
 _IMPROVE = "[IMPROVE]"
+_MODEL = "[MODEL]"
+
+
+def parse_model(reply):
+    """Pull `[MODEL] <what he said>` out of a reply, or None."""
+    if _MODEL not in reply:
+        return None
+    line = reply.split(_MODEL, 1)[1].strip().split("\n", 1)[0].strip()
+    return line or None
 
 
 # What the brain said to THEM in a reply that also carried a directive, or "" if it said nothing.
@@ -75,11 +86,11 @@ def _plain(reply):
     and what's left is what he hears. If that leaves nothing, say the attempt failed rather than
     going quiet - silence would leave him believing something was filed or sent when it wasn't.
     """
-    if not any(marker in reply for marker in (_SUPERVISE, _TELL, _IMPROVE)):
+    if not any(marker in reply for marker in (_SUPERVISE, _TELL, _IMPROVE, _MODEL)):
         return reply
     kept = "\n".join(
         line for line in reply.splitlines()
-        if not any(marker in line for marker in (_SUPERVISE, _TELL, _IMPROVE))
+        if not any(marker in line for marker in (_SUPERVISE, _TELL, _IMPROVE, _MODEL))
     ).strip()
     return kept or "I fumbled that one - it didn't go through. Say it again?"
 
@@ -158,6 +169,13 @@ class SupervisingBrain:
             for item in improvements:
                 self._file_enhancement(item)
             return _spoken_around_improvements(reply)
+        wanted = parse_model(reply)
+        if wanted is not None:
+            choice = resolve_model(wanted)
+            if choice is None:  # nothing in it named a model or an effort - say so, don't guess
+                return f"I didn't catch a model in that. Still on {self._desk.running_on()}."
+            said = self._desk.choose(*choice)
+            return _spoken_before(reply, _MODEL) or f"Next agent goes on {said}."
         told = parse_tell(reply)
         if told is not None:
             name, message = told

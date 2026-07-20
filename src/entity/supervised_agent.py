@@ -9,6 +9,7 @@ and returns what it says back, which the fleet layer relays onward.
 
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultAllow, PermissionResultDeny
 
+from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL
 from entity.sdk_session import SdkSession
 
 
@@ -23,10 +24,11 @@ def _permission_handler(name, decide):
     return can_use_tool
 
 
-def _agent_options(cwd, model, can_use_tool):
+def _agent_options(cwd, model, effort, can_use_tool):
     return ClaudeAgentOptions(
         cwd=cwd,
         model=model,
+        effort=effort,  # how hard it is told to think; his choice, said out loud (see entity.models)
         # setting_sources=[] loads NO settings. Verified necessary: because the worktrees live
         # under the user's home, "project"/"local" discovery walks up into ~/.claude and drags in
         # their global reply-format CLAUDE.md + Stop hook (the agent starts answering in that
@@ -39,9 +41,11 @@ def _agent_options(cwd, model, can_use_tool):
 
 
 class SupervisedAgent:
-    def __init__(self, name, cwd, decide, *, model="sonnet", session_factory=SdkSession):
+    def __init__(self, name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT,
+                 session_factory=SdkSession):
         self.name = name
-        self._session = session_factory(_agent_options(cwd, model, _permission_handler(name, decide)))
+        self._session = session_factory(
+            _agent_options(cwd, model, effort, _permission_handler(name, decide)))
 
     def work(self, message, on_message=None):
         """Do a piece of work, handing over everything it streams back as it happens - what it

@@ -251,6 +251,40 @@ def test_a_directive_with_nothing_said_alongside_it_is_covered_by_the_ack():
                   resolve=lambda target: ["/work/trees/a"]).respond("go") == ""
 
 
+def test_asking_for_a_model_out_loud_changes_what_the_next_agent_runs_on():
+    # "I should be able to ask it for Fable Max for example if I want." Said out loud, mid
+    # conversation, the same way everything else here is asked for.
+    chosen = []
+
+    class ModelDesk(FakeDesk):
+        def choose(self, model=None, effort=None):
+            chosen.append((model, effort))
+            return "Fable on max"
+
+        def running_on(self):
+            return "Opus on high"
+
+    said = _brain(FakeInner("[MODEL] Fable Max"), ModelDesk()).respond("use fable on max from now on")
+
+    assert chosen == [("claude-fable-5", "max")]
+    assert "Fable on max" in said and "[" not in said
+
+
+def test_a_model_it_could_not_make_out_says_what_is_still_running():
+    # Guessing here would put his real work on a model he did not ask for, and he would find out
+    # from the results rather than from Entity.
+    class ModelDesk(FakeDesk):
+        def choose(self, model=None, effort=None):
+            raise AssertionError("must not choose anything")
+
+        def running_on(self):
+            return "Opus on high"
+
+    said = _brain(FakeInner("[MODEL] the fast one"), ModelDesk()).respond("use the fast one")
+
+    assert "Opus on high" in said
+
+
 def test_a_malformed_marker_is_never_read_out_as_code():
     # "I don't appreciate how you're speaking to me in code. We're supposed to be having a
     # conversation as human like Entities." A marker it fumbled - no colon after the agent, an empty

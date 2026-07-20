@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 
+from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from entity.relay import notice
 from entity.steps import SAID, render
 from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
@@ -64,6 +65,11 @@ class AgentDesk:
         # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
         # reported to the user as fact, and both were denied on the spot by someone reading the log.
         self._monitor = monitor
+        # Which model his agents run on, and how hard they are told to think. Held HERE because
+        # he changes it by asking - and because an agent's session is fixed at birth, so a change
+        # governs the next one started, never one already working. It was hardcoded and invisible;
+        # he had to ask what his agents were running and could not be told (see entity.models).
+        self._model, self._effort = DEFAULT_MODEL, DEFAULT_EFFORT
         self._clock = clock
         self._desked = {}
         self._lock = threading.Lock()
@@ -75,10 +81,21 @@ class AgentDesk:
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
-        agent = self._factory(name, cwd, self._decide)
+        agent = self._factory(name, cwd, self._decide, model=self._model, effort=self._effort)
         with self._lock:
             self._desked[name] = _Desked(agent, cwd, task, self._open_log(name))
         self._dispatch(name, task + STANDING_RULE)
+
+    def choose(self, model=None, effort=None):
+        """Put the NEXT agent on this model, at this effort, and say what it will be. Either half
+        left out keeps what was there, because he says one or the other as often as both."""
+        self._model = model or self._model
+        self._effort = effort or self._effort
+        return describe(self._model, self._effort)
+
+    def running_on(self):
+        """What a fresh agent would be started on right now."""
+        return describe(self._model, self._effort)
 
     def send(self, name, message):
         """Say something more to an agent already at the desk. False if there's no such agent -
@@ -195,8 +212,8 @@ class AgentDesk:
         self._roster_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _real_agent(name, cwd, decide):
+def _real_agent(name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT):
     # Imported here so the desk can be exercised without the SDK (and without a real agent).
     from entity.supervised_agent import SupervisedAgent
 
-    return SupervisedAgent(name, cwd, decide)
+    return SupervisedAgent(name, cwd, decide, model=model, effort=effort)

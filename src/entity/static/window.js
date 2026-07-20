@@ -101,9 +101,9 @@ function dictate(chunks) {
   if (chunks.length) draft.scrollTop = draft.scrollHeight;
 }
 
-/* "Scratch that" - take back what he just said, out of the box it was typed into. Only while the
-   chunk is still the end of what is in there: this is the box he also types in by hand, and
-   guessing at what to cut from something he has edited would take away words he wrote himself. */
+/* "Scratch that" - take back what they just said, out of the box it was typed into. Only while the
+   chunk is still the end of what is in there: this is the box they also types in by hand, and
+   guessing at what to cut from something they have edited would take away words they wrote themselves. */
 function retract(times) {
   for (let i = 0; i < times; i++) {
     const chunk = dictated[dictated.length - 1];
@@ -114,7 +114,7 @@ function retract(times) {
   }
 }
 
-/* What he is being heard saying, while he is still saying it. Replaced whole rather than appended
+/* What they are being heard saying, while they are still saying it. Replaced whole rather than appended
    to, because the server sends the whole settled line each poll; it only ever grows, so the end is
    where the new words are and where it is scrolled to. */
 function showHearing(text) {
@@ -125,9 +125,9 @@ function showHearing(text) {
 
 document.getElementById("send").onclick = send;
 
-/* One click that says yes. About half his turns were the mic on, the word, the mic off and
+/* One click that says yes. About half their turns were the mic on, the word, the mic off and
    Submit - four gestures for one word. Whatever is half-written in the draft is left exactly
-   where it is: losing typed words is the thing he filed a ticket about. */
+   where it is: losing typed words is the thing they filed a ticket about. */
 document.getElementById("yes").onclick = () => post("/submit", { text: "Yes." });
 
 /* And the bin beside it: the whole draft gone, undoably. Written through the document's own edit

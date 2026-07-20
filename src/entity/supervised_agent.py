@@ -28,7 +28,7 @@ def _agent_options(cwd, model, effort, can_use_tool):
     return ClaudeAgentOptions(
         cwd=cwd,
         model=model,
-        effort=effort,  # how hard it is told to think; his choice, said out loud (see entity.models)
+        effort=effort,  # how hard it is told to think; their choice, said out loud (see entity.models)
         # setting_sources=[] loads NO settings. Verified necessary: because the worktrees live
         # under the user's home, "project"/"local" discovery walks up into ~/.claude and drags in
         # their global reply-format CLAUDE.md + Stop hook (the agent starts answering in that

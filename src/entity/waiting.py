@@ -6,7 +6,7 @@ utterance - a wall with no way to take them one at a time, and long enough that 
 shape: when several are ready, say which, and let the order be chosen.
 
 So they are read out numbered, and nothing more is said until one of them is named. Numbered
-because an agent is named after its worktree - `drive-native-gdoc-export` - and no speech-to-text
+because an agent is named after its worktree - `export-report-as-csv` - and no speech-to-text
 spells that back; a number always survives the trip, and any distinctive word of a name works too.
 Numbering was chosen over asking the model to interpret the reply, because that needs a marker in
 what it writes, and marker text has reached them verbatim before.

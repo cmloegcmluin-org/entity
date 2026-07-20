@@ -8,11 +8,11 @@ done": it hands the turn over AND puts the mic down. "Stop listening" turns the 
 and keeps the words before it; "hey Entity" turns it back on and keeps the words after it; the
 window's button does the same by hand. Muted, the room is heard but dropped - only the wake phrase
 gets through. "Scratch that" rewinds: it takes back the words immediately before it, whether those
-are the chunk already sitting in the box or the ones he said in the same breath, so a sentence that
+are the chunk already sitting in the box or the ones they said in the same breath, so a sentence that
 came out wrong is re-said rather than typed over.
 
-A chunk only reaches the draft box once a PAUSE has ended it, which is the wait he complained of -
-nothing printed until he stopped talking. So while a burst is still growing it is also handed to
+A chunk only reaches the draft box once a PAUSE has ended it, which is the wait they complained of -
+nothing printed until they stopped talking. So while a burst is still growing it is also handed to
 `hearing`, which reads it over and over on a worker of its own and puts the settled words on a live
 line as they settle. That line is a preview and nothing more: the draft box is still filled by the
 one authoritative reading taken when the burst ends, and the line comes down as it lands.
@@ -51,7 +51,7 @@ from entity.stt_mic import (
 
 DEFAULT_MUTE_PHRASES = ("stop listening", "suspend")
 DEFAULT_WAKE_PHRASES = ("hey entity", "resume")
-# Rewind and say it again. Both are stock dictation idioms rather than anything he says about code,
+# Rewind and say it again. Both are stock dictation idioms rather than anything they say about code,
 # and both are already what a person says when taking a sentence back mid-thought ("the blue one,
 # scratch that, the red one") - so the usage that would be a false alarm IS the one it is for.
 DEFAULT_RETRACT_PHRASES = ("scratch that", "strike that")
@@ -87,8 +87,8 @@ class Dictation:
         self._on_submit_request = on_submit_request
         self._on_retract = on_retract
         self._armed = not muted
-        self._auto_listen = False  # off until he asks for it; the button is how the mic opens
-        self._silenced = False  # he put the mic down ON the reply - auto-listening must not undo it
+        self._auto_listen = False  # off until they ask for it; the button is how the mic opens
+        self._silenced = False  # they put the mic down ON the reply - auto-listening must not undo it
         self._speaking = False
         self._terminator = terminator
         self._mutes = tuple(canonical(p) for p in mute_phrases)
@@ -99,7 +99,7 @@ class Dictation:
         self._interrupt = interrupt
         self._recorder = recorder
         # The live line: the burst so far, read over and over on its own worker, so words appear
-        # while he is still talking rather than only once a pause ends the sentence.
+        # while they are still talking rather than only once a pause ends the sentence.
         self._hearing = hearing
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
@@ -218,8 +218,8 @@ class Dictation:
                 started = True
             burst.add(frame, speech=speech, level=level)
             if self._hearing is not None and self.taking_dictation():
-                # Only what he is being heard saying: the room while the mic is off, and the
-                # Entity's own voice through his speakers, have no business on screen as his words.
+                # Only what they are being heard saying: the room while the mic is off, and the
+                # Entity's own voice through their speakers, have no business on screen as their words.
                 self._hearing.follow(burst)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over
@@ -284,13 +284,13 @@ class Dictation:
         self._on_draft(text)
 
     def _retract_what_he_took_back(self, spoken):
-        """"Scratch that" - rewind, and say it again. True if this chunk was him doing that.
+        """"Scratch that" - rewind, and say it again. True if this chunk was them doing that.
 
         What it takes back is the words immediately BEFORE it, wherever they are: said on their own
         after a pause ("...the drive work." / "scratch that"), that is the chunk already sitting in
         the box; said in the same breath ("...the drive work, scratch that"), it is those very words,
         which then simply never land. One rule, because it is one gesture. The phrase itself never
-        lands either way, and anything he goes straight on to say does - taking a sentence back and
+        lands either way, and anything they go straight on to say does - taking a sentence back and
         starting the new one is a single thing people say."""
         rest = strip_leading_command(spoken, self._retracts)
         if rest is not None:
@@ -299,7 +299,7 @@ class Dictation:
                 self._on_draft(rest)
             return True
         if ends_with_command(spoken, self._retracts):
-            return True  # what he took back is in this chunk; none of it goes in the box
+            return True  # what they took back is in this chunk; none of it goes in the box
         return False
 
     def _draft_before_mute(self, text, spoken):

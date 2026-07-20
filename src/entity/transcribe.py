@@ -46,8 +46,8 @@ class CorrectingTranscriber:
     otherwise: same `transcribe`/`warmup` surface, so it drops in wherever a plain transcriber goes.
 
     `translations` are the named ones - "cloud agent" for "Claude agent" - which no similarity
-    score can catch because what came back is ordinary English. His own are merged over the ones
-    that ship, so a rule he writes for a phrase wins."""
+    score can catch because what came back is ordinary English. Their own are merged over the ones
+    that ship, so a rule they write for a phrase wins."""
 
     def __init__(self, transcriber, terms, *, translations=None, threshold=None):
         self._transcriber = transcriber

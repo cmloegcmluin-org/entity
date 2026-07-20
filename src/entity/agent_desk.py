@@ -65,10 +65,10 @@ class AgentDesk:
         # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
         # reported to the user as fact, and both were denied on the spot by someone reading the log.
         self._monitor = monitor
-        # Which model his agents run on, and how hard they are told to think. Held HERE because
-        # he changes it by asking - and because an agent's session is fixed at birth, so a change
+        # Which model their agents run on, and how hard they are told to think. Held HERE because
+        # they change it by asking - and because an agent's session is fixed at birth, so a change
         # governs the next one started, never one already working. It was hardcoded and invisible;
-        # he had to ask what his agents were running and could not be told (see entity.models).
+        # they had to ask what their agents were running and could not be told (see entity.models).
         self._model, self._effort = DEFAULT_MODEL, DEFAULT_EFFORT
         self._clock = clock
         self._desked = {}
@@ -88,7 +88,7 @@ class AgentDesk:
 
     def choose(self, model=None, effort=None):
         """Put the NEXT agent on this model, at this effort, and say what it will be. Either half
-        left out keeps what was there, because he says one or the other as often as both."""
+        left out keeps what was there, because they say one or the other as often as both."""
         self._model = model or self._model
         self._effort = effort or self._effort
         return describe(self._model, self._effort)

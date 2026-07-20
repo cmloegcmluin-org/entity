@@ -1,7 +1,7 @@
 """What a message names that can be opened: a web address, or a path on this machine - what counts
 as one, what opens it, and how it is said aloud.
 
-He is not technical outside code, so the useful behaviour is not that a path is coloured - it is
+They are not technical outside code, so the useful behaviour is not that a path is coloured - it is
 that it OPENS. Entity writes real Windows paths into the conversation constantly, and reading one
 off the screen to type somewhere else is exactly the friction the window exists to remove.
 
@@ -19,7 +19,7 @@ import webbrowser
 from pathlib import Path, PureWindowsPath
 
 # A drive-letter path, a UNC share, or an http(s) address. Nothing looser: a bare `src/entity` is
-# indistinguishable from "and/or" or "he/she", and a wrong thing offered as openable is worse than
+# indistinguishable from "and/or" or "they/she", and a wrong thing offered as openable is worse than
 # a right one left plain.
 _LINK = re.compile(r"https?://\S+|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+")
 
@@ -42,7 +42,7 @@ def link_parts(text, *, exists=os.path.exists):
 
     The hard case is a space: "C:\\Users\\ada\\Field Notes\\inbox" cannot be told from a
     path followed by another word by looking at the text alone - which is why a single broken link
-    is what he saw. So the filesystem is asked. A drive-letter or UNC match is extended across the
+    is what they saw. So the filesystem is asked. A drive-letter or UNC match is extended across the
     following words to the longest run that actually exists on disk; a run that exists nowhere
     stays the one word it was, exactly as before, and a URL (which can hold no space) is always the
     one word. The page draws only what this returns, so the rule lives here, where it is tested."""
@@ -98,7 +98,7 @@ def _widest(words, index, exists):
 
 
 # What a person says instead of reading an address out. A stand-in rather than nothing: dropping
-# it would leave a sentence that no longer says there IS anything to open, and he has already
+# it would leave a sentence that no longer says there IS anything to open, and they have already
 # objected to hearing less than what was written.
 SPOKEN_ADDRESS = "the link"
 

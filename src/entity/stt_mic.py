@@ -75,12 +75,12 @@ def carries_speech(voiced, min_run=MIN_VOICED_RUN):
     where a burst starts and ends; it says nothing about whether a word is inside it. A single tap,
     creak or breath clears the bar, and the burst then has to wait out a whole pause before it can
     end - so the model gets a second of near silence and, rather than nothing, returns the likeliest
-    thing anyone ever says. Replaying his own sessions, that was some 90 chunks per 20 minutes, all
+    thing anyone ever says. Replaying their own sessions, that was some 90 chunks per 20 minutes, all
     of them invented: "Okay.", "Yeah.", "Thank you."
 
     Continuity is what separates the two, not loudness: speech carries syllables, ~150 ms of sound
     that does not let up, while noise hovering near the bar sputters - isolated frames scattered
-    through silence. Across two replayed sessions nothing actually spoken (his voice, the Entity's
+    through silence. Across two replayed sessions nothing actually spoken (their voice, the Entity's
     own through the room) ran under 6 frames, and the invented chunks sat at 1-4.
     """
     run = 0

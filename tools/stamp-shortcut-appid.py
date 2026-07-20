@@ -55,7 +55,7 @@ def read_back(path):
 
 if __name__ == "__main__":
     # An explicit path wins; otherwise both copies, and one that isn't there is simply said so -
-    # he may have pinned it and not put it in the Start Menu, or the other way round.
+    # they may have pinned it and not put it in the Start Menu, or the other way round.
     wanted = [Path(sys.argv[1])] if len(sys.argv) > 1 else list(SHORTCUTS)
     for shortcut in wanted:
         if not shortcut.exists():

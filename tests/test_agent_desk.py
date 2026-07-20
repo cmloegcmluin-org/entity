@@ -111,7 +111,7 @@ class _DyingAgent:
 def test_agents_start_on_the_model_he_chose_defaulting_to_opus_on_high():
     # "Sonnet's not so hot either. I usually use Opus... It should default to Opus 4.8 on High, but
     # I should be able to ask it for Fable Max for example if I want." It was hardcoded to Sonnet
-    # and invisible - he asked what his agents were running and could not be told.
+    # and invisible - they asked what their agents were running and could not be told.
     started = []
 
     def factory(name, cwd, decide, *, model, effort):
@@ -130,7 +130,7 @@ def test_agents_start_on_the_model_he_chose_defaulting_to_opus_on_high():
 
 def test_changing_the_model_leaves_an_agent_already_working_where_it_is():
     # A session's model is fixed when it opens, so a change can only govern the next agent. Saying
-    # otherwise would be the kind of claim he checks and finds false.
+    # otherwise would be the kind of claim they check and find false.
     started = []
     desk = AgentDesk(Outbox(), agent_factory=lambda name, cwd, decide, *, model, effort:
                      started.append((name, model)) or FakeAgent(name, cwd, decide))
@@ -140,7 +140,7 @@ def test_changing_the_model_leaves_an_agent_already_working_where_it_is():
     desk.choose("claude-fable-5", None)
 
     assert started == [("already-running", "claude-opus-4-8")]  # untouched by the later change
-    assert desk.running_on() == "Fable on high"  # effort left alone, since he only named a model
+    assert desk.running_on() == "Fable on high"  # effort left alone, since they only named a model
 
 
 def test_starting_an_agent_does_not_block_the_caller():
@@ -210,7 +210,7 @@ def test_every_task_carries_the_standing_rule_to_rebase_before_showing_work():
 
     assert _wait_for(lambda: bool(made and made[0].messages))
     sent = made[0].messages[0]
-    assert sent.startswith("fix the drive link")  # his ask first; the rule stands after it
+    assert sent.startswith("fix the drive link")  # their ask first; the rule stands after it
     assert "rebase" in sent and "origin/main" in sent
     desk.close()
 

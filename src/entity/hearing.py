@@ -1,20 +1,20 @@
-"""What he is saying, while he is still saying it.
+"""What they are saying, while they are still saying it.
 
-The mic only ever printed a sentence once he had finished it, because a burst is transcribed when
-a pause ends it - so the wait he saw was the pause itself, plus the reading. To print words as
+The mic only ever printed a sentence once they had finished it, because a burst is transcribed when
+a pause ends it - so the wait they saw was the pause itself, plus the reading. To print words as
 they arrive, the burst so far has to be read over and over while it grows.
 
 Parakeet cannot be fed audio a piece at a time: `recognize` takes a waveform and reads all of it.
-So each reading re-reads the whole burst from its start. Measured on his own captured sessions on
+So each reading re-reads the whole burst from its start. Measured on their own captured sessions on
 this machine: 90 ms at one second of speech, 150 ms at five, 280 ms at ten, 640 ms at twenty -
 around thirty times faster than real time, which is what makes re-reading affordable at all. It is
 still far too slow to sit on the pump's thread, where it would put the mic a second behind per
-second he talked, so the readings happen on a worker and the pump only ever leaves a snapshot.
+second they talked, so the readings happen on a worker and the pump only ever leaves a snapshot.
 
-The readings themselves are not fit to show. Replayed over his own audio, the tail of every one of
-them is guesswork the next reading rewrites - "I need to say" became "I need to set up in Google
-Cloud" - and four times in one three-second sentence the model answered a stretch it could not
-place with nothing at all. Printed straight, the line would empty and refill while he read it.
+The readings themselves are not fit to show. Replayed over their own audio, the tail of every one of
+them is guesswork the next reading rewrites - "I need to see" became "I need to see the release
+notes" - and four times in one three-second sentence the model answered a stretch it could not
+place with nothing at all. Printed straight, the line would empty and refill while they read it.
 What is trustworthy is the part two readings in a row AGREE on: across 123 readings of ten real
 bursts, the agreed head grew word by word and went backwards three times, twice only in casing or
 a comma. So a word is shown once it has been heard the same way twice, and the line never shrinks.
@@ -46,7 +46,7 @@ def settled(older, newer):
 
 
 class Hearing:
-    """The live line: what he has said so far in the burst he is still speaking."""
+    """The live line: what they have said so far in the burst they are still speaking."""
 
     def __init__(self, transcriber, on_hearing, *, every=READ_EVERY, idle=IDLE):
         self._transcriber = transcriber
@@ -73,7 +73,7 @@ class Hearing:
         return self._line
 
     def rest(self):
-        """He paused: the burst is over. Its finished text goes in the draft box, so the live line
+        """They paused: the burst is over. Its finished text goes in the draft box, so the live line
         comes down rather than standing there saying the same thing twice."""
         with self._lock:
             self._burst += 1  # a reading still in the air belongs to a burst nobody is in now
@@ -105,7 +105,7 @@ class Hearing:
         burst, audio = waiting
         hypothesis = self._transcriber.transcribe(audio)
         with self._lock:
-            stale = burst != self._burst  # he stopped talking while this was being read
+            stale = burst != self._burst  # they stopped talking while this was being read
         if not stale:
             self.hear(hypothesis)
         return True

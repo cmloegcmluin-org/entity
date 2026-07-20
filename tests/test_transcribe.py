@@ -66,9 +66,9 @@ def test_correcting_transcriber_applies_the_translations_it_ships_with():
     assert corrector.transcribe("AUDIO") == "how's our Claude agent"
 
 
-def test_his_own_translations_are_applied_beside_the_ones_that_ship():
-    corrector = CorrectingTranscriber(FakeTranscriber("open hydeas for the cloud agent"), [],
-                                      translations={"hydeas": "Notecraft"})
+def test_a_users_own_translations_are_applied_beside_the_ones_that_ship():
+    corrector = CorrectingTranscriber(FakeTranscriber("open notecraf for the cloud agent"), [],
+                                      translations={"notecraf": "Notecraft"})
 
     assert corrector.transcribe("AUDIO") == "open Notecraft for the Claude agent"
 

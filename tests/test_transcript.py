@@ -164,7 +164,7 @@ def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
     # "There should be a way to reload Entity so that it gets any fixes but without breaking the
     # current session." The half that breaks is the thread of the conversation: a fresh process
     # started with no memory of five minutes ago. The transcript already holds those turns; this
-    # reads them back as (his words, the reply) pairs so a restarted brain can be seeded with them.
+    # reads them back as (their words, the reply) pairs so a restarted brain can be seeded with them.
     from entity.transcript import recent_turns
 
     log = tmp_path / "session-20260719-200000.log"
@@ -187,7 +187,7 @@ def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
 
 
 def test_only_the_newest_session_is_read_back(tmp_path):
-    # Continuity is with the conversation he just had, not with every session ever - the older
+    # Continuity is with the conversation they just had, not with every session ever - the older
     # history is already in learned.md and on screen; re-feeding weeks of it would drown the seed.
     from entity.transcript import recent_turns
 
@@ -210,7 +210,7 @@ def test_recent_turns_keeps_only_the_tail_and_survives_absence(tmp_path):
 
 
 def test_a_question_the_session_died_on_is_not_paired_with_the_next_answer(tmp_path):
-    # A crash between his words and the reply must not stitch his question to the answer of the
+    # A crash between their words and the reply must not stitch their question to the answer of the
     # NEXT question - a seeded conversation where answers sit under the wrong questions is worse
     # than no seed at all.
     from entity.transcript import recent_turns

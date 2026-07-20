@@ -139,14 +139,14 @@ def _agent_protocol_note(roster, logs):
         "the desk already keeps the real one. You CAN close an agent's tab when asked: move that "
         f"log into the 'closed' folder inside {logs} and the tab goes with it. Never say "
         "you're unable to. "
-        "WHICH MODEL THE AGENTS RUN ON is his to choose and yours to report. They run on Opus 4.8 "
-        "at high effort unless he says otherwise. When he names a model or an effort - 'use Fable "
+        "WHICH MODEL THE AGENTS RUN ON is their to choose and yours to report. They run on Opus 4.8 "
+        "at high effort unless they say otherwise. When they name a model or an effort - 'use Fable "
         "on max', 'put them back on Opus', 'crank the effort up' - end your reply with `[MODEL] "
-        "<what he said, verbatim>` and it takes effect for the NEXT agent you start; one already "
-        "working keeps the model it opened with, so never tell him a running agent has changed. If "
-        "he simply ASKS what they are on, that is a question, not a change: answer it. Never say "
+        "<what they said, verbatim>` and it takes effect for the NEXT agent you start; one already "
+        "working keeps the model it opened with, so never tell them a running agent has changed. If "
+        "they simply ASKS what they are on, that is a question, not a change: answer it. Never say "
         "you don't get to pick or that it's whatever the harness defaults to - you do get to pick, "
-        "and being told that instead of an answer is what made him ask a second time. "
+        "and being told that instead of an answer is what made them ask a second time. "
         "And when you are told to FILE a self-improvement, an enhancement, or an idea for "
         "your own roadmap, put `[IMPROVE] <the item, one line>` on a line of its own - it lands in "
         "the profile's Enhancements section and appears in the window immediately. File it the "
@@ -240,8 +240,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
-    # Seeded with the tail of the last session's transcript, so a restart - his only way of picking
-    # up a fix - resumes the conversation instead of greeting him as a stranger.
+    # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
+    # up a fix - resumes the conversation instead of greeting them as a stranger.
     sdk_brain = SdkBrain(persona=_persona(), user=user_name(load_profile()),
                          seed_turns=recent_turns(TRANSCRIPTS))
     sdk_brain.warmup()
@@ -260,7 +260,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         from entity.hearing import Hearing
 
         transcriber, mic, recorder = _open_ears(announce)
-        # Words on screen while he is still saying them: the burst so far, read over and over on a
+        # Words on screen while they are still saying them: the burst so far, read over and over on a
         # worker of its own. The same transcriber, on purpose - one 2.4 GB model, loaded already,
         # and onnxruntime will run it from both threads.
         hearing = Hearing(transcriber, lambda t: feed.push("hearing", t))

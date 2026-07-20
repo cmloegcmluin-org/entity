@@ -77,9 +77,9 @@ LATE_CLOSURE = "handled."
 # Said back to the brain on the turn AFTER anything was spoken in its name that it did not write -
 # the acknowledgement, the handoff line, an agent's notice, a canned confirmation.
 #
-# The user hears ONE Entity. The brain only ever knew the half of it that it composed, so he could
+# The user hears ONE Entity. The brain only ever knew the half of it that it composed, so they could
 # quote a line at it and be told, truthfully, "I have no record of typing that myself" - which from
-# where he sits is a thing that said something and then denied saying it. His words: "a basic
+# where they sit is a thing that said something and then denied saying it. Their words: "a basic
 # principle of two people having a conversation is that each person is aware of the things that
 # they've said. If what I consider to be one Entity is actually a bunch of disconnected fakers who
 # aren't aware of each other, then the flimsy occasional illusion of you being a coherent Entity is
@@ -352,7 +352,7 @@ class Conversation:
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
         try:
             # Said, not written: an address becomes "the link" and a path becomes its filename. The
-            # line above already showed the real thing, which is what he reads and clicks - this is
+            # line above already showed the real thing, which is what they read and clicks - this is
             # only the difference between what is on the screen and what a person would say aloud.
             self._tts.speak(as_spoken(text), interrupt=self._interrupt)
         except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
@@ -603,8 +603,8 @@ class Conversation:
 
         Delivered on the same terms as any other reply: short enough, and it is simply said. Offering
         every collected answer regardless of size announced "I've got a longer answer for you" ahead
-        of a sixteen-character sentence, and he asked why - then the offer sat unclaimed for
-        twenty-one minutes, because an answer he has to say yes to is one more thing to notice.
+        of a sixteen-character sentence, and they asked why - then the offer sat unclaimed for
+        twenty-one minutes, because an answer they have to say yes to is one more thing to notice.
         """
         background = self._background
         if background is None or not background["done"].is_set():

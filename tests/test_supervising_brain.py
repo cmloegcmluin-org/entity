@@ -192,11 +192,11 @@ def test_a_tell_directive_reaches_an_agent_already_running():
     assert said == ""  # delivered; only a failure to deliver would speak
 
 
-def test_what_the_brain_said_to_him_survives_a_directive():
-    # His all-caps demand for a way to actually test the work was answered, in full, with "Passed
-    # that to drive-native-gdoc-export." The wrapper threw away every word the brain had for him and
-    # substituted a canned line. Eight turns in one session went out that way - so any turn where he
-    # asked something AND something got filed or dispatched, his question simply went unanswered.
+def test_what_the_brain_said_to_the_user_survives_a_directive():
+    # Their all-caps demand for a way to actually test the work was answered, in full, with "Passed
+    # that to export-report-as-csv." The wrapper threw away every word the brain had for them and
+    # substituted a canned line. Eight turns in one session went out that way - so any turn where they
+    # asked something AND something got filed or dispatched, their question simply went unanswered.
     desk = FakeDesk(knows={"fixer"})
     brain = _brain(FakeInner("Yes - you need to see it running before you sign anything off.\n"
                              "[TELL] fixer: stand a test instance up on another port"), desk)
@@ -208,7 +208,7 @@ def test_what_the_brain_said_to_him_survives_a_directive():
 
 
 def test_a_filing_can_carry_an_answer_before_or_after_it():
-    # "Filed." was the whole reply to "dig into the log files for last session", and he asked back
+    # "Filed." was the whole reply to "dig into the log files for last session", and they asked back
     # "Filed? What do you mean filed?" - the filing had eaten the answer.
     filed = []
     brain = _brain(FakeInner("[IMPROVE] level meter should show clipping\n"
@@ -223,7 +223,7 @@ def test_a_filing_can_carry_an_answer_before_or_after_it():
 
 def test_every_improvement_asked_for_is_filed_not_just_the_first():
     # "Well, you filed one of the two. Please file the other one." Only the first marker line was
-    # ever read, so asking for two tickets filed one and cost him another round to notice and say so.
+    # ever read, so asking for two tickets filed one and cost them another round to notice and say so.
     filed = []
     brain = _brain(FakeInner("On it.\n"
                              "[IMPROVE] stop claiming a longer answer when the answer is one word\n"
@@ -234,13 +234,13 @@ def test_every_improvement_asked_for_is_filed_not_just_the_first():
 
     assert filed == ["stop claiming a longer answer when the answer is one word",
                      "be aware of everything said in your own name"]
-    assert said == "On it."  # and no marker line is left in what he hears
+    assert said == "On it."  # and no marker line is left in what they hear
 
 
 def test_a_directive_with_nothing_said_alongside_it_is_covered_by_the_ack():
     # "Can you see how it's a waste of my time... this could all be collapsed into a single 'Got
-    # it.' within 5 seconds." The ack he hears at the top of every turn already confirms receipt,
-    # so a success with nothing else to say says nothing more - one "Got it." total, as he asked.
+    # it.' within 5 seconds." The ack they hear at the top of every turn already confirms receipt,
+    # so a success with nothing else to say says nothing more - one "Got it." total, as they asked.
     # Only a SUCCESS may be silent: failures below still speak.
     desk = FakeDesk(knows={"fixer"})
 
@@ -271,7 +271,7 @@ def test_asking_for_a_model_out_loud_changes_what_the_next_agent_runs_on():
 
 
 def test_a_model_it_could_not_make_out_says_what_is_still_running():
-    # Guessing here would put his real work on a model he did not ask for, and he would find out
+    # Guessing here would put their real work on a model they did not ask for, and they would find out
     # from the results rather than from Entity.
     class ModelDesk(FakeDesk):
         def choose(self, model=None, effort=None):
@@ -289,7 +289,7 @@ def test_a_malformed_marker_is_never_read_out_as_code():
     # "I don't appreciate how you're speaking to me in code. We're supposed to be having a
     # conversation as human like Entities." A marker it fumbled - no colon after the agent, an empty
     # target, a blank item - parsed as nothing, fell past every branch, and the raw reply went out
-    # bracket and all. Whatever else happens, marker syntax is not something he hears.
+    # bracket and all. Whatever else happens, marker syntax is not something they hear.
     desk = FakeDesk(knows={"fixer"})
 
     for fumbled in ("[TELL] fixer no colon here", "[SUPERVISE]\nsome task", "[IMPROVE]"):
@@ -299,7 +299,7 @@ def test_a_malformed_marker_is_never_read_out_as_code():
 
 
 def test_a_fumbled_marker_admits_it_rather_than_going_quiet():
-    # Silently swallowing it would be worse than the code: he'd be left believing the thing was
+    # Silently swallowing it would be worse than the code: they'd be left believing the thing was
     # filed or sent, and find out much later that nothing had happened at all.
     brain = _brain(FakeInner("[TELL] fixer no colon here"), FakeDesk(knows={"fixer"}))
 

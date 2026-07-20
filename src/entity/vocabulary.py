@@ -22,7 +22,7 @@ _SENTENCE_END = (".", "!", "?")
 # Mishearings that similarity can never catch, because what comes back is ordinary English. Every
 # one of these was counted in real session transcripts: "Claude" arrived as "cloud" seven times
 # against seven correct ones, and "worktree" as "Work Tree". Kept to what was actually observed and
-# to this app's own vocabulary - anything personal belongs in his own list, which the window shows
+# to this app's own vocabulary - anything personal belongs in their own list, which the window shows
 # these beside so the whole set is one thing to read.
 DEFAULT_TRANSLATIONS = {
     "cloud agent": "Claude agent",
@@ -95,17 +95,17 @@ def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
     return terms
 
 
-def translations_in_force(his=None):
-    """Every named translation that will actually be applied: the ones that ship, with his own
+def translations_in_force(their=None):
+    """Every named translation that will actually be applied: the ones that ship, with their own
     written over them. One rule in one place, because the window shows this list as the list in
     force and a second merge somewhere else would eventually disagree with it."""
-    return DEFAULT_TRANSLATIONS | dict(his or {})
+    return DEFAULT_TRANSLATIONS | dict(their or {})
 
 
 def _lookups(terms, translations):
     """Every table a match needs, built once per call.
 
-    `named` is the exact list - what he heard on the left, what he said on the right, looked up by
+    `named` is the exact list - what they heard on the left, what they said on the right, looked up by
     word count. `nearly` is the fuzzy one, also by word count, so two ordinary words are never
     glued into a coined name. `run_together` is every term with its spaces closed up, for the case
     where speech-to-text ran a whole name into one token."""
@@ -155,7 +155,7 @@ def _match_at(tokens, start, lookups, threshold):
 
 def correct_terms(text, terms, *, translations=(), threshold=0.82):
     """Rewrite `text`, replacing each near-miss with the closest known term above `threshold`, and
-    each phrase named in `translations` with what he actually said.
+    each phrase named in `translations` with what they actually said.
 
     A term can be one word or several - domain vocabulary usually is ("Bayesian inference"), so runs
     of words are matched as phrases, longest first, not one token at a time. Punctuation is peeled

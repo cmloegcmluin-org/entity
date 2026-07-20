@@ -9,7 +9,7 @@ def _three():
 
 
 def test_several_ready_at_once_are_read_out_numbered():
-    # "when several are ready, tell him which and let him choose the order." Joined into one
+    # "when several are ready, tell them which and let them choose the order." Joined into one
     # utterance they arrive as a wall with no way to take them one at a time.
     news = [News("fixer: the drive link is fixed", about="fixer"),
             News("docs-sidebar: needs your call on the width", about="docs-sidebar")]
@@ -27,7 +27,7 @@ def test_the_last_one_left_is_named_rather_than_numbered():
 
 def test_a_number_picks_the_one_at_that_place():
     # The whole reason they are numbered: an agent is named after its worktree, and no
-    # speech-to-text spells `drive-native-gdoc-export` back. A number always survives the trip.
+    # speech-to-text spells `export-report-as-csv` back. A number always survives the trip.
     assert chosen("two", _three()) == 1
     assert chosen("number three", _three()) == 2
     assert chosen("1", _three()) == 0
@@ -52,9 +52,9 @@ def test_a_word_two_of_them_share_picks_neither():
     # Worktrees cut from the same feature share most of their name. Answering about whichever came
     # first would sound certain and be wrong half the time; the roll call stands and they can say
     # a number instead.
-    news = [News("a", about="drive-export"), News("b", about="drive-native-gdoc-export")]
+    news = [News("a", about="sidebar-export"), News("b", about="sidebar-import")]
 
-    assert chosen("the drive one", news) is None
+    assert chosen("the sidebar one", news) is None
 
 
 def test_words_that_name_none_of_them_are_not_a_pick():

@@ -42,8 +42,8 @@ def test_a_remember_false_turn_stays_out_of_the_recent_window():
 
 
 def test_a_brain_seeded_with_past_turns_starts_mid_conversation():
-    # A restart used to greet him as a stranger five minutes after they'd been mid-task - that is
-    # the "breaking the current session" half of his reload ticket. Seeded, the FIRST session opens
+    # A restart used to greet them as a stranger five minutes after they'd been mid-task - that is
+    # the "breaking the current session" half of their reload ticket. Seeded, the FIRST session opens
     # already carrying the recent back-and-forth, exactly as a compaction reseed does.
     made = []
 

@@ -7,7 +7,7 @@ user hears whatever the brain had to say - never the raw marker.
   [SUPERVISE] <where>        start a fresh agent per worktree there; everything on the
   <the task, any length>     following lines is the task that agent is given
   [TELL] <name>: <message>   say something more to an agent already running
-  [MODEL] <what he said>     put the NEXT agent on that model/effort ("fable max", "opus high")
+  [MODEL] <what they said>     put the NEXT agent on that model/effort ("fable max", "opus high")
   [IMPROVE] <one line>       file a self-improvement that was asked for - it lands in the
                              profile's Enhancements section, which the window shows live
                              (one line per item, and every one of them is filed)
@@ -50,7 +50,7 @@ _MODEL = "[MODEL]"
 
 
 def parse_model(reply):
-    """Pull `[MODEL] <what he said>` out of a reply, or None."""
+    """Pull `[MODEL] <what they said>` out of a reply, or None."""
     if _MODEL not in reply:
         return None
     line = reply.split(_MODEL, 1)[1].strip().split("\n", 1)[0].strip()
@@ -62,7 +62,7 @@ def parse_model(reply):
 # A directive used to consume the whole reply and hand back a canned line, so any turn that filed or
 # dispatched something answered whatever they had asked with "Filed." or "Passed that to <agent>." -
 # eight of them in one session. Their all-caps demand to be shown the work running got "Passed that
-# to drive-native-gdoc-export." and nothing else. The question wasn't deprioritized; the answer was
+# to export-report-as-csv." and nothing else. The question wasn't deprioritized; the answer was
 # written and then deleted.
 
 
@@ -83,8 +83,8 @@ def _plain(reply):
     empty target, a blank item - parses as no directive at all and used to fall through to here and
     be read out bracket and all: "I don't appreciate how you're speaking to me in code. We're
     supposed to be having a conversation as human like Entities." So the marker lines are dropped,
-    and what's left is what he hears. If that leaves nothing, say the attempt failed rather than
-    going quiet - silence would leave him believing something was filed or sent when it wasn't.
+    and what's left is what they hear. If that leaves nothing, say the attempt failed rather than
+    going quiet - silence would leave them believing something was filed or sent when it wasn't.
     """
     if not any(marker in reply for marker in (_SUPERVISE, _TELL, _IMPROVE, _MODEL)):
         return reply
@@ -98,8 +98,8 @@ def _plain(reply):
 def parse_improvements(reply):
     """Every `[IMPROVE] <one line>` in the reply, in the order they were written.
 
-    All of them, not just the first: asked for two tickets it filed one, and he had to notice the
-    gap and ask again for something he had already asked for."""
+    All of them, not just the first: asked for two tickets it filed one, and they had to notice the
+    gap and ask again for something they had already asked for."""
     return [
         item
         for item in (line.partition(_IMPROVE)[2].strip() for line in str(reply).splitlines())
@@ -162,7 +162,7 @@ class SupervisingBrain:
     def respond(self, utterance):
         reply = self._inner.respond(utterance)
         # A success with no aside returns "" - said aloud, a canned confirmation was one more stock
-        # phrase on top of the ack that already told him he was heard: "this could all be collapsed
+        # phrase on top of the ack that already told them they were heard: "this could all be collapsed
         # into a single 'Got it.'". Only successes may be silent; every failure below still speaks.
         improvements = parse_improvements(reply)
         if improvements:

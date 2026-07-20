@@ -107,12 +107,12 @@ class Mirror:
         self._feed = feed
         self.state = "muted"  # the mic starts off; nothing is heard until it is turned on
         self.level = 0.0
-        # The sentence he is still in the middle of. A state, not a hand-off: it stands on screen
+        # The sentence they are still in the middle of. A state, not a hand-off: it stands on screen
         # until it grows or is taken down, so every poll carries it.
         self.hearing = ""
         self._typed = []      # dictation's words, waiting for the page to put them in the box
         self._send = False    # dictation said "over": the box is to be sent as it stands
-        self._retract = 0     # he said "scratch that": chunks already in the box to take back out
+        self._retract = 0     # they said "scratch that": chunks already in the box to take back out
 
     def drain(self):
         """Take everything the conversation and the dictation pump have said since last time."""

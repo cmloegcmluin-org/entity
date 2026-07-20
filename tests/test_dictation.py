@@ -95,9 +95,9 @@ class MicWithAWorkerBeside:
             self._hearing.step()
 
 
-def test_his_words_reach_the_window_while_he_is_still_saying_them():
+def test_words_reach_the_window_while_they_are_still_being_said():
     # The complaint itself: "it doesn't actually print out what it's hearing me say until I stop
-    # speaking". The burst is only transcribed once a pause ends it, so the wait he saw was the
+    # speaking". The burst is only transcribed once a pause ends it, so the wait they saw was the
     # pause. Now the burst so far is read as it grows, and the settled words go up as they settle.
     ears = Ears()
     heard = []
@@ -117,9 +117,9 @@ def test_his_words_reach_the_window_while_he_is_still_saying_them():
     assert ears.drafted == ["Pick up the drive work."]
 
 
-def test_the_live_line_never_puts_the_entitys_own_voice_up_as_his_words():
-    # His draft box once opened with "I do for you" - the tail of Entity's own greeting, heard back
-    # through his speakers. A line that printed as it listened would put that on screen a word at a
+def test_the_live_line_never_puts_the_entitys_own_voice_up_as_the_users_words():
+    # Their draft box once opened with "I do for you" - the tail of Entity's own greeting, heard back
+    # through their speakers. A line that printed as it listened would put that on screen a word at a
     # time, and faster.
     ears = Ears()
     heard = []
@@ -149,7 +149,7 @@ def test_stop_listening_mutes_and_keeps_the_words_before_it():
 
 
 def test_scratch_that_takes_back_what_he_said_before_it_and_never_lands_in_the_draft():
-    # The other half of what he asked for: a spoken way to rewind and say it again. He says a
+    # The other half of what they asked for: a spoken way to rewind and say it again. They says a
     # sentence, sees it come out wrong, and takes it back without reaching for the keyboard.
     ears = Ears()
     dictation = Dictation(
@@ -164,8 +164,8 @@ def test_scratch_that_takes_back_what_he_said_before_it_and_never_lands_in_the_d
 
 
 def test_scratch_that_in_the_same_breath_takes_back_the_words_in_that_breath():
-    # He catches it before he has even paused. What he is taking back is right there in the chunk,
-    # so none of it lands - and the sentence already in the box, which he did not object to, stays.
+    # They catches it before they have even paused. What they are taking back is right there in the chunk,
+    # so none of it lands - and the sentence already in the box, which they did not object to, stays.
     ears = Ears()
     dictation = Dictation(
         FakeTranscriber("pick up the Notecraft work",
@@ -209,7 +209,7 @@ def test_over_carries_a_short_answer_through_instead_of_reading_it_as_filler():
     # "Yeah, over" is the exact case the backchannel filter is written to let through - it refuses
     # to call anything filler if the terminator is in it. Stripping the terminator FIRST and then
     # asking took that protection away: the answer was dropped, the submit found an empty draft
-    # box, and saying "over" did nothing whatsoever. Half his answers are one of these words.
+    # box, and saying "over" did nothing whatsoever. Half their answers are one of these words.
     ears = Ears()
     dictation = Dictation(FakeTranscriber("Yeah, over."), FakeMic(_burst_then_pause()),
                           pause_frames=3, **ears.kwargs())
@@ -221,7 +221,7 @@ def test_over_carries_a_short_answer_through_instead_of_reading_it_as_filler():
 
 
 def test_over_ends_the_recording_as_well_as_submitting():
-    # Both halves of what he asked for: "over" is the whole gesture for "I'm done talking", so it
+    # Both halves of what they asked for: "over" is the whole gesture for "I'm done talking", so it
     # hands the turn over AND puts the mic down, rather than leaving it live on the room.
     ears = Ears()
     dictation = Dictation(FakeTranscriber("send the report over"), FakeMic(_burst_then_pause()),
@@ -249,7 +249,7 @@ def test_the_level_meter_sees_the_mic_only_while_recording():
 
 
 def test_a_burst_with_no_sustained_sound_is_never_even_transcribed():
-    # Replayed from his own session audio: a single tap or creak clears the speech bar, the burst
+    # Replayed from their own session audio: a single tap or creak clears the speech bar, the burst
     # then has to wait out a whole pause before it ends, and Parakeet - handed a second of near
     # silence - answers with the likeliest thing anyone ever says ("Thank you.", "Okay."). Some 90
     # times in 20 minutes. Nothing a person says is that brief, so the burst never goes to the model.
@@ -419,7 +419,7 @@ def test_auto_listening_opens_the_mic_when_it_finishes_speaking():
 
 
 def test_auto_listening_leaves_the_mic_he_used_to_cut_it_off_alone():
-    # He silenced it mid-sentence: that is not an invitation to record his next breath, whatever
+    # They silenced it mid-sentence: that is not an invitation to record their next breath, whatever
     # the mode says. The button and the reply ending race each other, so both orders have to hold.
     for silence_first in (True, False):
         ears = Ears()

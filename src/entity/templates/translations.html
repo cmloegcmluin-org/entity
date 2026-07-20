@@ -2,7 +2,7 @@
 {% block title %} · Translations{% endblock %}
 
 {% block content %}
-{#- What Entity is quietly rewriting, written out. A correction he cannot see is one he cannot
+{#- What Entity is quietly rewriting, written out. A correction they cannot see is one they cannot
     argue with, and "cloud agent" for "Claude agent" is not a near miss anything could have
     guessed - it is a rule, so it is shown as one, alongside the words the fuzzy pass snaps to. -#}
 <main id="content" class="reading">
@@ -14,7 +14,7 @@
         <span class="heard">{{ row.heard }}</span>
         <span class="arrow" aria-hidden="true">→</span>
         <span class="said">{{ row.said }}</span>
-        {% if not row.his %}<span class="stock">built in</span>{% endif %}
+        {% if not row.own %}<span class="stock">built in</span>{% endif %}
       </li>
       {% else %}
       <li class="empty">Nothing is being swapped.</li>
@@ -23,7 +23,7 @@
     <details class="as-text" open>
       <summary>Your own — one per line, as <code>heard -&gt; said</code>. Entity picks up changes
         when it next starts.</summary>
-      <textarea class="writing" data-translations="true" placeholder="hydeas -&gt; Notecraft"
+      <textarea class="writing" data-translations="true" placeholder="notecraf -&gt; Notecraft"
                 aria-label="Your own translations">{{ mine }}</textarea>
     </details>
   </section>

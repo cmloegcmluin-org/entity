@@ -36,24 +36,24 @@ def test_translations_are_read_as_the_arrow_he_writes_them_with():
         "# what it keeps mishearing\n"
         "\n"
         "cloud agent -> Claude agent\n"
-        "- hydeas -> Notecraft\n"
+        "- notecraf -> Notecraft\n"
         "work tree → worktree\n"
         "not a translation\n"
     )
     # Lowercased on the left, because that is the side it is looked up by; a line with no arrow on
     # it is not one, and is left out rather than guessed at.
     assert translation_pairs(text) == {
-        "cloud agent": "Claude agent", "hydeas": "Notecraft", "work tree": "worktree",
+        "cloud agent": "Claude agent", "notecraf": "Notecraft", "work tree": "worktree",
     }
 
 
 def test_translations_are_saved_as_the_file_he_can_read_back(tmp_path):
     path = tmp_path / "translations.md"
 
-    save_translations("Hydeas -> Notecraft\n\ncloud agent -> Claude agent", path)
+    save_translations("Notecraf -> Notecraft\n\ncloud agent -> Claude agent", path)
 
     assert translation_pairs(path.read_text(encoding="utf-8")) == {
-        "hydeas": "Notecraft", "cloud agent": "Claude agent",
+        "notecraf": "Notecraft", "cloud agent": "Claude agent",
     }
 
 
@@ -245,14 +245,14 @@ def test_completing_an_enhancement_ticks_it_and_leaves_it_there(tmp_path):
 
     path = tmp_path / "profile.md"
     path.write_text(
-        "## Enhancements\n- [ ] better voice\n- [ ] Only notice HIS voice: speaker enrollment\n",
+        "## Enhancements\n- [ ] better voice\n- [ ] Only notice the user's voice: speaker enrollment\n",
         encoding="utf-8",
     )
 
     assert complete_enhancement("speaker enrollment", path=path) is True
 
     body = profile_sections(path.read_text(encoding="utf-8"))["Enhancements"]
-    assert "- [x] Only notice HIS voice: speaker enrollment" in body  # ticked, and still readable
+    assert "- [x] Only notice the user's voice: speaker enrollment" in body  # ticked, and still readable
     assert "- [ ] better voice" in body  # and nothing else was touched
 
 
@@ -282,7 +282,7 @@ def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
 def test_a_section_reads_back_as_the_items_the_window_ticks():
     # The window draws boxes to click, so what it is handed is items - whether each is done and
     # what it says - rather than lines for it to parse a second time. The file stays markdown:
-    # that same file is what the brain loads as standing context and what he reads outside the app.
+    # that same file is what the brain loads as standing context and what they read outside the app.
     from entity.memory import checklist_items
 
     stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
@@ -297,7 +297,7 @@ def test_a_section_reads_back_as_the_items_the_window_ticks():
 
 def test_the_items_go_back_as_the_markdown_the_brain_reads():
     # A bullet written before the boxes existed comes back as `- [ ]`, so the list upgrades itself
-    # the first time he touches it rather than needing a migration run over a personal file the
+    # the first time they touch it rather than needing a migration run over a personal file the
     # running app may be autosaving at that moment.
     from entity.memory import checklist_items, checklist_markdown
 
@@ -311,7 +311,7 @@ def test_the_items_go_back_as_the_markdown_the_brain_reads():
 def test_several_lines_pasted_into_one_row_become_the_items_they_read_as():
     # A row is one line in the file, so a pasted block landing in one of them would otherwise be
     # stored as a bullet with newlines inside it - which reads back as items that have lost their
-    # place in the list. It is split where he pasted the breaks, which is where he meant them.
+    # place in the list. It is split where they pasted the breaks, which is where they meant them.
     from entity.memory import checklist_markdown
 
     assert checklist_markdown([{"done": False, "text": "better voice\nspeaker enrollment"}]) == (
@@ -321,8 +321,8 @@ def test_several_lines_pasted_into_one_row_become_the_items_they_read_as():
 
 def test_a_row_with_nothing_typed_into_it_yet_is_not_stored():
     # Pressing Enter makes the row before there are any words in it - and Enter is how every item
-    # is made, so an untyped row is the normal state of the one he is about to fill in. Storing it
-    # would leave a bullet with nothing after it sitting in his profile.
+    # is made, so an untyped row is the normal state of the one they are about to fill in. Storing it
+    # would leave a bullet with nothing after it sitting in their profile.
     from entity.memory import checklist_markdown
 
     assert checklist_markdown([{"done": False, "text": "better voice"},
@@ -347,27 +347,27 @@ def test_ticking_and_typing_write_the_whole_list_back_into_its_section(tmp_path)
 
 def test_an_item_filed_while_the_page_sat_open_survives_the_next_thing_he_types(tmp_path):
     # Entity files enhancements into this same list, and the window is open all session. Every
-    # keystroke writes the whole list back, so without this the next character he types deletes
+    # keystroke writes the whole list back, so without this the next character they type deletes
     # whatever it filed a moment ago.
     from entity.memory import append_enhancement, profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
-    drawn = ["better voice"]        # what the page was showing when he started typing into it
-    append_enhancement("filed while he typed", path=path)
+    drawn = ["better voice"]        # what the page was showing when they started typing into it
+    append_enhancement("filed while they typed", path=path)
 
     save_checklist(path, "Enhancements", [{"done": False, "text": "better voice, Cartesia"}],
                    drawn=drawn)
 
     assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
-        "- [ ] better voice, Cartesia\n- [ ] filed while he typed"
+        "- [ ] better voice, Cartesia\n- [ ] filed while they typed"
     )
 
 
 def test_an_item_he_edits_after_ticking_it_is_not_filed_a_second_time(tmp_path):
     # The first save upgrades `- swim` to `- [x] swim` in the file. Comparing what the page holds
     # against the stored LINES then reads that upgrade as an item nobody had seen, and files a
-    # second copy of it beside his edit - so the comparison is on the words of an item instead.
+    # second copy of it beside their edit - so the comparison is on the words of an item instead.
     from entity.memory import profile_sections, save_checklist
 
     path = tmp_path / "profile.md"

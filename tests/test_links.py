@@ -25,7 +25,7 @@ def test_a_web_address_is_not_read_out_aloud():
 
 def test_a_path_is_said_the_way_a_person_says_it_and_the_sentence_keeps_its_punctuation():
     # The last part is what anyone would actually say - "it's in profile.md" - and it still tells
-    # him WHICH file, which "that file" would not. The full stop after it is the sentence's.
+    # them WHICH file, which "that file" would not. The full stop after it is the sentence's.
     assert as_spoken(r"I put it in C:\Users\ada\workspace\entity\runtime\profile.md.") == \
         "I put it in profile.md."
     assert as_spoken(r"Look in (C:\Users\ada\workspace\entity) for it.") == "Look in (entity) for it."

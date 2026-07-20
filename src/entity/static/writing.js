@@ -6,8 +6,8 @@
 
    And it writes back BEFORE the page goes. A save half a second after the last keystroke never
    happens at all if the next thing you do is click another page in the bar, which is exactly how
-   the profile lost everything he added to it: "I add new items, tab away, tab back, and they're
-   just gone." So whatever is still waiting goes out the moment what he is editing loses focus,
+   the profile lost everything they added to it: "I add new items, tab away, tab back, and they're
+   just gone." So whatever is still waiting goes out the moment what they are editing loses focus,
    and again on the way off the page - by beacon, the only send that outlives the page that
    started it. */
 
@@ -61,7 +61,7 @@ function atOnce(what, save) {
 
 /* A click on another page in the bar takes this one away with the edit still on its timer. Both of
    these fire while the page can still speak: `pagehide` is its last word, and a window merely
-   hidden - he switched to something else - may never come back to fire anything. */
+   hidden - they switched to something else - may never come back to fire anything. */
 const flushAll = () => { for (const what of [...waiting.keys()]) flush(what, true); };
 addEventListener("pagehide", flushAll);
 document.addEventListener("visibilitychange", () => { if (document.hidden) flushAll(); });
@@ -121,10 +121,10 @@ function caretIn(words) {
 }
 
 for (const list of document.querySelectorAll(".checklist")) {
-  /* What the page believes the file holds, so a save can tell his own edit from an item Entity
+  /* What the page believes the file holds, so a save can tell their own edit from an item Entity
      filed into the same section while the window sat open. It is what was last SENT rather than
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
-     it, and a stale answer here files a second copy of everything he has edited since. */
+     it, and a stale answer here files a second copy of everything they have edited since. */
   let drawn = itemsOf(list).map((item) => item.text);
   const save = (leaving) => {
     const items = itemsOf(list);
@@ -150,7 +150,7 @@ for (const list of document.querySelectorAll(".checklist")) {
     if (event.key === "Enter") {
       /* Enter is how an item is made - the whole point of this page. Whatever is to the right of
          the caret goes with it, so Enter at the end of a line (which is where it is pressed) makes
-         an empty one, and Enter in the middle of one splits it where he asked. */
+         an empty one, and Enter in the middle of one splits it where they asked. */
       event.preventDefault();
       const said = words.textContent;
       const [from, to] = caretIn(words);
@@ -163,7 +163,7 @@ for (const list of document.querySelectorAll(".checklist")) {
       soon(list, save);
       caretTo(next, true);                // ...which loses focus, and sends what was just made
     } else if (event.key === "Backspace" && !words.textContent && rowsOf(list).length > 1) {
-      /* Backspace out of a row he made and did not fill in, the way he made it. Only an empty one:
+      /* Backspace out of a row they made and did not fill in, the way they made it. Only an empty one:
          an item with words in it is removed by emptying it first, never by one stray keystroke. */
       event.preventDefault();
       const above = row.previousElementSibling;

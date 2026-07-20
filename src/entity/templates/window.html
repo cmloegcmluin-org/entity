@@ -24,7 +24,7 @@
     <label class="switch"><input type="checkbox" id="auto"> auto-listen</label>
     <button type="button" id="send" class="btn send">Submit</button>
     {#- Saying yes was costing four gestures - mic on, the word, mic off, Submit - for about half
-        his turns. This is the one click that does it, with the bin beside it for the opposite:
+        their turns. This is the one click that does it, with the bin beside it for the opposite:
         everything drafted, gone, and Ctrl+Z brings it back. -#}
     <div class="answer">
       <button type="button" id="yes" class="btn">Yes</button>
@@ -33,8 +33,8 @@
   </div>
 
   <div class="saying">
-    {#- What he is being heard saying right now, above the box his finished sentence lands in, so
-        his eye is already where the words are going. A word goes up once two readings running have
+    {#- What they are being heard saying right now, above the box their finished sentence lands in, so
+        their eye is already where the words are going. A word goes up once two readings running have
         agreed on it (see hearing.py); the line comes down as the sentence lands below it. -#}
     <p id="hearing" aria-live="polite"></p>
     <textarea id="draft" rows="4" placeholder="Say something, or type it here…"></textarea>

@@ -71,29 +71,29 @@ def test_the_bar_reaches_every_page_that_used_to_be_a_tab(tmp_path):
 
 def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements he wants for you (roadmap, not now)\n- better voice\n\n"
+    profile.write_text("## Enhancements they want for you (roadmap, not now)\n- better voice\n\n"
                        "## Goals\n- swim\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/profile").get_data(as_text=True)
     assert "better voice" in page and "swim" in page
     # Matched by prefix, since a profile glosses its own headings however it likes.
-    assert 'data-heading="Enhancements he wants for you (roadmap, not now)"' in page
+    assert 'data-heading="Enhancements they want for you (roadmap, not now)"' in page
 
     client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
                                   "items": [{"done": False, "text": "swim, three times a week"}]})
 
     saved = profile.read_text(encoding="utf-8")
     # A bullet written before the boxes existed comes back as an unticked one, so the list
-    # upgrades itself the first time he touches it rather than needing a migration run.
+    # upgrades itself the first time they touch it rather than needing a migration run.
     assert "- [ ] swim, three times a week" in saved
     assert "- better voice" in saved  # the section beside it is untouched
 
 
 def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements he wants for you (roadmap, not now)\n"
-                       "- [x] hear only his voice\n- live captions\nplain line\n", encoding="utf-8")
+    profile.write_text("## Enhancements they want for you (roadmap, not now)\n"
+                       "- [x] hear only their voice\n- live captions\nplain line\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/profile").get_data(as_text=True)
@@ -104,9 +104,9 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
 
     # Ticking one writes the whole list back as markdown, which is the form the brain reads.
     client.post("/profile", json={
-        "heading": "Enhancements he wants for you (roadmap, not now)",
-        "drawn": ["hear only his voice", "live captions", "plain line"],
-        "items": [{"done": True, "text": "hear only his voice"},
+        "heading": "Enhancements they want for you (roadmap, not now)",
+        "drawn": ["hear only their voice", "live captions", "plain line"],
+        "items": [{"done": True, "text": "hear only their voice"},
                   {"done": True, "text": "live captions"},
                   {"done": False, "text": "plain line"}],
     })
@@ -116,19 +116,19 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
     assert "- [ ] plain line" in saved     # and a plain line joined the list it was meant to
 
 
-def test_every_translation_in_force_is_on_the_page_and_his_own_save_back(tmp_path):
+def test_every_translation_in_force_is_on_the_page_and_a_users_own_save_back(tmp_path):
     # "can we have an explicit list of translations I can see" - so the ones that ship are listed
-    # beside his own, rather than being applied invisibly.
+    # beside their own, rather than being applied invisibly.
     translations = tmp_path / "translations.md"
-    translations.write_text("hydeas -> Notecraft\n", encoding="utf-8")
+    translations.write_text("notecraf -> Notecraft\n", encoding="utf-8")
     client = _client(translations_path=translations, terms=["Notecraft", "Git Bash"])
 
     page = client.get("/translations").get_data(as_text=True)
     assert "cloud agent" in page and "Claude agent" in page  # one that ships
-    assert "hydeas" in page and "Notecraft" in page           # one of his
+    assert "notecraf" in page and "Notecraft" in page        # one of the user's own
     assert "Notecraft" in page and "Git Bash" in page        # and what the fuzzy pass snaps to
 
-    client.post("/translations", data={"body": "hydeas -> Notecraft\nhi deas -> Notecraft"})
+    client.post("/translations", data={"body": "notecraf -> Notecraft\nhi deas -> Notecraft"})
 
     assert "hi deas -> Notecraft" in translations.read_text(encoding="utf-8")
 
@@ -161,7 +161,7 @@ def test_shouting_inside_a_sentence_is_not_pulled_out_as_a_heading():
 
 
 def test_a_paragraph_that_is_already_markdown_is_left_as_it_was():
-    # His profile arrives inside the persona with headings and bullets of its own, on their own
+    # Their profile arrives inside the persona with headings and bullets of its own, on their own
     # lines. Those are already readable and must survive intact.
     blocks = persona_paragraphs("## Goals\n- swim\n- cello\n\nplain words after it")
 
@@ -171,7 +171,7 @@ def test_a_paragraph_that_is_already_markdown_is_left_as_it_was():
 
 def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
     # "consistent styling of all the tabs (all checkboxes, same font)". Enhancements was the only
-    # one with boxes; the other three showed him the markdown and left him to decode it.
+    # one with boxes; the other three showed them the markdown and left them to decode it.
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements\n- better voice\n\n## Life context\n- new to the city\n\n"
                        "## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
@@ -191,8 +191,8 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
 
 def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path):
     # "I add new items, tab away, tab back, and they're just gone." The box to edit a section as
-    # raw markdown was the only way to add one, and it lost what he typed - so the items
-    # themselves are what he types into, and a new one is made by pressing Enter in the list.
+    # raw markdown was the only way to add one, and it lost what they typed - so the items
+    # themselves are what they type into, and a new one is made by pressing Enter in the list.
     profile = tmp_path / "profile.md"
     profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
 
@@ -204,12 +204,12 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):
     learned = tmp_path / "learned.md"
-    learned.write_text("- prefers teal\n", encoding="utf-8")
+    learned.write_text("- prefers metric units\n", encoding="utf-8")
     client = _client(learned_path=learned)
 
-    assert "prefers teal" in client.get("/memory").get_data(as_text=True)
+    assert "prefers metric units" in client.get("/memory").get_data(as_text=True)
 
-    client.post("/memory", data={"body": "- prefers teal\n- hates a wall of text"})
+    client.post("/memory", data={"body": "- prefers metric units\n- hates a wall of text"})
 
     assert "hates a wall of text" in learned.read_text(encoding="utf-8")
 
@@ -225,7 +225,7 @@ def test_an_agents_exchange_reads_as_a_conversation_with_the_speakers_swapped(tm
 
     shown = client.get("/agents/fixer").get_json()
     # In an agent's thread the Entity is the one asking and the agent answers - the speakers are
-    # swapped, so neither reads as the user talking to himself.
+    # swapped, so neither reads as the user talking to themselves.
     assert [(entry["name"], entry["text"]) for entry in shown["entries"]] == [
         ("Entity", "fix the drive link"), ("fixer", "Found it - repointed."),
     ]
@@ -285,7 +285,7 @@ def test_taking_back_what_he_just_said_reaches_the_box_it_was_typed_into():
 
 
 def test_a_chunk_taken_back_before_the_page_saw_it_is_never_typed_at_all():
-    # He caught it inside one poll. Undoing it in the box would mean putting it there first, so
+    # They caught it inside one poll. Undoing it in the box would mean putting it there first, so
     # the page is simply never told about it.
     feed = TranscriptFeed()
     mirror = Mirror(feed, clock=lambda: "12:00:00")
@@ -353,7 +353,7 @@ def test_only_what_was_offered_as_a_link_can_be_opened(tmp_path):
 
 
 def test_the_one_click_yes_and_the_bin_are_both_on_the_page():
-    # Saying yes cost four gestures - mic on, the word, mic off, Submit - for about half his turns,
+    # Saying yes cost four gestures - mic on, the word, mic off, Submit - for about half their turns,
     # and the bin beside it throws a draft away undoably. Both went missing in the port.
     page = _client().get("/").get_data(as_text=True)
 

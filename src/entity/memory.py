@@ -27,9 +27,9 @@ DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
 DEFAULT_LEXICON_PATH = _RUNTIME / "lexicon.md"
 # One line naming the lexicon file, when it isn't the one above - see `lexicon_path`.
 LEXICON_POINTER = _RUNTIME / "lexicon-path.txt"
-# His own "heard -> said" list. Beside the lexicon rather than inside it: a lexicon entry is a real
+# Their own "heard -> said" list. Beside the lexicon rather than inside it: a lexicon entry is a real
 # word to get right, a translation has a WRONG side, and the lexicon is shared with whatever else
-# transcribes him - a syntax it doesn't know would read as a term he never uses.
+# transcribes them - a syntax it doesn't know would read as a term they never uses.
 DEFAULT_TRANSLATIONS_PATH = _RUNTIME / "translations.md"
 
 # `{user}` is filled in from the profile's own title line by `compose_persona` - see `user_name`.
@@ -52,8 +52,8 @@ _LEXICON_INTRO = (
 # A gloss can follow the term after " - " / " — " / ": "; the term itself is the head of the line.
 _GLOSS = re.compile(r"\s+[—–-]\s+|:\s+")
 
-# What separates the two sides of a translation. "->" is what he wrote it as; "→" is what a page
-# showing it back to him renders, and either has to read back in.
+# What separates the two sides of a translation. "->" is what they wrote it as; "→" is what a page
+# showing it back to them renders, and either has to read back in.
 _ARROW = re.compile(r"\s*(?:->|→)\s*")
 
 CONSOLIDATION_PROMPT = (
@@ -136,9 +136,9 @@ def load_translations(path=DEFAULT_TRANSLATIONS_PATH):
 
 
 def translation_pairs(text):
-    """His own list of what it keeps mishearing: {what came back: what he said}.
+    """Their own list of what it keeps mishearing: {what came back: what they said}.
 
-    One per line, with the arrow he wrote in his own ticket - "cloud agent" -> "Claude agent". A
+    One per line, with the arrow they wrote in their own ticket - "cloud agent" -> "Claude agent". A
     line without one is not a translation and is left out rather than guessed at; the left side is
     lowercased because that is the side it gets looked up by."""
     pairs = {}
@@ -158,8 +158,8 @@ def translation_pairs(text):
 
 
 def save_translations(text, path=DEFAULT_TRANSLATIONS_PATH):
-    """Write his list back. His file, his wording - stored exactly as typed, so what he reads next
-    time is what he wrote rather than a normalised version of it."""
+    """Write their list back. Their file, their wording - stored exactly as typed, so what they read next
+    time is what they wrote rather than a normalised version of it."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
@@ -244,7 +244,7 @@ ENHANCEMENTS_HEADING = "Enhancements"
 # are one bug, refiled because nothing ever showed it had been dealt with).
 #
 # The list predates the boxes, so a plain "- item" is read as an unticked one and upgraded the first
-# time anything writes it back. That migrates the file by use rather than by rewriting, under him,
+# time anything writes it back. That migrates the file by use rather than by rewriting, under them,
 # a personal file the running app may be autosaving at the same moment.
 _BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?P<item>.*)$")
 UNTICKED, TICKED = "- [ ] ", "- [x] "
@@ -254,8 +254,8 @@ def checklist_items(body):
     """A section's lines as the things the window ticks: whether each is done, and what it says.
 
     ANY line with words on it is an item - "the enhancements tab should simply assume that any
-    newline is a checklist item" - because he types them in plain, and boxing only the ones already
-    punctuated as bullets left his own additions sitting outside the list they were meant to join.
+    newline is a checklist item" - because they type them in plain, and boxing only the ones already
+    punctuated as bullets left their own additions sitting outside the list they were meant to join.
     A blank line is not an item; it is the gap between two."""
     items = []
     for line in body.splitlines():
@@ -271,12 +271,12 @@ def checklist_markdown(items):
     """The items back as markdown - the form the file keeps and the brain reads.
 
     Not quite the inverse of `checklist_items`: a bullet written before the boxes existed comes
-    back as `- [ ]`, so the list upgrades itself the first time he touches it rather than needing a
+    back as `- [ ]`, so the list upgrades itself the first time they touch it rather than needing a
     migration run over a personal file the app may be autosaving at that moment.
 
     A row with nothing typed into it yet is not an item. Enter is how every item is made, so the
-    empty row is the normal state of the one he is about to fill in; storing it would leave a
-    bullet with nothing after it sitting in his profile.
+    empty row is the normal state of the one they are about to fill in; storing it would leave a
+    bullet with nothing after it sitting in their profile.
 
     A row holding several lines - a block pasted into one of them - becomes the items it reads as.
     Stored whole it would be one bullet with newlines inside it, and those lines come back as
@@ -301,11 +301,11 @@ def save_checklist(path, heading, items, *, drawn):
     `drawn` is what the page believes the file holds - the words of every item it was drawn with,
     or last sent. Anything the section has gained since is carried over rather than overwritten:
     Entity files enhancements into this same list while the window sits open, and every keystroke
-    writes the whole list back, so without this the next character he types deletes them.
+    writes the whole list back, so without this the next character they type deletes them.
 
     Compared on the WORDS of an item, never on the line it is stored as - the file upgrades `- x`
     to `- [ ] x` the first time anything writes it, and comparing lines read that upgrade as an
-    item nobody had seen and filed a second copy of everything he had edited."""
+    item nobody had seen and filed a second copy of everything they had edited."""
     seen = {item["text"] for item in items} | set(drawn)
     gained = [item for item in checklist_items(profile_sections(_read(path)).get(heading, ""))
               if item["text"] not in seen]

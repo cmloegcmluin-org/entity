@@ -84,8 +84,8 @@ transcription into an editable draft, `hey entity` / `stop listening` to arm and
 that` to take back what was just said, and it reports whether it is recording so nothing speaks
 over the user. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
 a word shown only once two readings running have agreed on it — read its docstring before changing
-any number in it, because every one was measured off real captured sessions. The window is a local web app, the
-same shape as Notecraft: `mirror.py` is the conversation as a window shows it — the message model,
+any number in it, because every one was measured off real captured sessions. The window is a local
+web app: `mirror.py` is the conversation as a window shows it — the message model,
 the thread-safe feed everything crosses on, and where each session starts — with no window in it,
 so all of it is tested without a display; `web.py` serves it, `templates/` and `static/` are the
 pages, and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
@@ -95,9 +95,7 @@ used to be lost to context resets) and streams the whole exchange into its log; 
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named. `playback.py` captures what this PC is sending to
-its own speakers, so a burst whose loudness follows it can be discounted — a streamer in Chrome is
-otherwise indistinguishable from the user.
+held, and it says which one a reply just named.
 `brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
@@ -110,27 +108,27 @@ Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hear
 voice.
 
 **Hearing only the user.** Nothing is built. Loopback gating WAS built and was taken back out the
-same day, because it went deaf to him — the meter moved with his voice and not a word reached the
-draft. That is the whole lesson, and it cost him an hour of a broken app: a false negative here is
+same day, because it went deaf to the user — the meter moved with their voice and not a word reached
+the draft. That is the whole lesson, and it cost an hour of a broken app: a false negative here is
 far worse than a false positive, and the threshold that produced it had been fitted to a single
 four-minute sample. Read `git log` for `playback.py` before rebuilding it. What was measured and
 still holds:
 
 - WASAPI loopback capture works, but not through `sounddevice` — its PortAudio build (19.7.0-devel)
   has no loopback flag and enumerates no loopback devices. `soundcard` does it.
-- Speaker → air → mic on his machine is 90 ms, a clean correlation peak (r = .83 there, .47 either
-  side). Comparing per-frame LOUDNESS survives the room; the waveform does not. Plain envelope
+- Speaker → air → mic on the test machine is 90 ms, a clean correlation peak (r = .83 there, .47
+  either side). Comparing per-frame LOUDNESS survives the room; the waveform does not. Plain envelope
   correlation beat log and sqrt on labelled data.
-- On one four-minute capture — his stream loud, him talking over it — the stream's bursts scored
-  +0.38 to +0.96 against the delayed playback and his own −0.26 to +0.58. Replayed, a 0.6 bar took
-  75 s of streamer-only from 7 draft lines to 0 and kept all twelve of his.
-- And it still ate him live. So that sample did not generalise, the margin above his worst (0.583)
-  was 0.017, and no bar fitted to one recording should be trusted. Whatever comes next needs paired
-  captures across several sessions and volumes, and must fail toward hearing him.
+- On one four-minute capture — a loud stream, the user talking over it — the stream's bursts scored
+  +0.38 to +0.96 against the delayed playback and the user's own −0.26 to +0.58. Replayed, a 0.6 bar
+  took 75 s of streamer-only from 7 draft lines to 0 and kept all twelve of the user's.
+- And it still ate the user's speech live. So that sample did not generalise, the margin above its
+  worst (0.583) was 0.017, and no bar fitted to one recording should be trusted. Whatever comes next
+  needs paired captures across several sessions and volumes, and must fail toward hearing the user.
 
 Speaker enrollment is untouched. A voiceprint is personal: `runtime/`, never the source, and
 bootstrapping is free — the chunks that became submitted turns in past sessions are labelled samples
-of his voice. Same asymmetry, same decision point: `Burst`, beside `carries_speech`.
+of the user's voice. Same asymmetry, same decision point: `Burst`, beside `carries_speech`.
 
 **Printing as it listens is done.** Parakeet has no streaming door — `recognize` takes a waveform
 and reads all of it — so the burst so far is re-read as it grows, on a worker, because at 90 ms for
@@ -138,22 +136,13 @@ one second of speech and 640 ms for twenty it is thirty times faster than real t
 cheap enough for the pump's thread. The readings are not fit to show raw: their tails are guesswork
 the next reading rewrites, and four times in one three-second sentence the model answered a stretch
 it could not place with nothing at all. Only what two readings running agree on goes up, and the line
-never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, his own
-sentences reached the screen 2 to 5 seconds before the draft box used to fill.
-
-**Printing as it listens is done.** Parakeet has no streaming door — `recognize` takes a waveform
-and reads all of it — so the burst so far is re-read as it grows, on a worker, because at 90 ms for
-one second of speech and 640 ms for twenty it is thirty times faster than real time but nowhere near
-cheap enough for the pump's thread. The readings are not fit to show raw: their tails are guesswork
-the next reading rewrites, and four times in one three-second sentence the model answered a stretch
-it could not place with nothing at all. Only what two readings running agree on goes up, and the line
-never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, his own
+never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, real
 sentences reached the screen 2 to 5 seconds before the draft box used to fill.
 
 Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
 rather than being read back out of the sentence, several ready at once are read out numbered, and
-whichever is named is the one spoken. He was asked and chose numbering over a new brain directive,
-because a marker is a thing that has reached him verbatim before.
+whichever is named is the one spoken. Numbering was chosen over a new brain directive, because a
+marker is a thing that has reached the user verbatim before.
 
 ## How the user works
 

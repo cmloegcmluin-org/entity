@@ -1,6 +1,6 @@
 /* The window: a contents column, the conversation, and the row of things to do with talking.
 
-   The look follows Notecraft — system font, hairline outline buttons that take the accent on
+   System font, hairline outline buttons that take the accent on
    hover, one accent and one danger colour — so the two apps read as the same hand. What is
    Entity's own is the thread: a message is a box that hugs its own words, and there are two
    sides to the conversation.
@@ -97,20 +97,20 @@ body.page { padding: 10px; }
    done item is still something worth going back to. */
 .checklist { list-style: none; margin: 0; padding: 0; }
 /* The row itself is the line the box and the words sit on. It used to be a <label> inside the row,
-   which cannot be here: a label makes a click anywhere in it tick the box, and these are rows he
-   types into - the caret would never land where he aimed it. */
+   which cannot be here: a label makes a click anywhere in it tick the box, and these are rows they
+   types into - the caret would never land where they aimed it. */
 .checklist li { display: flex; gap: 9px; align-items: baseline; padding: 2px 0; }
 .checklist input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0;
                    flex: none; cursor: pointer; }
-/* The words ARE the item - this is what he types into, and what Enter makes another of. One of
+/* The words ARE the item - this is what they type into, and what Enter makes another of. One of
    them runs to a paragraph, so it wraps against its own edge under the box rather than under the
-   tick. It keeps a line's height while it is empty, or the row he has just made would be a box
+   tick. It keeps a line's height while it is empty, or the row they have just made would be a box
    with nothing beside it and nowhere to click. */
 .checklist .item { flex: 1; min-width: 0; min-height: 1.45em; padding: 0 4px; margin: 0 -4px;
                    border-radius: 6px; outline: none; }
 .checklist .item:focus { background: rgba(127, 255, 0, .07); }
 .checklist li.done .item { color: var(--dim); }
-/* What it heard, and what he actually said. A rule is two things and an arrow between them, so it
+/* What it heard, and what they actually said. A rule is two things and an arrow between them, so it
    reads as one line rather than as a table to scan across. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }
 .swaps li { display: flex; align-items: baseline; gap: 9px; padding: 2px 0; flex-wrap: wrap; }
@@ -292,10 +292,10 @@ body.page { padding: 10px; }
 #meter { height: 10px; border-radius: 5px; background: var(--panel); overflow: hidden; }
 #level { height: 100%; width: 0; background: var(--accent); transition: width .06s linear; }
 
-/* What he is being heard saying, above the box his finished sentence lands in. Its height is
+/* What they are being heard saying, above the box their finished sentence lands in. Its height is
    reserved whether or not anything is on it: a line that appeared and vanished with every burst
    would walk the box up and down the window all through a conversation. A step back in colour, the
-   same step an earlier session's messages take, because these words are not his final ones. */
+   same step an earlier session's messages take, because these words are not their final ones. */
 .saying { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #hearing {
   margin: 0;

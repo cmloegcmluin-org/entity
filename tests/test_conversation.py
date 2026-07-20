@@ -93,7 +93,7 @@ def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
 
 
 def test_a_path_is_shown_whole_and_spoken_the_way_a_person_would_say_it():
-    # He wants the real path on screen - it is what he clicks - and he does not want a minute of
+    # They want the real path on screen - it is what they click - and they do not want a minute of
     # "see colon backslash users backslash" out of the speaker. The two are not the same words.
     class PathBrain:
         def respond(self, utterance):
@@ -395,7 +395,7 @@ def test_a_late_answer_names_the_question_it_is_answering():
     # "See there again an example of you responding to something that I said several messages ago.
     # The last time I mentioned logs was one, two, three, four, five, six, seven messages ago. So it
     # doesn't make sense for you to phrase things like you just did, like as if we were just talking
-    # about logs." A detached answer lands after he has moved on, and arrived with nothing tying it
+    # about logs." A detached answer lands after they have moved on, and arrived with nothing tying it
     # to what it answered - so a perfectly good answer read as a non-sequitur.
     release = threading.Event()
 
@@ -418,13 +418,13 @@ def test_a_late_answer_names_the_question_it_is_answering():
     convo.turn()  # the lull it woke, and the answer goes out
 
     late = [line for line in tts.spoken if "didn't die" in line][0]
-    assert "why do these agents keep dying" in late  # his own words, so it lands as an answer
+    assert "why do these agents keep dying" in late  # their own words, so it lands as an answer
     assert late.endswith("That one didn't die - it finished hours ago and went idle.")
 
 
 def test_a_reply_with_nothing_to_say_says_nothing():
     # A directive that succeeded with no aside comes back empty: the ack already confirmed receipt,
-    # and "collapsed into a single 'Got it.'" is what he asked for. An empty reply must not become
+    # and "collapsed into a single 'Got it.'" is what they asked for. An empty reply must not become
     # a blank "entity>" line or an empty utterance.
     lines = []
 
@@ -438,14 +438,14 @@ def test_a_reply_with_nothing_to_say_says_nothing():
 
     turn = convo.turn()
 
-    assert tts.spoken == ["Got it."]  # the one utterance he asked for
+    assert tts.spoken == ["Got it."]  # the one utterance they asked for
     assert turn is not None and turn.said == ""  # the turn still completed
     assert not any(line.startswith("entity>") for line in lines)  # and no blank reply line
 
 
 def test_a_late_silent_success_still_closes_the_promise():
     # A slow directive says "I'll get back to you on that." before its silent success lands - and a
-    # promise to get back that is never followed by ANYTHING is this program's original sin: he
+    # promise to get back that is never followed by ANYTHING is this program's original sin: they
     # waited half an hour on exactly that line. So a late empty reply is not silence, it is the
     # smallest possible closure, tied to what it closes.
     release = threading.Event()
@@ -470,8 +470,8 @@ def test_a_late_silent_success_still_closes_the_promise():
 
 
 def test_a_prompt_answer_is_not_prefaced_with_the_question():
-    # Only a LATE one needs tying back. Repeating his question at him when he has just asked it
-    # would be one more stock phrase in a conversation he already called a waste of his time.
+    # Only a LATE one needs tying back. Repeating their question at them when they have just asked it
+    # would be one more stock phrase in a conversation they already called a waste of their time.
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["did it work"]), FakeBrain(), tts, long_answer_chars=None)
 
@@ -557,7 +557,7 @@ def test_a_collected_answer_is_gated_on_its_length_like_any_other_reply():
     # "That wasn't a very long message. Why did you say you had a longer answer for me?" - the
     # background path announced EVERY answer it collected, however short, so a forty-character reply
     # arrived as "I've got a longer answer for you - ready for it?" and then sat unclaimed for
-    # twenty-one minutes before he said yes to it. A collected answer is a reply like any other.
+    # twenty-one minutes before they said yes to it. A collected answer is a reply like any other.
     def collected(answer, **settings):
         release = threading.Event()
 
@@ -896,7 +896,7 @@ def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys
 
 
 def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named():
-    # "when several are ready, tell him which and let him choose the order." Run together they
+    # "when several are ready, tell them which and let them choose the order." Run together they
     # arrived as a wall - and a long enough one to be offered as "ready for it?" rather than heard.
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed", about="fixer")
@@ -1015,8 +1015,8 @@ def test_the_default_acknowledgement_is_the_plain_line_he_asked_for():
 
     convo.turn()
 
-    # His own word for it, after counting the stock phrases he was getting per turn and calling
-    # them a waste of his time. Not "Mm-hm." et al either, which read aloud as "m m".
+    # Their own word for it, after counting the stock phrases they were getting per turn and calling
+    # them a waste of their time. Not "Mm-hm." et al either, which read aloud as "m m".
     assert tts.spoken[0] == "Got it."
 
 
@@ -1542,11 +1542,11 @@ def test_a_failure_is_never_cut_short_of_its_cause():
 
 
 def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():
-    # He asked what he had to set up and heard "...here are the real steps, from the agent: 1." -
+    # They asked what they had to set up and heard "...here are the real steps, from the agent: 1." -
     # then nothing. The splitter reads "1." as the end of a sentence, so the cut fell between the
-    # number and its step and handed him a list marker with no step attached. He said so: "you
+    # number and its step and handed them a list marker with no step attached. They said so: "you
     # started telling me the steps, but then all you said was the number one and nothing more."
-    # The persona already promises him a walkthrough in full, however long; only chatter is cut.
+    # The persona already promises them a walkthrough in full, however long; only chatter is cut.
     steps = ("Here are the real steps. 1. Open the Google console and pick your existing project. "
              "2. Enable the Drive and Docs APIs. 3. Create an OAuth client and download the JSON. "
              "4. Run the authorize script and approve the consent screen in your browser.")
@@ -1563,7 +1563,7 @@ def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():
 
     convo.turn()
 
-    assert steps in tts.spoken  # every step reached him, not just the number
+    assert steps in tts.spoken  # every step reached them, not just the number
     assert "approve the consent screen" in chr(10).join(lines)  # and the last one is on screen too
 
 
@@ -1590,7 +1590,7 @@ def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():
 def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
     # "If what I consider to be one Entity is actually a bunch of disconnected fakers who aren't
     # aware of each other, then the flimsy occasional illusion of you being a coherent Entity is
-    # worse than useless." He kept quoting lines back that the brain had no record of, because the
+    # worse than useless." They kept quoting lines back that the brain had no record of, because the
     # app speaks in its name - the acknowledgement, the handoff line, an agent's notice - and none
     # of it ever reached the brain. Asked about one, it said "I have no record of typing that
     # myself", which was true, and read as gaslighting.
@@ -1609,7 +1609,7 @@ def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
     convo.turn()  # a lull: the agent's notice goes out in its name, unwritten by it
     convo.turn()  # and now they ask about it
 
-    assert "fixer: the drive link is fixed" in heard[0]  # it knows what he heard
+    assert "fixer: the drive link is fixed" in heard[0]  # it knows what they heard
     assert "what did you just say to me" in heard[0]  # and their words are still in there
 
 

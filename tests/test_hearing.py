@@ -24,7 +24,7 @@ def _burst(frames):
 
 
 def test_only_the_words_two_readings_agree_on_are_settled():
-    # Measured on his own session audio: the tail of a partial reading is guesswork the next
+    # Measured on their own session audio: the tail of a partial reading is guesswork the next
     # reading rewrites ("I need to say" -> "I need to set up"), while the head stays put. Showing
     # only the agreed head is what makes the line grow instead of flickering.
     older, newer = "Then tell me exactly what I need", "Then tell me exactly what I need to set up"
@@ -33,7 +33,7 @@ def test_only_the_words_two_readings_agree_on_are_settled():
 
 
 def test_a_word_the_model_recased_or_repunctuated_still_counts_as_agreed():
-    # Replayed from his own audio: "in the hungry Newman work tree," came back as "In the Hungry
+    # Replayed from their own audio: "in the hungry Newman work tree," came back as "In the Hungry
     # Newman Work Tree on" - the same words, differently dressed. Compared strictly, the line
     # stalls at the first comma the model changes its mind about and never catches up.
     older, newer = "In the hungry Newman work tree,", "in the Hungry Newman Work Tree on"
@@ -43,7 +43,7 @@ def test_a_word_the_model_recased_or_repunctuated_still_counts_as_agreed():
 
 
 def test_the_line_only_ever_grows_however_the_readings_wobble():
-    # The readings taken while he was still talking, off his own captured audio. Handed a stretch
+    # The readings taken while they were still talking, off their own captured audio. Handed a stretch
     # it cannot place, Parakeet answers with NOTHING at all - four times in this one sentence. A
     # line that emptied and refilled four times in three seconds is unreadable, so it never shrinks.
     hearing = Hearing(None, lambda text: None)
@@ -56,9 +56,9 @@ def test_the_line_only_ever_grows_however_the_readings_wobble():
 
 
 def test_the_line_is_reported_when_it_grows_and_comes_down_when_the_burst_ends():
-    # It grows three times a second while he talks, so an unchanged line must not be re-sent - the
+    # It grows three times a second while they talk, so an unchanged line must not be re-sent - the
     # window would redraw it on every poll. And the burst ending is what puts the finished sentence
-    # in the draft box, so the live line has to clear or he reads the same words twice.
+    # in the draft box, so the live line has to clear or they read the same words twice.
     shown = []
     hearing = Hearing(None, shown.append)
 
@@ -73,7 +73,7 @@ def test_the_line_is_reported_when_it_grows_and_comes_down_when_the_burst_ends()
 
 def test_only_the_newest_snapshot_is_read_so_the_pump_never_falls_behind():
     # Reading a growing buffer costs 90 ms at one second of speech and 640 ms at twenty (measured
-    # on his own audio, this machine). Done on the pump's thread it would fall a second behind per
+    # on their own audio, this machine). Done on the pump's thread it would fall a second behind per
     # second of talking, so snapshots pile up in one slot and the newest wins - the reading rate
     # drops on a long sentence instead of the mic drifting out of real time.
     transcriber = FakeTranscriber("Remember to", "Remember to pop open")
@@ -87,11 +87,11 @@ def test_only_the_newest_snapshot_is_read_so_the_pump_never_falls_behind():
     assert hearing.step() is False  # nothing waiting: the worker sleeps rather than spinning
 
 
-def test_a_reading_interrupted_by_his_pause_is_not_carried_into_the_next_burst():
-    # The worker is part-way through a reading when he stops talking. Its answer describes a burst
+def test_a_reading_interrupted_by_a_pause_is_not_carried_into_the_next_burst():
+    # The worker is part-way through a reading when they stop talking. Its answer describes a burst
     # nobody is in any more, so leaving it standing as "the reading before this one" would have the
-    # NEXT burst agree with it - and the first thing he saw of a new sentence would be words from
-    # the last one, which is the kind of thing this app has put in his draft box before.
+    # NEXT burst agree with it - and the first thing they saw of a new sentence would be words from
+    # the last one, which is the kind of thing this app has put in their draft box before.
     class ReadInterruptedByHisPause:
         def __init__(self):
             self.hearing = None

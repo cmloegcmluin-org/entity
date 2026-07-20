@@ -1,4 +1,4 @@
-"""The window, as a local web app - the same shape as Notecraft, which this is moving to join.
+"""The window, as a local web app - Flask behind a loopback port, shown in its own desktop window.
 
 The pages live in `templates/`, their look in `static/app.css`, their behaviour in the scripts
 beside it; this module is the routes between them and the conversation. Nothing here draws: it
@@ -34,7 +34,7 @@ SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 
 # The profile's own categories, in its own numbering, minus the one the conversation itself is.
 # Each names only the stem of its heading, because a profile glosses its headings however it likes
-# ("Enhancements he wants for you (roadmap, not now)").
+# ("Enhancements they want for you (roadmap, not now)").
 SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
             ("Goals", "Goals"), ("Projects", "Projects"))
 
@@ -91,9 +91,9 @@ _LEAD = re.compile(rf"^({_SHOUT}(?:[.:!?]|(?=\s+[-–—]\s)))\s*")
 def persona_paragraphs(text):
     """The persona as something readable, without one word of it being changed.
 
-    This is the exact text the brain reads - the window shows it so he can see what it has been
+    This is the exact text the brain reads - the window shows it so they can see what it has been
     told, and a second, tidied copy would drift from the real one. So nothing here rewrites: it
-    only decides where the breaks go. Blank lines are breaks already (his profile arrives with its
+    only decides where the breaks go. Blank lines are breaks already (their profile arrives with its
     own headings and bullets); the rest are where the persona starts shouting, which is where its
     author meant a new section.
 
@@ -112,7 +112,7 @@ def persona_paragraphs(text):
 
 def _heading(found, stem):
     """Which of the profile's own headings this section means. Matched on the stem, because a
-    profile glosses its headings however it likes ("Enhancements he wants for you (roadmap, not
+    profile glosses its headings however it likes ("Enhancements they want for you (roadmap, not
     now)")."""
     return next((head for head in found if head.lower().startswith(stem.lower())), None)
 
@@ -160,7 +160,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     is a live session behind it - without one the model is whatever was put in it.
 
     `terms` is the vocabulary transcription is biased toward, as it stood when the session opened -
-    shown, not used, so he can see what it is snapping his words to."""
+    shown, not used, so they can see what it is snapping their words to."""
     app = Flask(__name__)
     profile_path = Path(profile_path) if profile_path else None
     learned_path = Path(learned_path) if learned_path else None
@@ -239,7 +239,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     def profile():
         """The four sections, down one page, every one of them a checklist. They are the same kind
         of thing - a list of lines under a heading - and only Enhancements drew boxes, so three of
-        the four handed him raw markdown to decode. Matched by prefix, since a profile glosses its
+        the four handed them raw markdown to decode. Matched by prefix, since a profile glosses its
         own headings, and shown in the profile's order rather than ours where both agree."""
         found = _profile_text()
         sections = [
@@ -257,7 +257,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
         `drawn` is what the page believes the file holds, so an enhancement Entity filed into the
         same section while the window sat open is carried over rather than overwritten by the next
-        character he types."""
+        character they type."""
         if profile_path is not None:
             sent = request.get_json()
             save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"])
@@ -268,7 +268,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         return render_template("persona.html", here="/persona",
                                blocks=persona_paragraphs(persona), length=len(persona))
 
-    def _his_translations():
+    def _own_translations():
         if translations_path is None or not translations_path.exists():
             return ""
         return translations_path.read_text(encoding="utf-8")
@@ -276,16 +276,16 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     @app.get("/translations")
     def translations():
         """What it is quietly rewriting, written out. "Cloud agent" for "Claude agent" is a
-        correction he cannot see happening and cannot argue with, and he asked to see the lot -
-        the ones that ship and the ones he adds, in one list, with the words the fuzzy pass snaps
-        toward underneath them."""
-        his = translation_pairs(_his_translations())
-        in_force = translations_in_force(his)
+        correction the user cannot see happening and cannot argue with, and they asked to see the
+        lot - the ones that ship and the ones they add, in one list, with the words the fuzzy pass
+        snaps toward underneath them."""
+        own = translation_pairs(_own_translations())
+        in_force = translations_in_force(own)
         return render_template(
             "translations.html", here="/translations",
-            rows=[{"heard": heard, "said": in_force[heard], "his": heard in his}
+            rows=[{"heard": heard, "said": in_force[heard], "own": heard in own}
                   for heard in sorted(in_force)],
-            mine=_his_translations(),
+            mine=_own_translations(),
             terms=sorted(terms, key=str.lower),
         )
 

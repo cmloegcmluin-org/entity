@@ -1,6 +1,6 @@
 """The window as an application: a browser engine in an OS window of its own, not a browser tab.
 
-Same shape as Notecraft, which this is moving to join - Flask on a loopback port nobody else can
+A local Flask app on a loopback port nobody else can
 reach, and pywebview holding a WebView2 view of it. What that buys over a tab is what a companion
 needs: its own taskbar button and icon, no address bar, no other tabs, and a window that is closed
 rather than navigated away from.

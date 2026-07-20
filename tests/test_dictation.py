@@ -310,6 +310,38 @@ def test_cutting_it_off_leaves_the_mic_off_rather_than_recording_the_next_breath
     assert ears.states[-1] == "muted"
 
 
+def test_auto_listening_opens_the_mic_when_it_finishes_speaking():
+    # "an auto listening mode, where it will default to turning the mic on when it finishes
+    # speaking" - so answering back costs nothing, not even the button.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())
+    dictation.set_auto_listen(True)
+
+    dictation.begin_speaking()
+    dictation.end_speaking()
+
+    assert ears.states[-1] == "recording"
+
+
+def test_auto_listening_leaves_the_mic_he_used_to_cut_it_off_alone():
+    # He silenced it mid-sentence: that is not an invitation to record his next breath, whatever
+    # the mode says. The button and the reply ending race each other, so both orders have to hold.
+    for silence_first in (True, False):
+        ears = Ears()
+        dictation = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+        dictation.set_auto_listen(True)
+        dictation.begin_speaking()
+
+        if silence_first:
+            dictation.set_recording(False)  # what the button does while it's showing STOP
+            dictation.end_speaking()
+        else:
+            dictation.end_speaking()
+            dictation.set_recording(False)
+
+        assert ears.states[-1] == "muted"
+
+
 def test_a_muted_mic_stays_muted_through_a_reply():
     ears = Ears()
     dictation = Dictation(FakeTranscriber(), FakeMic([]), muted=True, **ears.kwargs())

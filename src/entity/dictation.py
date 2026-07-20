@@ -21,7 +21,8 @@ with "I do for you", the tail of its own spoken greeting. Chunks heard while it 
 for a stop BARK instead, which is the barge-in. Arming survives a reply, so a conversation flows
 without touching the button; only they can end it - by saying "over" or "stop listening", or by
 cutting the Entity off mid-sentence, since a stop should not turn straight around and start
-recording their next breath.
+recording their next breath. Auto-listening goes one further and opens the mic each time a reply
+ends, so answering costs nothing - except after that same cut-off, for the same reason.
 """
 
 import queue
@@ -72,6 +73,8 @@ class Dictation:
         self._on_level = on_level
         self._on_submit_request = on_submit_request
         self._armed = not muted
+        self._auto_listen = False  # off until he asks for it; the button is how the mic opens
+        self._silenced = False  # he put the mic down ON the reply - auto-listening must not undo it
         self._speaking = False
         self._terminator = terminator
         self._mutes = tuple(canonical(p) for p in mute_phrases)
@@ -130,6 +133,8 @@ class Dictation:
         """
         if not recording and self._armed and self._mid_burst:
             self._finish_burst = True
+        if not recording and self._speaking:
+            self._silenced = True  # cutting it off is not an invitation to auto-listen after
         self._armed = recording
         self._announce_state()
 
@@ -149,9 +154,17 @@ class Dictation:
         self._speaking = True
         self._announce_state()
 
+    def set_auto_listen(self, on):
+        """Auto-listening: the mic opens by itself each time the Entity stops talking, so answering
+        back costs nothing at all."""
+        self._auto_listen = on
+
     def end_speaking(self):
         """It has finished (or been cut off) - back to however they had left the mic."""
         self._speaking = False
+        if self._auto_listen and not self._silenced:
+            self._armed = True
+        self._silenced = False
         self._announce_state()
 
     def taking_dictation(self):

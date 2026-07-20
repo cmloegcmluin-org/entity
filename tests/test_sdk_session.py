@@ -1,4 +1,6 @@
+import asyncio
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -157,6 +159,13 @@ def _ask_quietly(session):
         return exc
 
 
+class RefusingClient(FakeClient):
+    """A client whose CLI will not start - the failure `SdkSession.__init__` has to survive."""
+
+    async def connect(self):
+        raise RuntimeError("the CLI would not start")
+
+
 def _capturing_factory(seen):
     def factory(*, options):
         seen.append(options)
@@ -198,10 +207,6 @@ def test_a_session_that_never_connects_takes_its_spilled_prompt_back_with_it():
     # The failure path is the one that repeats: a brain whose session died rebuilds on every turn,
     # and a rebuild that also fails never reaches close(). Thirty-four minutes of that is thirty-four
     # minutes of dropping copies of the user's profile into the temp directory.
-    class RefusingClient(FakeClient):
-        async def connect(self):
-            raise RuntimeError("the CLI would not start")
-
     seen = []
 
     def factory(*, options):
@@ -212,3 +217,49 @@ def test_a_session_that_never_connects_takes_its_spilled_prompt_back_with_it():
         SdkSession(ClaudeAgentOptions(system_prompt="who you are"), client_factory=factory)
 
     assert not Path(seen[0].system_prompt["path"]).exists()
+
+
+def _loops_built(monkeypatch):
+    """Every event loop `SdkSession` opens while this is in place, so a test can look at one it
+    never got a handle on - a session that fails to build never returns."""
+    built = []
+    opening = asyncio.new_event_loop
+
+    def remember():
+        loop = opening()
+        built.append(loop)
+        return loop
+
+    monkeypatch.setattr(asyncio, "new_event_loop", remember)
+    return built
+
+
+def _settled(loop, timeout=2.0):
+    deadline = time.monotonic() + timeout
+    while not loop.is_closed() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return loop.is_closed()
+
+
+def test_a_session_that_never_connects_shuts_down_the_loop_it_opened(monkeypatch):
+    # The loop and its thread are started BEFORE the connect that can fail, and a failed build never
+    # reaches close(). The brain rebuilds on every turn while it's broken, so that is one abandoned
+    # event loop per turn, each still spinning, for as long as the trouble lasts - thirty-four
+    # minutes of it the morning this was found.
+    built = _loops_built(monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        SdkSession(ClaudeAgentOptions(), client_factory=lambda options: RefusingClient())
+
+    assert _settled(built[0]), "the failed session left its event loop running"
+
+
+def test_closing_a_session_releases_its_loop_rather_than_only_stopping_it(monkeypatch):
+    # A stopped loop still holds its selector and its thread. The brain opens a fresh session on
+    # every compaction and every reconnect, so what is only stopped accumulates for the whole run.
+    built = _loops_built(monkeypatch)
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: FakeClient())
+
+    session.close()
+
+    assert _settled(built[0]), "close() left the event loop open"

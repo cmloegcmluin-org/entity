@@ -73,6 +73,8 @@ def _spill_system_prompt(options):
 
 
 class SdkSession:
+    _LOOP_STOP_WAIT = 5.0  # seconds to give the loop's thread to unwind before letting it go
+
     def __init__(self, options, *, client_factory=ClaudeSDKClient):
         options, self._prompt_file = _spill_system_prompt(options)
         self._loop = asyncio.new_event_loop()
@@ -86,14 +88,15 @@ class SdkSession:
             # A session that never opened is never closed, so this is its only chance to tidy up -
             # and it's the path that REPEATS, since a brain whose session died rebuilds every turn.
             self._discard_spilled_prompt()
+            self._shutdown_loop()
             raise
         self.last_context_tokens = 0  # size of the context the most recent ask processed
 
     def _submit(self, coro):
         """Run a coroutine on this session's loop and wait for it.
 
-        Refused once closed, because closing STOPS that loop: a coroutine handed to a stopped loop
-        is queued and never run, so the wait is for something that cannot happen. Whoever still
+        Refused once closed, because closing SHUTS that loop down: a coroutine handed to a stopped
+        loop is queued and never run, so the wait is for something that cannot happen. Whoever still
         holds a closed session would then not fail - it would stop answering altogether, with no
         reply, no error and no end to the wait. A brain whose rebuild failed holds exactly that.
         """
@@ -146,8 +149,20 @@ class SdkSession:
         try:
             self._run(self._client.disconnect())
         finally:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._shutdown_loop()
             self._discard_spilled_prompt()
+
+    def _shutdown_loop(self):
+        """Stop this session's loop, wait for its thread to come out of `run_forever`, and close it.
+
+        Closing is the part that gives the handles back; a loop that is merely stopped keeps them,
+        and its thread stays alive. Bounded, because a loop that will not stop must not take the
+        conversation down with it - better a leaked thread than a wedged app.
+        """
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=self._LOOP_STOP_WAIT)
+        if not self._thread.is_alive():
+            self._loop.close()
 
     def _discard_spilled_prompt(self):
         """Take the persona's copy back off disk. A fresh session is built on every compaction and

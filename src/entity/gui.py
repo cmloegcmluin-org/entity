@@ -11,8 +11,8 @@ right, Entity's down the left, each with a name and a time, past sessions above 
 boxes themselves are `bubbles.py`. Everything to do with talking sits together along the bottom:
 mic button, level meter, an auto-listen switch, the editable draft speech types into, Submit, and a
 one-click Yes for the answer he gives oftenest with a bin beside it for the draft he doesn't want.
-Beside the conversation are tabs - one per agent log, tailed live, and the profile's Goals, Projects and
-Enhancements, editable and saved straight back into the file the brain reads.
+Beside the conversation are tabs - one per agent log, tailed live, and the profile's Goals,
+Projects and Enhancements, editable and saved straight back into the file the brain reads.
 
 Threads: the conversation loop and the dictation pump run on workers and push into the feed;
 tkinter runs the main thread and polls with `after`, so no Tk call ever happens off the Tk thread.
@@ -64,6 +64,15 @@ def set_app_id(app_id, api=_set_app_id_via_shell32):
 
 def _clock():
     return time.strftime("%H:%M:%S")
+
+
+def _ask_before_closing(window, title):
+    """The real are-you-sure. A function rather than a method so the window's close path can be
+    driven in a test without a modal box waiting for a click nobody is there to give it."""
+    from tkinter import messagebox
+
+    return messagebox.askyesno(title, "Close Entity?", detail="This ends the conversation.",
+                               icon="warning", default="no", parent=window)
 
 
 class TranscriptModel:
@@ -184,7 +193,7 @@ class EntityWindow:
     # ticked line is the only evidence a complaint was heard and answered.
     CHECKLIST_HEADINGS = ("Enhancements",)
 
-    def __init__(self, feed, *, on_stop, on_close,
+    def __init__(self, feed, *, on_stop, on_close, confirm_close=None,
                  profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
                  icon=None, title="Entity", clock=_clock, now=time.monotonic, chord=None):
         import tkinter as tk
@@ -196,6 +205,7 @@ class EntityWindow:
         self._done = None
         self.ended = False
         self._on_stop = on_stop
+        self._on_close = on_close
         # No-ops until `attach_mic` hands over the real ones: the window opens before the mic
         # exists, and every one of these is a control he can already reach.
         self._on_submit = lambda text: None
@@ -254,7 +264,8 @@ class EntityWindow:
         self._agent_tabs.bind("<Button-3>", self._clicked_agent_tabs)
         self._tabs.add(self._agent_tabs, text="Agents")
         self._build_controls(tk)
-        self._tk.protocol("WM_DELETE_WINDOW", on_close)
+        self._confirm_close = confirm_close or (lambda: _ask_before_closing(self._tk, title))
+        self._tk.protocol("WM_DELETE_WINDOW", self.request_close)
         if self._chord is not None:
             self._chord.start()
 
@@ -700,6 +711,14 @@ class EntityWindow:
             name = label.rsplit("  ", 1)[0]
             if name in self._tails:
                 self.close_agent_tab(name)
+
+    def request_close(self):
+        """What the X on the title bar asks for. It asks back first: he shut the whole thing down
+        by accident once - "Godddamnit, I accidentally closed this app" - and there is a live
+        conversation, a mic and running agents behind that button. The Entity winding down on its
+        own doesn't come through here, so a session that ends properly is never questioned."""
+        if self._confirm_close():
+            self._on_close()
 
     def close_when(self, done):
         """Once `done` (a threading.Event) fires, the window shuts itself on its own thread."""

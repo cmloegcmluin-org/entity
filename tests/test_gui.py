@@ -175,7 +175,9 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     chord = SimpleNamespace(started=0, stopped=0)
     chord.start = lambda: setattr(chord, "started", chord.started + 1)
     chord.stop = lambda: setattr(chord, "stopped", chord.stopped + 1)
-    window = EntityWindow(feed, on_stop=lambda: stops.append(True), on_close=lambda: None,
+    closes, sure = [], [False]
+    window = EntityWindow(feed, on_stop=lambda: stops.append(True),
+                          on_close=lambda: closes.append(True), confirm_close=lambda: sure[0],
                           profile_path=profile, agent_logs_dir=logs, clock=lambda: "12:00:00",
                           persona="You are Entity. BREVITY IS YOUR MOST IMPORTANT RULE.",
                           learned_path=learned, now=lambda: ticks[0], chord=chord)
@@ -393,6 +395,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         # The submit chord listens for as long as the window is open, and no longer: a global
         # keyboard hook outliving its window would keep eating Win+Enter everywhere.
         assert chord.started == 1 and chord.stopped == 0
+
+        # "Godddamnit, I accidentally closed this app. There should definitely be an 'are you
+        # sure' confirmation dialog!!" - so the X asks, and a no leaves everything running.
+        window.request_close()
+        assert closes == []
+        sure[0] = True
+        window.request_close()
+        assert closes == [True]
 
         assert not window.ended
         done.set()

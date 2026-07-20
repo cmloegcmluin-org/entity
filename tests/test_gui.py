@@ -294,6 +294,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert submitted[-1] == "Yes."
         assert window.draft_text() == "something I was still writing"
 
+        # The bin beside it throws the whole draft away - and Ctrl+Z brings it back, because a
+        # button that destroys typed words for good is the complaint this box just answered.
+        window.press_discard()
+        assert window.draft_text() == ""
+        window.press_undo()
+        assert window.draft_text() == "something I was still writing"
+        window.press_discard()
+
         # One button: it IS the stop while Entity talks, and stopping leaves the mic off.
         feed.push("state", "speaking")
         window._drain_once()

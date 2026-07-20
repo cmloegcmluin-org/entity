@@ -94,9 +94,28 @@ and the keyboard hook run on workers.
 
 ## Open work
 
-Nothing is assigned. Outstanding, unstarted: hearing only the user's voice (speaker enrollment, and
-loopback gating so audio this PC is playing is discounted), and a live word-by-word transcription
-display with a spoken codeword to rewind and re-say. Both are in the profile's Enhancements section.
+Nothing is assigned. Outstanding, unstarted, both in the profile's Enhancements: hearing only the
+user's voice, and a live word-by-word transcription display with a spoken codeword to rewind and
+re-say.
+
+**Hearing only the user.** Replay `runtime/audio/*.wav` through the real pump and the real Parakeet
+before designing anything — that is how the phantom "thank you"s were found, and it already says
+what else is in there. One 20-minute session carried the Entity's own spoken replies back in through
+the mic at the same level as his voice; another carried half an hour of a TV show, transcribed
+verbatim. Neither is him and neither is silence, so `carries_speech` cannot see them.
+
+Speaker enrollment and loopback gating answer the same question — *is this him?* — so they belong at
+one decision point, beside `carries_speech` where a burst ends. For whoever takes them:
+
+- A voiceprint is personal: `runtime/`, never the source. Bootstrapping is free — the chunks that
+  became submitted turns in past sessions are labelled samples of his voice.
+- A false negative costs far more than a false positive. Dropping a phantom costs nothing; dropping
+  HIM makes the app deaf, which is the failure `NoiseFloor` already records twice.
+- Loopback is WASAPI through `sounddevice`, opened on the machine's *output* device — check the
+  current API rather than writing against a remembered one. The point is to discount what the PC is
+  playing, not to go deaf while it plays: gate on the mic correlating with the delay-aligned
+  loopback, and measure that delay instead of assuming it. Its own voice is already handled by the
+  `_speaking` flag, so what this buys is Chrome and the TV.
 
 ## How the user works
 

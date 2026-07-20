@@ -1,5 +1,7 @@
 import threading
 
+from claude_agent_sdk import ResultMessage
+
 from entity.sdk_session import SdkSession, _context_tokens, extract_text
 
 
@@ -81,6 +83,42 @@ class FakeClient:
 
     async def disconnect(self):
         self.disconnected.set()
+
+
+def _finished():
+    return ResultMessage(subtype="success", duration_ms=1, duration_api_ms=1, is_error=False,
+                         num_turns=1, session_id="s", usage={})
+
+
+class StreamingClient(FakeClient):
+    """A client that streams a turn back: a tool call, its output, then the agent's words."""
+
+    STREAM = (
+        FakeMsg([FakeBlock("Confirmed red.")]),
+        FakeMsg([FakeBlock("Now the implementation:")]),
+        _finished(),
+    )
+
+    async def query(self, prompt):
+        self.asked = prompt
+
+    async def receive_response(self):
+        for message in self.STREAM:
+            yield message
+
+
+def test_every_message_reaches_the_caller_whole_as_it_streams():
+    # It used to boil each message down to its text right here, so the tool calls, the diffs and
+    # the command output were gone before anything downstream could write them anywhere.
+    client = StreamingClient()
+    session = SdkSession(object(), client_factory=lambda options: client)
+    seen = []
+
+    reply = session.ask("do the thing", on_message=seen.append)
+
+    assert seen == list(StreamingClient.STREAM)  # every message, untouched
+    assert reply == "Now the implementation:"  # the reply is still only its final word
+    session.close()
 
 
 def test_interrupt_runs_the_clients_interrupt_on_the_session_loop():

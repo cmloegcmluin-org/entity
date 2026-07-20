@@ -17,6 +17,10 @@ SHARE = 0.55  # of the pane a bubble may take - about half, the way a message th
 PAD_X = 10
 PAD_Y = 6
 NAME_FONT = ("Segoe UI", 8)
+# What an agent RAN, and what came back. Monospaced, because a diff and a column of test output
+# only line up in a font whose characters do; left, because centring output line by line is not
+# something anyone can read. Not a bubble either: one tinted box per line of a stack trace.
+WORK_FONT = ("Consolas", 9)
 PAGE = 40  # messages built at a time - what a screenful needs, and what a scroll back adds
 COPY_ICON = "⧉"  # two joined squares - the copy glyph, in the font the window already uses
 REACH_MS = 250  # how long the copy button waits after the pointer leaves, to be reachable
@@ -127,6 +131,7 @@ class Thread:
                                spacing1=8)
         pane.tag_configure("status", justify="center", foreground=DIM, font=NAME_FONT,
                            spacing1=4, spacing3=4)
+        pane.tag_configure("work", justify="left", foreground=DIM, font=WORK_FONT)
         pane.tag_configure("historical", foreground=PAST)
         # Its own pane, not the window: a tab not yet opened is sized only when it appears,
         # and the window sends no resize of its own for that.
@@ -311,14 +316,16 @@ class Thread:
         self._fill(shown)
 
     def _build_line(self, entry, prepend, faded):
-        """A centred remark with no bubble - a status line, a day, or a session break.
+        """A remark with no bubble - a status line, a day, a session break, or an agent's work.
 
         Every one gets a mark, because a line has no widget to scroll to the way a bubble does,
         and the contents list scrolls to the line a session opens with. A session break also
         gets a tag, so hovering it can offer to copy the whole session."""
         where = "1.0" if prepend else "end"
         start = "1.0" if prepend else self._pane.index("end-1c")
-        self._pane.insert(where, entry["text"] + "\n", ("status",) + faded)
+        # An agent's machinery reads down the left in a monospace; everything else is centred.
+        kind = "work" if entry["role"] == "work" else "status"
+        self._pane.insert(where, entry["text"] + "\n", (kind,) + faded)
         mark = f"line{id(entry)}"  # no hyphen: a mark name is parsed as part of an index expression
         self._pane.mark_set(mark, start)
         self._pane.mark_gravity(mark, "left")
@@ -359,6 +366,19 @@ class Thread:
         """Where the bubbles actually landed: (role, x, width) each, measured off the widgets."""
         return [(entry["role"], holder.winfo_x(), holder.winfo_width())
                 for entry, holder, _ in self._shown if holder is not None]
+
+    def line_geometry(self):
+        """Where the lines with no bubble landed: (role, x) each, read back off the pane.
+
+        What a tag was CONFIGURED to justify is not where the words ended up - the pane has its own
+        padding and margins, and only the position it reports says whether output reads down the
+        left the way a terminal does or is centred a line at a time."""
+        placed = []
+        for entry, holder, _ in self._shown:
+            box = None if holder is not None else self._pane.bbox(self._marks[id(entry)])
+            if box is not None:
+                placed.append((entry["role"], box[0]))
+        return placed
 
     def bodies(self):
         """The widgets holding each message's words - what a selection is made in."""

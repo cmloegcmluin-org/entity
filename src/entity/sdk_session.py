@@ -62,28 +62,30 @@ class SdkSession:
         turn out with a result message, so the blocked `ask` returns of its own accord."""
         self._submit(self._client.interrupt())
 
-    async def _ask(self, prompt, on_step):
+    async def _ask(self, prompt, on_message):
         await self._client.query(prompt)
         messages = []
         async for message in self._client.receive_response():
             messages.append(message)
-            if on_step is not None:
-                step = extract_text([message])
-                if step:
-                    on_step(step)
+            if on_message is not None:
+                on_message(message)
             if isinstance(message, ResultMessage):
                 self.last_context_tokens = _context_tokens(message.usage)
                 break
         return extract_text(messages)
 
-    def ask(self, prompt, on_step=None):
-        """Ask, and hand each step to `on_step` as it arrives.
+    def ask(self, prompt, on_message=None):
+        """Ask, and hand each message to `on_message`, whole, as it arrives.
 
-        A real task takes many minutes, and until now nothing at all was visible until the very
-        end - so an agent hard at work and an agent that had died looked exactly the same, and
-        the user sat watching an empty log for fourteen minutes while Entity declared it dead one
-        minute before it answered. The steps are the narration Claude Code shows them natively."""
-        return self._submit(self._ask(prompt, on_step))
+        A real task takes many minutes, and nothing at all used to be visible until the very end -
+        so an agent hard at work and an agent that had died looked exactly the same, and the user
+        sat watching an empty log for fourteen minutes while Entity declared it dead one minute
+        before it answered.
+
+        Whole, and not boiled down to its text first: a message carries what the agent RAN as well
+        as what it said, and reducing it here is what left the logs with the narration and none of
+        the work. What to keep is the caller's decision - see `entity.steps`."""
+        return self._submit(self._ask(prompt, on_message))
 
     def close(self):
         try:

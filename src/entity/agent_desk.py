@@ -23,7 +23,8 @@ import time
 from pathlib import Path
 
 from entity.relay import notice
-from entity.transcript import Transcript
+from entity.steps import SAID, render
+from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
 class _Desked:
@@ -109,15 +110,15 @@ class AgentDesk:
             entry = self._desked.get(name)
         if entry is None:  # closed out from under us
             return
-        self._log(entry, message, prefix="ENTITY> ")
+        self._log(entry, message, prefix=ENTITY_SAID)
         self._set_state(name, "working")
         self._alive(name)  # it has work in flight from this moment; the silence clock starts here
         try:
-            # Every step goes to the log as it happens, so their tab shows the agent working rather
-            # than an empty file that reads exactly like a dead one.
-            reply = entry.agent.work(message, on_step=lambda step: self._step(name, step))
+            # Everything the agent streams back goes to the log as it happens, so their tab shows
+            # the agent working rather than an empty file that reads exactly like a dead one.
+            reply = entry.agent.work(message, on_message=lambda msg: self._heard(name, msg))
         except Exception as exc:  # a dead agent is news, not something to swallow
-            self._log(entry, f"(died: {exc})", prefix="AGENT> ")
+            self._log(entry, f"(died: {exc})", prefix=AGENT_SAID)
             self._set_state(name, "failed")
             self._finished(name)  # already announced as dead; don't also announce it as quiet later
             self._outbox.push(f"The {name} agent died: {exc}")
@@ -127,15 +128,17 @@ class AgentDesk:
         # A notice, never the agent's own words - the full reply is in the log its tab reads.
         self._outbox.push(notice(name, reply))
 
-    def _step(self, name, text):
-        """A step of an agent's thinking, logged and timestamped as it arrives."""
+    def _heard(self, name, message):
+        """One message back from an agent - what it said AND what it did - logged as it arrives."""
         with self._lock:
             entry = self._desked.get(name)
         if entry is not None:
-            self._log(entry, text, prefix="AGENT> ")
-            entry.last_word = text[:120]
+            for kind, text in render(message):
+                self._log(entry, text, prefix=AGENT_SAID if kind == SAID else AGENT_DID)
+                if kind == SAID:
+                    entry.last_word = text[:120]  # the roster carries its words, not its machinery
             entry.last_heard = self._clock("%Y-%m-%d %H:%M:%S")
-            self._alive(name)  # the same signal the roster records - anything it says is a sign of life
+            self._alive(name)  # the same signal the roster records - any message is a sign of life
 
     def _alive(self, name):
         if self._monitor is not None:

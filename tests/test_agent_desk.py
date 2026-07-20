@@ -1,8 +1,22 @@
 import threading
 import time
+from types import SimpleNamespace
 
 from entity.agent_desk import AgentDesk
 from entity.outbox import Outbox
+
+
+def said(text):
+    """One streamed message carrying the agent's own words."""
+    return SimpleNamespace(content=[SimpleNamespace(text=text)])
+
+
+def called(tool, **tool_input):
+    return SimpleNamespace(content=[SimpleNamespace(name=tool, input=tool_input)])
+
+
+def came_back(output):
+    return SimpleNamespace(content=[SimpleNamespace(tool_use_id="toolu_01", content=output)])
 
 
 class FakeAgent:
@@ -16,10 +30,10 @@ class FakeAgent:
         self.closed = False
         self._hold = hold
 
-    def work(self, message, on_step=None):
+    def work(self, message, on_message=None):
         self.messages.append(message)
-        if on_step is not None:
-            on_step(f"[{self.name}] did: {message}")
+        if on_message is not None:
+            on_message(said(f"[{self.name}] did: {message}"))
         if self._hold is not None:
             self._hold.wait(2.0)
         return f"[{self.name}] did: {message}"
@@ -87,7 +101,7 @@ def test_an_agent_that_dies_stops_its_silence_clock_too():
 
 
 class _DyingAgent:
-    def work(self, message, on_step=None):
+    def work(self, message, on_message=None):
         raise RuntimeError("session lost")
 
     def close(self):
@@ -145,7 +159,7 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
     outbox = Outbox()
 
     class Exploding:
-        def work(self, message, on_step=None):
+        def work(self, message, on_message=None):
             raise RuntimeError("session died")
 
         def close(self):
@@ -225,9 +239,9 @@ def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
     steps = ["Reading the router.", "Writing a failing test.", "Confirmed red."]
 
     class NarratingAgent:
-        def work(self, message, on_step=None):
+        def work(self, message, on_message=None):
             for step in steps:
-                on_step(step)
+                on_message(said(step))
             return "done"
 
         def close(self):
@@ -245,13 +259,40 @@ def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
     desk.close()
 
 
+def test_what_an_agent_ran_and_what_came_back_reach_its_log(tmp_path):
+    # "no tool calls, diffs, or command/test output": the log held only the sentences the agent
+    # narrated, so ten minutes of real work read back as ten minutes of silence. Asked for the
+    # real exchange repeatedly, because it is what says whether these agents are being driven well.
+    outbox = Outbox()
+
+    class Working:
+        def work(self, message, on_message=None):
+            on_message(called("Bash", command="python -m pytest -q"))
+            on_message(came_back("358 passed in 4.41s"))
+            on_message(said("Green. Committing."))
+            return "Green. Committing."
+
+        def close(self):
+            pass
+
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide: Working(), log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "make it green")
+    assert _wait_for(lambda: bool(outbox))
+
+    log = (tmp_path / "fixer.log").read_text(encoding="utf-8")
+    assert "WORK> Bash: python -m pytest -q" in log
+    assert "WORK>     358 passed in 4.41s" in log
+    assert "AGENT> Green. Committing." in log
+    desk.close()
+
+
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
     outbox = Outbox()
     roster = tmp_path / "active-agents.txt"
 
     class NarratingAgent:
-        def work(self, message, on_step=None):
-            on_step("Reading the router.")
+        def work(self, message, on_message=None):
+            on_message(said("Reading the router."))
             return "done"
 
         def close(self):

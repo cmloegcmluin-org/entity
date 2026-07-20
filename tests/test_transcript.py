@@ -107,6 +107,18 @@ def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
     assert parse_line("[03:41:18] (thinking…)") == ("status", "03:41:18", "(thinking…)")
 
 
+def test_what_an_agent_ran_reads_back_as_its_own_kind_with_its_shape_intact():
+    from entity.transcript import parse_line
+
+    # Its own role, because the tab draws the machinery differently from what the agent SAID -
+    # a command and its output as messages would be one tinted box per line of a diff.
+    assert parse_line("[08:20:15] WORK> Bash: python -m pytest -q") == (
+        "work", "08:20:15", "Bash: python -m pytest -q")
+    # And the indent is the structure: it is what puts output under the call that produced it.
+    assert parse_line("[08:20:52] WORK>     358 passed in 4.41s") == (
+        "work", "08:20:52", "    358 passed in 4.41s")
+
+
 def test_a_day_header_reads_back_as_a_break_that_can_be_seen():
     from entity.transcript import parse_line
 
@@ -129,6 +141,16 @@ def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():
     assert role == "session"
     assert text != DAY_BREAK.format("session")
     assert not any(character.isdigit() for character in text)
+
+
+def test_a_marker_with_a_blank_line_after_it_is_a_blank_line_not_the_marker():
+    from entity.transcript import parse_line
+
+    # A written line keeps no trailing space by the time it is read back, so a blank line under a
+    # marker arrives as the bare marker - and turned up in the middle of the tab as a centred
+    # "WORK>" and "AGENT>". Seen only by looking at the rendered pane; every test passed.
+    assert parse_line("[09:29:25] AGENT> ") is None
+    assert parse_line("[08:20:52] WORK> ") is None
 
 
 def test_lines_that_are_not_conversation_read_back_as_nothing():

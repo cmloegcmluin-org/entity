@@ -83,14 +83,22 @@ def day_of(line):
     return None
 
 
+# The prefixes an agent's exchange is written under. Named here because the desk writes them and
+# `parse_line` reads them back, and two spellings of one format is a bug nothing would catch.
+ENTITY_SAID = "ENTITY> "
+AGENT_SAID = "AGENT> "
+AGENT_DID = "WORK> "  # what it ran, and what came back - the machinery under its words
+
+
 # Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
 # desk's). "you" is whoever opened the exchange - them in their own thread, the Entity in an agent's.
 _ROLE_PREFIXES = (
     ("you said: ", "you"),
     ("entity (heads-up)> ", "heads-up"),
     ("entity> ", "entity"),
-    ("ENTITY> ", "you"),
-    ("AGENT> ", "entity"),
+    (ENTITY_SAID, "you"),
+    (AGENT_SAID, "entity"),
+    (AGENT_DID, "work"),
 )
 
 
@@ -162,4 +170,9 @@ def parse_line(line):
     for prefix, role in _ROLE_PREFIXES:
         if body.startswith(prefix):
             return role, stamp, body[len(prefix):]
+        if body == prefix.rstrip():
+            # The marker with nothing after it - a blank line in what was said. A written line
+            # keeps no trailing space by the time it is read back, so without this the marker
+            # itself was drawn, centred, in the middle of the tab: "AGENT>", "WORK>".
+            return None
     return "status", stamp, body

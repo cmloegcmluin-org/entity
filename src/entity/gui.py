@@ -95,8 +95,12 @@ class TranscriptModel:
         self._counter = None
         self.entries.append({
             "role": role,
+            # An agent's machinery keeps its leading space, where every other entry is stripped of
+            # the stray whitespace a message arrives with: for a tool call the indent IS the
+            # structure, and flattening it puts a diff, a stack trace and the command that produced
+            # them all in one column.
+            "text": text.rstrip() if role == "work" else text.strip(),
             "stamp": stamp or self._clock(),
-            "text": text.strip(),
             "historical": historical,
         })
 
@@ -792,6 +796,19 @@ class EntityWindow:
 
     def agent_tab_text(self, name):
         return self._tails[name][1].text()
+
+    def show_agent_tab(self, name):
+        """Bring one agent's tab to the front - what clicking it does, and what has to have
+        happened before anything in it can be measured where it actually landed."""
+        self._tabs.select(self._agent_tabs)
+        self._agent_tabs.select(self._tails[name][1].pane)
+        self._tk.update()
+
+    def agent_tab_geometry(self, name):
+        return self._tails[name][1].geometry()
+
+    def agent_tab_line_geometry(self, name):
+        return self._tails[name][1].line_geometry()
 
     def agent_tab_labels(self):
         return [self._agent_tabs.tab(tab_id, "text") for tab_id in self._agent_tabs.tabs()]

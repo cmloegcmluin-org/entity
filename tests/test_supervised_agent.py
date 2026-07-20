@@ -8,8 +8,10 @@ class FakeSession:
         self.options = options
         self.asked = []
 
-    def ask(self, message, on_step=None):
+    def ask(self, message, on_message=None):
         self.asked.append(message)
+        if on_message is not None:
+            on_message(f"a message about {message}")
         return f"report: did {message}"
 
     def close(self):
@@ -62,3 +64,16 @@ def test_work_sends_the_message_and_returns_the_agents_report():
 
     assert report == "report: did continue your task"
     assert agent.name == "docs-sidebar"
+
+
+def test_work_hands_the_desk_every_message_the_session_streams():
+    # The desk is what writes the log, so a watcher dropped here is a log with nothing in it.
+    async def decide(*a):
+        return True
+
+    agent = SupervisedAgent("docs-sidebar", "C:/wt", decide, session_factory=FakeSession)
+    watching = []
+
+    agent.work("continue your task", on_message=watching.append)
+
+    assert watching == ["a message about continue your task"]

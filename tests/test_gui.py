@@ -35,6 +35,21 @@ def test_past_sessions_read_back_as_the_conversation_they_were():
     ]
 
 
+def test_an_agents_work_keeps_the_indent_that_puts_output_under_its_call():
+    # Every other entry is stripped, because a message arrives with stray whitespace around it.
+    # For the machinery the leading space IS the structure - strip it and a diff, a stack trace
+    # and the command that produced them all land in one flat column.
+    model = _model()
+
+    model.apply("history", "[08:20:15] WORK> Bash: python -m pytest -q")
+    model.apply("history", "[08:20:52] WORK>     358 passed in 4.41s")
+
+    assert [(e["role"], e["text"]) for e in model.entries] == [
+        ("work", "Bash: python -m pytest -q"),
+        ("work", "    358 passed in 4.41s"),
+    ]
+
+
 def test_the_contents_list_names_each_session_by_the_day_and_time_it_opened():
     from entity.gui import sessions
 
@@ -145,7 +160,13 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     learned.write_text("- prefers metric units" + chr(10), encoding="utf-8")
     logs = tmp_path / "agent-logs"
     logs.mkdir()
-    (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix the drive link\n", encoding="utf-8")
+    (logs / "fixer.log").write_text(
+        "[10:00:00] ENTITY> fix the drive link\n"
+        "[10:00:01] (waking it up)\n"
+        "[10:00:02] WORK> Bash: python -m pytest -q\n"
+        "[10:00:03] WORK>     358 passed in 4.41s\n"
+        "[10:00:04] AGENT> Green. Committing.\n",
+        encoding="utf-8")
 
     feed = TranscriptFeed()
     done = threading.Event()
@@ -269,6 +290,19 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         shown_log = window.agent_tab_text("fixer")
         assert "Entity · 10:00:00" in shown_log  # the agent exchange reads as a conversation too
         assert "fix the drive link" in shown_log
+        # What it RAN and what came back are in the tab too, not just the sentence it narrated -
+        # and the output sits UNDER its call, which is the whole job the indent does.
+        assert "Bash: python -m pytest -q\n    358 passed in 4.41s\n" in shown_log
+
+        # And where they actually landed, measured off the widgets: the machinery reads down the
+        # left margin like a terminal, while an ordinary status line stays centred. A diff or a
+        # stack trace centred line by line is not something anyone can read.
+        window.show_agent_tab("fixer")
+        placed = dict(window.agent_tab_line_geometry("fixer"))
+        assert placed["work"] <= 14
+        assert placed["status"] > placed["work"] + 100  # centred, and nothing like the margin
+        # Its words are still messages, in a tinted box - only the machinery is a bare line.
+        assert [role for role, _, _ in window.agent_tab_geometry("fixer")] == ["you", "entity"]
 
         # Closing one takes the tab away and archives its log, so it stays closed.
         window.close_agent_tab("fixer")

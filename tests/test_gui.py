@@ -276,6 +276,16 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         window._drain_once()
         assert submitted == ["add eggs and milk"] and window.draft_text() == ""
 
+        # Ctrl+Z. He wiped out everything he had typed and there was no getting it back - "hugely
+        # frustrating". Typed a key at a time and wiped by a real keystroke, because undo has to
+        # work against the stack real typing builds, not against one programmatic insert.
+        window.type_in_draft("the whole thing I typed")
+        window.wipe_draft()
+        assert window.draft_text() == ""
+        window.press_undo()
+        assert window.draft_text() == "the whole thing I typed"
+        window.wipe_draft()
+
         # One button: it IS the stop while Entity talks, and stopping leaves the mic off.
         feed.push("state", "speaking")
         window._drain_once()

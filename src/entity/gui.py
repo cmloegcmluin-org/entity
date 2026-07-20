@@ -412,9 +412,11 @@ class EntityWindow:
                                  command=self._submit_draft, bg="#2a4d00", fg=ACCENT,
                                  activebackground="#2a4d00", activeforeground=ACCENT)
         self._submit.pack(fill="x", pady=(6, 0))
+        # undo=True is Ctrl+Z, which Tk gives a Text only when asked. Without it he wiped out
+        # everything he had typed with nothing to recover it - "hugely frustrating".
         self._draft = tk.Text(row, height=4, wrap="word", font=("Segoe UI", 11), bg=PANEL, fg=FG,
                               insertbackground=ACCENT, selectbackground="#3a5f00", borderwidth=0,
-                              padx=8, pady=6)
+                              padx=8, pady=6, undo=True, autoseparators=True, maxundo=-1)
         self._draft.pack(side="left", fill="both", expand=True)
         self._draft.bind("<Key-Return>", self._submit_from_key)
         self._show_state(self._state)
@@ -750,6 +752,27 @@ class EntityWindow:
 
     def draft_text(self):
         return self._draft.get("1.0", "end-1c")
+
+    def type_in_draft(self, text):
+        """Type into the draft a key at a time, the way he does - so what undo has to work with is
+        the stack real typing builds, not one programmatic insert."""
+        self._draft.focus_set()
+        for character in text:
+            self._draft.event_generate("<KeyPress>",
+                                       keysym="space" if character == " " else character)
+        self._tk.update()
+
+    def wipe_draft(self):
+        """Select the whole draft and hit backspace - the accident he had."""
+        self._draft.focus_set()
+        self._draft.tag_add("sel", "1.0", "end-1c")
+        self._draft.event_generate("<KeyPress-BackSpace>")
+        self._tk.update()
+
+    def press_undo(self):
+        self._draft.focus_set()
+        self._draft.event_generate("<Control-z>")
+        self._tk.update()
 
     def tab_labels(self):
         return [self._tabs.tab(tab_id, "text") for tab_id in self._tabs.tabs()]

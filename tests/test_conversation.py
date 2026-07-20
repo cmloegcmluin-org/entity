@@ -55,6 +55,12 @@ class FakeTTS:
         self.spoken.append(text)
 
 
+def _words(utterance):
+    """Just the user's own words, with any system note the loop prefixed stripped back off - so a
+    test about WHICH turns reached the brain isn't also a test of how they were annotated."""
+    return utterance.rpartition("]\n\n")[2]
+
+
 def test_a_barge_in_before_the_reply_leaves_it_unspoken():
     interrupt = threading.Event()
 
@@ -206,7 +212,7 @@ def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
 
     assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # they declined, so it was never delivered
     assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
-    assert brain.heard == ["tell me everything", "no thanks"]
+    assert [_words(u) for u in brain.heard] == ["tell me everything", "no thanks"]
 
 
 def test_a_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
@@ -315,7 +321,7 @@ def test_talking_again_cancels_the_detached_call_instead_of_deflecting_the_user(
 
     assert cancelled == [True]  # the stale call was cancelled, not left to block them
     assert second.said == "fresh answer"  # and their new turn actually got answered
-    assert calls == ["slow one", "what about this"]
+    assert [_words(u) for u in calls] == ["slow one", "what about this"]
 
 
 def test_a_finished_background_answer_is_spoken_when_they_speak_again():
@@ -686,7 +692,7 @@ def test_stop_listening_sleeps_the_entity_and_hey_entity_wakes_it():
 
     convo.run()
 
-    assert brain.heard == ["hi again"]  # nothing reached the brain while it was asleep
+    assert [_words(u) for u in brain.heard] == ["hi again"]  # nothing reached it while asleep
     assert convo.suspend_reply in tts.spoken and convo.resume_reply in tts.spoken
 
 
@@ -1030,7 +1036,7 @@ def test_suspend_pauses_the_brain_until_resume():
 
     convo.run()
 
-    assert brain.heard == ["hi there"]  # nothing reached the brain while paused
+    assert [_words(u) for u in brain.heard] == ["hi there"]  # nothing reached it while paused
     assert convo.suspend_reply in tts.spoken
     assert convo.resume_reply in tts.spoken
 
@@ -1044,7 +1050,7 @@ def test_a_wake_word_with_words_after_it_still_wakes_it():
 
     convo.run()
 
-    assert brain.heard == ["so about that bug"]  # it woke on the first try and took the next turn
+    assert [_words(u) for u in brain.heard] == ["so about that bug"]  # woke first try, took the turn
 
 
 def test_agent_news_still_arrives_while_it_is_asleep():
@@ -1360,6 +1366,52 @@ def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():
 
     assert heard[0] == "hi"  # the first turn is untouched
     assert "CUT OFF" in heard[1] and "and again" in heard[1]  # the second carries the consequence
+
+
+def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
+    # "If what I consider to be one Entity is actually a bunch of disconnected fakers who aren't
+    # aware of each other, then the flimsy occasional illusion of you being a coherent Entity is
+    # worse than useless." He kept quoting lines back that the brain had no record of, because the
+    # app speaks in its name - the acknowledgement, the handoff line, an agent's notice - and none
+    # of it ever reached the brain. Asked about one, it said "I have no record of typing that
+    # myself", which was true, and read as gaslighting.
+    heard = []
+
+    class NotingBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "a reply"
+
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed")
+    convo = Conversation(FakeSTT(["", "what did you just say to me"]), NotingBrain(), FakeTTS(),
+                         outbox=outbox, acknowledgement="Message received.", long_answer_chars=None)
+
+    convo.turn()  # a lull: the agent's notice goes out in its name, unwritten by it
+    convo.turn()  # and now they ask about it
+
+    assert "fixer: the drive link is fixed" in heard[0]  # it knows what he heard
+    assert "what did you just say to me" in heard[0]  # and their words are still in there
+
+
+def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
+    # Only lines it is NOT already aware of. Its own reply is in its context already, and the
+    # acknowledgement fires on every single turn - the persona carries that one as a standing fact,
+    # so the ledger doesn't repeat it into every prompt for the rest of the session.
+    heard = []
+
+    class NotingBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "the drive icon opens the folder now"
+
+    convo = Conversation(FakeSTT(["did it work", "thanks"]), NotingBrain(), FakeTTS(),
+                         acknowledgement="Message received.", long_answer_chars=None)
+
+    convo.turn()
+    convo.turn()
+
+    assert heard[1] == "thanks"  # nothing to report: it wrote its own last line, and knows the ack
 
 
 def test_a_reply_that_fitted_is_not_complained_about():

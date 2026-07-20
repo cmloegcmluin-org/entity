@@ -56,6 +56,23 @@ TRUNCATION_NOTICE = (
     "{limit} - they never saw or heard the rest of it. Answer in one or two short sentences.]\n\n"
 )
 
+# Said back to the brain on the turn AFTER anything was spoken in its name that it did not write -
+# the acknowledgement, the handoff line, an agent's notice, a canned confirmation.
+#
+# The user hears ONE Entity. The brain only ever knew the half of it that it composed, so he could
+# quote a line at it and be told, truthfully, "I have no record of typing that myself" - which from
+# where he sits is a thing that said something and then denied saying it. His words: "a basic
+# principle of two people having a conversation is that each person is aware of the things that
+# they've said. If what I consider to be one Entity is actually a bunch of disconnected fakers who
+# aren't aware of each other, then the flimsy occasional illusion of you being a coherent Entity is
+# worse than useless."
+UNWRITTEN_NOTICE = (
+    "[System note, not from the user: since your last reply, these lines were spoken to them in "
+    "YOUR name by the app rather than composed by you. They experienced every one of them as you "
+    "talking, and may refer to them as things you said - so own them and answer accordingly, and "
+    "never tell them you have no record of saying something they heard you say:\n{lines}]\n\n"
+)
+
 # Whether they said yes to "ready for it?" (see _is_affirmative for the full rules).
 _AFFIRMATIVES = (
     "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "ready", "please", "now",
@@ -249,6 +266,7 @@ class Conversation:
         self._long_answer_chars = long_answer_chars
         self._spoken_chars = spoken_chars
         self._cut_last_reply = None  # (written, limit) when the last reply was cut, else None
+        self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._detach_after = detach_after
         self._offered = None  # a long/slow answer spoken only once they say yes to "ready for it?"
         self._held_news = []  # drained from the outbox but not yet sayable (an offer stands, mic on)
@@ -272,7 +290,7 @@ class Conversation:
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
 
-    def _say(self, text, *, record=True):
+    def _say(self, text, *, record=True, known=False):
         """Speak, unless they've cut in. Once the interrupt is set, every later line this turn stays
         unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
         watcher listens for them saying "stop", which trips the same interrupt - so they can cut it off
@@ -283,6 +301,10 @@ class Conversation:
         if self._interrupted():
             self._console.spoke("(left unsaid - they had cut in)")
             return
+        if not known:
+            # They are about to hear this as the Entity speaking, and the brain did not write it -
+            # so the brain has to be told, or the two of them remember different conversations.
+            self._unwritten.append(text)
         if record:  # a line already printed records itself; this is for the ones only they hear
             self._console.spoke(text)
         stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
@@ -297,12 +319,15 @@ class Conversation:
             if stop_watching is not None:
                 stop_watching()
 
-    def _speak_reply(self, text):
+    def _speak_reply(self, text, *, known=False):
         """Cut it to a length worth hearing, then show and say exactly that.
 
         They disliked reading a wall they'd only heard the start of, so what is on screen and what
         is in their ear are the same words - the cut happens once, up front, to both. Steps they
         asked for are exempt and go out whole (see `_is_walkthrough`): brevity is for chatter.
+
+        `known` says the brain is already aware of this line - it composed it, or the persona tells
+        it standingly that it goes out. Everything else joins the list it is told next turn.
         """
         whole = text
         limit = None if _is_walkthrough(whole) else self._spoken_chars
@@ -311,7 +336,7 @@ class Conversation:
         # anything can learn from.
         self._cut_last_reply = (len(whole), self._spoken_chars) if len(text) < len(whole) else None
         self._console.reply(text)
-        self._say(text, record=False)
+        self._say(text, record=False, known=known)
 
     def _pause_to_read(self):
         """A short beat after a reply before the mic reopens, so they aren't rushed off it - skipped if
@@ -490,7 +515,7 @@ class Conversation:
             self._offered = reply
             self._speak_reply(self.ready_question)
         else:
-            self._speak_reply(reply)
+            self._speak_reply(reply, known=True)
 
     def turn(self):
         if self._interrupt is not None:
@@ -552,27 +577,34 @@ class Conversation:
         if background["done"].is_set():
             reply = background["outcome"].get("reply")  # a failure stays dropped, as it always has
             if reply is not None:
-                self._speak_reply(reply)
+                self._speak_reply(reply, known=True)
             return
         self._console.dropped()  # so the promise it made doesn't just silently evaporate
         self._cancel_think(background["done"])  # unwind it before their turn starts a new call
 
-    def _with_truncation_notice(self, heard):
-        """Their words, prefixed with the consequence of the last reply if there was one."""
+    def _with_system_notes(self, heard):
+        """Their words, prefixed with what the brain would otherwise have no way of knowing: that
+        its last reply was cut, and everything said in its name since that it did not write."""
+        notes = ""
         cut, self._cut_last_reply = self._cut_last_reply, None
-        if cut is None:
-            return heard
-        wrote, limit = cut
-        return TRUNCATION_NOTICE.format(wrote=wrote, limit=limit) + heard
+        if cut is not None:
+            wrote, limit = cut
+            notes += TRUNCATION_NOTICE.format(wrote=wrote, limit=limit)
+        unwritten, self._unwritten = self._unwritten, []
+        if unwritten:
+            notes += UNWRITTEN_NOTICE.format(lines="\n".join(f"- {line}" for line in unwritten))
+        return notes + heard
 
     def _answer(self, heard):
         """Acknowledge, think, and speak the reply - unless it's long enough to gate, in which case
         it's held and offered first (see _offer)."""
-        self._say(self._acknowledgement)  # let them know they were heard before the thinking pause
+        # `known`: this one fires on every single turn, so the persona states it once as a standing
+        # fact rather than the ledger repeating it into every prompt for the rest of the session.
+        self._say(self._acknowledgement, known=True)
         self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
         think_start = time.monotonic()
         try:
-            said = self._think(self._with_truncation_notice(heard))
+            said = self._think(self._with_system_notes(heard))
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             return None
         except _ThinkDetached:  # too slow - it's running in the background; offered when it lands
@@ -585,7 +617,7 @@ class Conversation:
         if self._should_gate(said):
             return self._offer(heard, said)
         speak_start = time.monotonic()
-        self._speak_reply(said)  # if they hit Enter while it was talking, this is cut off
+        self._speak_reply(said, known=True)  # if they hit Enter while it was talking, this is cut off
         if self._timings:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()
@@ -608,7 +640,7 @@ class Conversation:
         to accept or refuse."""
         if _is_affirmative(heard):
             answer, self._offered = self._offered, None
-            self._speak_reply(answer)
+            self._speak_reply(answer, known=True)
             self._pause_to_read()
             return Turn(heard=heard, said=answer)
         if _is_negative(heard):

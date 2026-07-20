@@ -9,13 +9,20 @@ user gets a short answer instead of the raw marker.
   [TELL] <name>: <message>   say something more to an agent already running
   [IMPROVE] <one line>       file a self-improvement that was asked for - it lands in the
                              profile's Enhancements section, which the window shows live
+                             (one line per item, and every one of them is filed)
+
+Whatever the brain writes AROUND a directive is what the user hears; the marker never reaches them.
+That matters because a directive used to consume the whole reply, so any turn that filed or
+dispatched something answered the user with a canned "Filed." or "Passed that to <agent>." and
+their actual question went unanswered. With nothing written around it they still get the canned
+confirmation - that is the floor, not the intent.
 
 The task travels WITH the directive on purpose. Without it the brain had no way to pass on what
 was actually asked for, so it would go and work the request out for itself first - forty-five
 seconds of digging before a single word came back, on a request that should have been handed
 straight to an agent. Relaying requirements needs no investigation: the agent does that.
 
-Both markers hand off to the AgentDesk and return AT ONCE. Nothing here waits on an agent: an
+The agent markers hand off to the AgentDesk and return AT ONCE. Nothing here waits on an agent: an
 agent that takes twenty minutes used to hold the whole conversation for twenty minutes, which
 left the user talking to a wall while it worked.
 """
@@ -38,12 +45,35 @@ _TELL = "[TELL]"
 _IMPROVE = "[IMPROVE]"
 
 
-def parse_improve(reply):
-    """Pull the enhancement out of an `[IMPROVE] <one line>` reply, or None."""
-    if _IMPROVE not in reply:
-        return None
-    line = reply.split(_IMPROVE, 1)[1].strip().split("\n", 1)[0].strip()
-    return line or None
+# What the brain said to THEM in a reply that also carried a directive, or "" if it said nothing.
+#
+# A directive used to consume the whole reply and hand back a canned line, so any turn that filed or
+# dispatched something answered whatever they had asked with "Filed." or "Passed that to <agent>." -
+# eight of them in one session. Their all-caps demand to be shown the work running got "Passed that
+# to drive-native-gdoc-export." and nothing else. The question wasn't deprioritized; the answer was
+# written and then deleted.
+
+
+def _spoken_before(reply, marker):
+    """For a directive whose payload runs to the end of the reply: whatever came before it."""
+    return reply.partition(marker)[0].strip()
+
+
+def _spoken_around_improvements(reply):
+    """An `[IMPROVE]` item is one line, so every OTHER line was meant for them."""
+    return "\n".join(line for line in reply.splitlines() if _IMPROVE not in line).strip()
+
+
+def parse_improvements(reply):
+    """Every `[IMPROVE] <one line>` in the reply, in the order they were written.
+
+    All of them, not just the first: asked for two tickets it filed one, and he had to notice the
+    gap and ask again for something he had already asked for."""
+    return [
+        item
+        for item in (line.partition(_IMPROVE)[2].strip() for line in str(reply).splitlines())
+        if item
+    ]
 
 
 def parse_supervise(reply):
@@ -100,16 +130,19 @@ class SupervisingBrain:
 
     def respond(self, utterance):
         reply = self._inner.respond(utterance)
-        improvement = parse_improve(reply)
-        if improvement is not None:
-            self._file_enhancement(improvement)
-            return "Filed."
+        improvements = parse_improvements(reply)
+        if improvements:
+            for item in improvements:
+                self._file_enhancement(item)
+            return _spoken_around_improvements(reply) or "Filed."
         told = parse_tell(reply)
         if told is not None:
             name, message = told
-            if self._desk.send(name, message):
-                return f"Passed that to {name}."
-            return f"I don't have an agent called {name} running."
+            if not self._desk.send(name, message):
+                # Never what it said alongside: that was written expecting the message to land, so
+                # speaking it would report a delivery that did not happen.
+                return f"I don't have an agent called {name} running."
+            return _spoken_before(reply, _TELL) or f"Passed that to {name}."
         directive = parse_supervise(reply)
         if directive is None:
             return reply
@@ -122,7 +155,8 @@ class SupervisingBrain:
                 self._prepare(path)
             self._desk.start(Path(path).name, path, task or self._task)
         count = len(paths)
-        return f"Started {count} agent{'' if count == 1 else 's'}. I'll pass on whatever they say."
+        return _spoken_before(reply, _SUPERVISE) or (
+            f"Started {count} agent{'' if count == 1 else 's'}. I'll pass on whatever they say.")
 
     def interrupt(self):
         self._inner.interrupt()

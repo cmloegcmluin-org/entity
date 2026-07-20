@@ -192,6 +192,60 @@ def test_a_tell_directive_reaches_an_agent_already_running():
     assert "fixer" in said
 
 
+def test_what_the_brain_said_to_him_survives_a_directive():
+    # His all-caps demand for a way to actually test the work was answered, in full, with "Passed
+    # that to drive-native-gdoc-export." The wrapper threw away every word the brain had for him and
+    # substituted a canned line. Eight turns in one session went out that way - so any turn where he
+    # asked something AND something got filed or dispatched, his question simply went unanswered.
+    desk = FakeDesk(knows={"fixer"})
+    brain = _brain(FakeInner("Yes - you need to see it running before you sign anything off.\n"
+                             "[TELL] fixer: stand a test instance up on another port"), desk)
+
+    said = brain.respond("I NEED TO SEE THE NEW WORK IN ACTION")
+
+    assert desk.sent == [("fixer", "stand a test instance up on another port")]
+    assert said == "Yes - you need to see it running before you sign anything off."
+
+
+def test_a_filing_can_carry_an_answer_before_or_after_it():
+    # "Filed." was the whole reply to "dig into the log files for last session", and he asked back
+    # "Filed? What do you mean filed?" - the filing had eaten the answer.
+    filed = []
+    brain = _brain(FakeInner("[IMPROVE] level meter should show clipping\n"
+                             "Noted - I'll have that in the tab in a moment."),
+                   FakeDesk(), file_enhancement=filed.append)
+
+    said = brain.respond("file that, and tell me when it's there")
+
+    assert filed == ["level meter should show clipping"]
+    assert said == "Noted - I'll have that in the tab in a moment."
+
+
+def test_every_improvement_asked_for_is_filed_not_just_the_first():
+    # "Well, you filed one of the two. Please file the other one." Only the first marker line was
+    # ever read, so asking for two tickets filed one and cost him another round to notice and say so.
+    filed = []
+    brain = _brain(FakeInner("On it.\n"
+                             "[IMPROVE] stop claiming a longer answer when the answer is one word\n"
+                             "[IMPROVE] be aware of everything said in your own name"),
+                   FakeDesk(), file_enhancement=filed.append)
+
+    said = brain.respond("file both of those")
+
+    assert filed == ["stop claiming a longer answer when the answer is one word",
+                     "be aware of everything said in your own name"]
+    assert said == "On it."  # and no marker line is left in what he hears
+
+
+def test_a_directive_with_nothing_said_alongside_it_still_confirms():
+    # The canned lines remain the floor: silence would be worse than a terse confirmation.
+    desk = FakeDesk(knows={"fixer"})
+
+    assert "Passed that to fixer" in _brain(FakeInner("[TELL] fixer: go"), desk).respond("tell it")
+    assert "Filed" in _brain(FakeInner("[IMPROVE] a thing"), FakeDesk(),
+                             file_enhancement=lambda item: None).respond("file it")
+
+
 def test_a_tell_to_an_agent_that_is_not_running_says_so_rather_than_pretending():
     desk = FakeDesk()
     brain = _brain(FakeInner("[TELL] ghost: are you there"), desk)

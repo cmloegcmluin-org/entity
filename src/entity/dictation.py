@@ -228,7 +228,14 @@ class Dictation:
             return
         without_over = _strip_terminator(text, self._terminator)
         if without_over is not None:
-            if without_over and not _is_invented(without_over, self._terminator):
+            # Whatever came before "over" is kept as said. It is NOT run past the invention
+            # filter: a chunk carrying the terminator is someone deliberately ending a turn,
+            # never something the model made up out of near-silence - which is why _is_invented
+            # refuses to call one invented in the first place. Asking it after the terminator
+            # had been taken off threw away exactly the answers that filter exists to protect
+            # ("yeah, over"), and the submit then found an empty draft box, so saying "over" did
+            # nothing at all.
+            if without_over:
                 self._on_draft(without_over)
             self._on_submit_request()  # "over" still submits - old muscle memory, same meaning
             return

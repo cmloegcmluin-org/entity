@@ -110,6 +110,21 @@ def test_over_still_submits_for_the_old_muscle_memory():
     assert ears.submits == 1
 
 
+def test_over_carries_a_short_answer_through_instead_of_reading_it_as_filler():
+    # "Yeah, over" is the exact case the backchannel filter is written to let through - it refuses
+    # to call anything filler if the terminator is in it. Stripping the terminator FIRST and then
+    # asking took that protection away: the answer was dropped, the submit found an empty draft
+    # box, and saying "over" did nothing whatsoever. Half his answers are one of these words.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("Yeah, over."), FakeMic(_burst_then_pause()),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["Yeah,"]
+    assert ears.submits == 1
+
+
 def test_the_level_meter_sees_the_mic_only_while_recording():
     ears = Ears()
     dictation = Dictation(FakeTranscriber(""), FakeMic([_sp(0.04), _sp(0.04)]),

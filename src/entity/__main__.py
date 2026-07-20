@@ -423,7 +423,8 @@ def main(argv=None):
     from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_PROFILE_PATH
     from entity.no_console import silence_child_consoles
     from entity.transcript import past_lines
-    from entity.web import Mirror, create_app
+    from entity.mirror import Mirror
+    from entity.web import create_app
 
     # With no console of its own to lend them, Windows gives each console child a new window: the
     # Claude CLI the brain runs was turning up as a second window on their desktop.

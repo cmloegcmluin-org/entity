@@ -1294,6 +1294,32 @@ def test_a_long_reply_is_cut_short_rather_than_half_read():
     assert convo.ready_question not in tts.spoken  # and they were never asked
 
 
+def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():
+    # He asked what he had to set up and heard "...here are the real steps, from the agent: 1." -
+    # then nothing. The splitter reads "1." as the end of a sentence, so the cut fell between the
+    # number and its step and handed him a list marker with no step attached. He said so: "you
+    # started telling me the steps, but then all you said was the number one and nothing more."
+    # The persona already promises him a walkthrough in full, however long; only chatter is cut.
+    steps = ("Here are the real steps. 1. Open the Google console and pick your existing project. "
+             "2. Enable the Drive and Docs APIs. 3. Create an OAuth client and download the JSON. "
+             "4. Run the authorize script and approve the consent screen in your browser.")
+    lines = []
+
+    class StepsBrain:
+        def respond(self, utterance):
+            return steps
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what do I have to set up"]), StepsBrain(), tts,
+                         long_answer_chars=None, spoken_chars=80,
+                         console=Console(echo=lines.append))
+
+    convo.turn()
+
+    assert steps in tts.spoken  # every step reached him, not just the number
+    assert "approve the consent screen" in chr(10).join(lines)  # and the last one is on screen too
+
+
 def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():
     # Truncating silently taught it nothing: it never saw the cut, so the next turn began with no
     # evidence any of it happened. Now the cut is part of what it hears next.

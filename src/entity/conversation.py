@@ -112,6 +112,23 @@ def _humanize_elapsed(seconds):
     return f"about {minutes} {unit} and {rest} seconds"
 
 
+# A number that opens a step ("1. Open the console", "2) Enable the API"). Two or more of them and
+# this is a list, not a passing mention of "step 1." in a sentence.
+_ENUMERATOR = re.compile(r"(?:^|\s)\d+[.)]\s+\S")
+
+
+def _is_walkthrough(text):
+    """Are these the numbered steps they asked for, rather than chatter?
+
+    Cutting one is worse than saying nothing: `_opening` splits on sentence ends, "1." looks exactly
+    like one, and so the cut fell between the number and its step - they were handed a list marker
+    with no step attached and had to say "all you said was the number one and nothing more". The
+    persona already promises them a walkthrough complete, however many lines it takes; brevity
+    governs what the Entity volunteers, never something they explicitly asked to be told.
+    """
+    return len(_ENUMERATOR.findall(str(text))) >= 2
+
+
 def _opening(text, limit):
     """The first sentence or two of `text`, whole sentences only, or all of it if it's already
     short. Never mid-word: a voice cut off mid-sentence sounds like a fault."""
@@ -275,15 +292,15 @@ class Conversation:
                 stop_watching()
 
     def _speak_reply(self, text):
-        """Show them all of it, say the opening of it.
+        """Cut it to a length worth hearing, then show and say exactly that.
 
-        Everything the Entity says goes on screen in full - that is what the window is for - while
-        the voice reads only as much as anyone wants read aloud. Speaking every word of a long reply
-        is what made "I've got a longer answer for you, ready for it?" fire on nearly every turn,
-        and being asked that constantly was worse than the wall it guarded against.
+        They disliked reading a wall they'd only heard the start of, so what is on screen and what
+        is in their ear are the same words - the cut happens once, up front, to both. Steps they
+        asked for are exempt and go out whole (see `_is_walkthrough`): brevity is for chatter.
         """
         whole = text
-        text = _opening(text, self._spoken_chars)  # what they read IS what they hear
+        limit = None if _is_walkthrough(whole) else self._spoken_chars
+        text = _opening(text, limit)
         # Remember a cut so the next turn can say so: a limit nothing ever reports is not a limit
         # anything can learn from.
         self._cut_last_reply = (len(whole), self._spoken_chars) if len(text) < len(whole) else None

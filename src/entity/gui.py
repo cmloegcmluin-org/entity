@@ -9,7 +9,8 @@ forwards buttons.
 Layout: the conversation reads like a text thread - the user's messages in tinted boxes down the
 right, Entity's down the left, each with a name and a time, past sessions above a divider. The
 boxes themselves are `bubbles.py`. Everything to do with talking sits together along the bottom:
-mic button, level meter, the editable draft speech types into, and Submit. Beside the conversation
+mic button, level meter, the editable draft speech types into, Submit, and a one-click Yes for the
+answer he gives oftenest. Beside the conversation
 are tabs - one per agent log, tailed live, and the profile's Goals, Projects and Enhancements,
 editable and saved straight back into the file the brain reads.
 
@@ -37,6 +38,7 @@ from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
 
 LEVEL_FULL = 0.06  # the meter tops out around loud speech, so ordinary talk visibly moves it
+YES = "Yes."  # what the one-click answer sends - word for word what dictating it used to produce
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
 # identity of whatever other python-hosted app already owns a button - the Entity window turned up
@@ -412,6 +414,12 @@ class EntityWindow:
                                  command=self._submit_draft, bg="#2a4d00", fg=ACCENT,
                                  activebackground="#2a4d00", activeforeground=ACCENT)
         self._submit.pack(fill="x", pady=(6, 0))
+        # Saying yes was costing four gestures - mic on, the word, mic off, Submit - for about half
+        # his turns. This is the one click that does it.
+        self._yes = tk.Button(left, text=YES, width=13, relief="flat", cursor="hand2",
+                              command=self._press_yes, bg=PANEL, fg=FG,
+                              activebackground=PANEL, activeforeground=FG)
+        self._yes.pack(fill="x", pady=(6, 0))
         # undo=True is Ctrl+Z, which Tk gives a Text only when asked. Without it he wiped out
         # everything he had typed with nothing to recover it - "hugely frustrating".
         self._draft = tk.Text(row, height=4, wrap="word", font=("Segoe UI", 11), bg=PANEL, fg=FG,
@@ -448,6 +456,11 @@ class EntityWindow:
         self._draft.delete("1.0", "end")
         if text:
             self._on_submit(text)
+
+    def _press_yes(self):
+        """Answer yes and nothing else. Whatever is half-written in the draft stays exactly where
+        it is - losing words he had typed is the thing he filed a ticket about."""
+        self._on_submit(YES)
 
     def _mark_dirty(self, label):
         self._sections[label]["edited"] = self._now()
@@ -841,6 +854,10 @@ class EntityWindow:
 
     def press_mic(self):
         self._press_mic()
+
+    def press_yes(self):
+        """Click the Yes button itself, so its wiring is what gets exercised."""
+        self._yes.invoke()
 
     def destroy(self):
         if not self.ended:  # idempotent - the poll loop and a test teardown may both get here

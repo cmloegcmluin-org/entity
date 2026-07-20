@@ -286,6 +286,14 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert window.draft_text() == "the whole thing I typed"
         window.wipe_draft()
 
+        # One click to say yes. Half his turns were the mic on, the word "yes", the mic off and
+        # Submit - four gestures for one word. Anything half-written in the draft is left where it
+        # is: losing typed words is the thing he filed a ticket about.
+        window.type_in_draft("something I was still writing")
+        window.press_yes()
+        assert submitted[-1] == "Yes."
+        assert window.draft_text() == "something I was still writing"
+
         # One button: it IS the stop while Entity talks, and stopping leaves the mic off.
         feed.push("state", "speaking")
         window._drain_once()

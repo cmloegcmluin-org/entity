@@ -201,6 +201,22 @@ def _persona():
     )
 
 
+def _watch_playback(announce=print):
+    """Start listening to what this PC is playing, so the mic can discount exactly that.
+
+    Returns None if the capture can't start - a machine without WASAPI loopback still gets a working
+    mic, it just can't tell a streamer in Chrome from the person in the room."""
+    from entity.playback import LoopbackSource, Playback
+
+    try:
+        playback = Playback(LoopbackSource())
+        playback.start()
+        return playback
+    except Exception as reason:  # noqa: BLE001 - never let this stop the app from hearing them
+        announce(f"  (not watching this PC's own audio: {reason})")
+        return None
+
+
 def _build_ears(text_mode, stop, interrupt, announce=print):
     """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
     `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
@@ -244,14 +260,17 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor)
     brain = SupervisingBrain(sdk_brain, desk)
     dictation = None
+    playback = None
     if gui:
         # The window's mic is a STATE, not a walkie-talkie: continuous dictation into the editable
         # draft, controlled by voice ("hey entity" / "stop listening"), the mic button, and Submit.
         from entity.dictation import Dictation
 
         transcriber, mic, recorder = _open_hearing(announce)
+        playback = _watch_playback(announce)  # what the PC plays, so the mic can discount it
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
+            playback=playback,
             muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
@@ -351,6 +370,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 brain.close,
                 mic.close if mic is not None else None,
                 recorder.close if recorder is not None else None,
+                playback.close if playback is not None else None,
             ):
                 try:
                     if closer is not None:

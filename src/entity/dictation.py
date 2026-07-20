@@ -28,18 +28,16 @@ ends, so answering costs nothing - except after that same cut-off, for the same 
 import queue
 import threading
 
-import numpy as np
-
 from entity.hesitation import without_hesitations
 from entity.phrases import canonical, ends_with_command, strip_leading_command, wakes
 from entity.stt_mic import (
     PAUSE_FRAMES,
     STOP_WORDS,
+    Burst,
     NoiseFloor,
     _is_invented,
     _is_stop_bark,
     _strip_terminator,
-    carries_speech,
     rms,
 )
 
@@ -65,6 +63,7 @@ class Dictation:
         stop=None,
         interrupt=None,
         recorder=None,
+        playback=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -83,6 +82,9 @@ class Dictation:
         self._stop = stop
         self._interrupt = interrupt
         self._recorder = recorder
+        # What this PC is sending to its speakers, if it is being captured. Without it every burst
+        # reads as "the machine was silent", which discounts nothing - the console has no capture.
+        self._playback = playback
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
@@ -183,8 +185,7 @@ class Dictation:
         """The forever loop: frames in, draft text / state changes / levels / submits out. Runs on
         its own thread against a real mic; tests run it inline against a finite one."""
         floor = NoiseFloor()
-        chunk = []
-        voiced = []  # the per-frame speech verdicts for this burst, to tell a word from a tap
+        burst = Burst()
         silence = 0
         started = False
         for frame in self._mic.frames():
@@ -195,28 +196,28 @@ class Dictation:
             level = rms(frame)
             self._on_level(level if self.taking_dictation() else 0.0)
             speech = floor.is_speech(level)
+            playing = self._playback.level() if self._playback is not None else 0.0
             if not started:
                 if not speech:
                     continue
                 started = True
-            chunk.append(frame)
-            voiced.append(speech)
+            burst.add(frame, speech=speech, level=level, playing=playing)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over
             if ended or self._finish_burst:  # ...or they muted while still mid-sentence
-                self._end_burst(chunk, voiced)
-                chunk, voiced, silence, started = [], [], 0, False
+                self._end_burst(burst)
+                burst, silence, started = Burst(), 0, False
             self._mid_burst = started
-        if chunk:  # a finite source ran out mid-burst (a real mic never does)
-            self._end_burst(chunk, voiced)
+        if len(burst):  # a finite source ran out mid-burst (a real mic never does)
+            self._end_burst(burst)
         self._mid_burst = False
 
-    def _end_burst(self, chunk, voiced):
-        """Hand one finished burst to the transcriber - unless there was no word in it. A burst with
-        no sustained sound is a tap or a creak, and the model answers those with invented words (see
-        carries_speech), so it never gets asked."""
-        if carries_speech(voiced):
-            self._absorb(np.concatenate(chunk), armed=self._armed or self._finish_burst)
+    def _end_burst(self, burst):
+        """Hand one finished burst to the transcriber - unless nobody said it. A burst with no
+        sustained sound is a tap or a creak and the model answers those with invented words; one
+        whose loudness follows the speakers is what this PC is playing, not them."""
+        if burst.carries_speech() and not burst.echoes_playback():
+            self._absorb(burst.audio(), armed=self._armed or self._finish_burst)
         self._finish_burst = False
 
     def _absorb(self, audio, *, armed=None):

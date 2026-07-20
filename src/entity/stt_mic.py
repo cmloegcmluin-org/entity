@@ -91,6 +91,41 @@ def carries_speech(voiced, min_run=MIN_VOICED_RUN):
     return False
 
 
+class Burst:
+    """One stretch of sound between pauses, and what was true of it frame by frame.
+
+    The frames are what gets transcribed; the rest is what decides whether transcribing it is worth
+    doing at all. Both pumps keep exactly this bookkeeping, so it lives here once."""
+
+    def __init__(self):
+        self.frames = []
+        self._voiced = []
+        self._heard = []
+        self._played = []
+
+    def __len__(self):
+        return len(self.frames)
+
+    def add(self, frame, *, speech, level, playing=0.0):
+        self.frames.append(frame)
+        self._voiced.append(speech)
+        self._heard.append(level)
+        self._played.append(playing)
+
+    def audio(self):
+        return np.concatenate(self.frames)
+
+    def carries_speech(self):
+        return carries_speech(self._voiced)
+
+    def echoes_playback(self):
+        """Was this only what the PC itself was playing? False wherever no playback is captured -
+        `playing` then stays at zero, which reads as silent speakers and discounts nothing."""
+        from entity.playback import echoes_playback  # imported here: the console path never captures
+
+        return echoes_playback(self._heard, self._played)
+
+
 def _is_invented(text, terminator):
     """True if the chunk is nothing the user said - filler the model hears in near-silence, or its
     stock answer to a stretch with no words in it. Never true of a chunk carrying the terminator, so
@@ -189,8 +224,7 @@ class MicSTT:
         self.caught_terminator = False  # about this turn only; forget the last one
         self._flush_mic()
         segments = []  # transcribed text so far, one entry per pause-delimited chunk
-        segment = []  # frames captured since the last pause - only this chunk gets transcribed
-        voiced = []  # the per-frame speech verdicts for this chunk, to tell a word from a tap
+        burst = Burst()  # frames since the last pause - only this chunk gets transcribed
         silence_run = 0
         started = False
         for frame in self._mic.frames():
@@ -198,7 +232,8 @@ class MicSTT:
                 self._recorder.write(frame)  # to disk first, so a crash can't lose what they said
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
-            speech = self._is_speech(rms(frame))
+            level = rms(frame)
+            speech = self._is_speech(level)
             if not started:
                 if self._interrupt is not None and self._interrupt.is_set():
                     return ""  # a lull, and the Entity has something to say - yield so it can
@@ -206,21 +241,20 @@ class MicSTT:
                     started = True
                 else:
                     continue
-            segment.append(frame)
-            voiced.append(speech)
+            burst.add(frame, speech=speech, level=level)
             silence_run = 0 if speech else silence_run + 1
             if silence_run == self._pause_frames:  # you paused - did you say "over"?
-                done = self._absorb(segments, segment, voiced)
-                segment, voiced = [], []  # this chunk is now text; the next one starts fresh
+                done = self._absorb(segments, burst)
+                burst = Burst()  # this chunk is now text; the next one starts fresh
                 if done is not None:
                     return done
-        if segment:  # a finite source ran out mid-chunk (a real mic never does)
-            done = self._absorb(segments, segment, voiced)
+        if len(burst):  # a finite source ran out mid-chunk (a real mic never does)
+            done = self._absorb(segments, burst)
             if done is not None:
                 return done
         return " ".join(segments).strip()
 
-    def _absorb(self, segments, chunk, voiced):
+    def _absorb(self, segments, burst):
         """Transcribe one pause-delimited chunk, append it to the running transcript, and return
         the finished turn if the transcript now ends with the terminator - else None to keep
         listening. Only this chunk is transcribed, never the whole turn, so the work per pause
@@ -228,9 +262,9 @@ class MicSTT:
 
         A chunk with no sustained sound in it holds no word (see carries_speech), so it isn't
         transcribed at all - the model would answer it with something invented."""
-        if not carries_speech(voiced):
+        if not burst.carries_speech():
             return None
-        text = self._transcriber.transcribe(np.concatenate(chunk)).strip()
+        text = self._transcriber.transcribe(burst.audio()).strip()
         if text and not _is_invented(text, self._terminator):
             segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence
         without_terminator = _strip_terminator(" ".join(segments), self._terminator)

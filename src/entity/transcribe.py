@@ -8,7 +8,7 @@ the names they coined and the domain terms of their fields (see `vocabulary`). S
 no hotword hook, the bias is applied after recognition.
 """
 
-from entity.vocabulary import correct_terms
+from entity.vocabulary import correct_terms, translations_in_force
 
 DEFAULT_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
@@ -43,16 +43,22 @@ class ParakeetTranscriber:
 class CorrectingTranscriber:
     """Wraps a transcriber and rewrites its output toward known terms, so Parakeet's "note craft"
     comes back as "Notecraft" and "bayesan inference" as "Bayesian inference". Transparent
-    otherwise: same `transcribe`/`warmup` surface, so it drops in wherever a plain transcriber goes."""
+    otherwise: same `transcribe`/`warmup` surface, so it drops in wherever a plain transcriber goes.
 
-    def __init__(self, transcriber, terms, *, threshold=None):
+    `translations` are the named ones - "cloud agent" for "Claude agent" - which no similarity
+    score can catch because what came back is ordinary English. His own are merged over the ones
+    that ship, so a rule he writes for a phrase wins."""
+
+    def __init__(self, transcriber, terms, *, translations=None, threshold=None):
         self._transcriber = transcriber
         self._terms = list(terms)
+        self.translations = translations_in_force(translations)
         # None -> defer to correct_terms' tuned default, so the threshold lives in exactly one place.
         self._kwargs = {} if threshold is None else {"threshold": threshold}
 
     def transcribe(self, audio):
-        return correct_terms(self._transcriber.transcribe(audio), self._terms, **self._kwargs)
+        return correct_terms(self._transcriber.transcribe(audio), self._terms,
+                             translations=self.translations, **self._kwargs)
 
     def warmup(self):
         self._transcriber.warmup()

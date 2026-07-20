@@ -9,6 +9,8 @@ from entity.memory import (
     load_lexicon,
     load_profile,
     parse_facts,
+    save_translations,
+    translation_pairs,
     user_name,
 )
 
@@ -27,6 +29,32 @@ def test_lexicon_terms_takes_the_head_of_each_line_ignoring_glosses_and_comments
 def test_lexicon_terms_is_empty_for_blank_or_comment_only_text():
     assert lexicon_terms("") == []
     assert lexicon_terms("# just a header\n\n") == []
+
+
+def test_translations_are_read_as_the_arrow_he_writes_them_with():
+    text = (
+        "# what it keeps mishearing\n"
+        "\n"
+        "cloud agent -> Claude agent\n"
+        "- hydeas -> Notecraft\n"
+        "work tree → worktree\n"
+        "not a translation\n"
+    )
+    # Lowercased on the left, because that is the side it is looked up by; a line with no arrow on
+    # it is not one, and is left out rather than guessed at.
+    assert translation_pairs(text) == {
+        "cloud agent": "Claude agent", "hydeas": "Notecraft", "work tree": "worktree",
+    }
+
+
+def test_translations_are_saved_as_the_file_he_can_read_back(tmp_path):
+    path = tmp_path / "translations.md"
+
+    save_translations("Hydeas -> Notecraft\n\ncloud agent -> Claude agent", path)
+
+    assert translation_pairs(path.read_text(encoding="utf-8")) == {
+        "hydeas": "Notecraft", "cloud agent": "Claude agent",
+    }
 
 
 def test_load_lexicon_is_empty_when_missing(tmp_path):

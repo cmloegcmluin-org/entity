@@ -58,6 +58,21 @@ def test_correcting_transcriber_leaves_plain_speech_untouched():
     assert corrector.transcribe("AUDIO") == "what's the weather"
 
 
+def test_correcting_transcriber_applies_the_translations_it_ships_with():
+    # Nothing passed in: the mishearings counted in real sessions are corrected out of the box, so
+    # the list on the window's page is the list actually in force.
+    corrector = CorrectingTranscriber(FakeTranscriber("how's our cloud agent"), [])
+
+    assert corrector.transcribe("AUDIO") == "how's our Claude agent"
+
+
+def test_his_own_translations_are_applied_beside_the_ones_that_ship():
+    corrector = CorrectingTranscriber(FakeTranscriber("open hydeas for the cloud agent"), [],
+                                      translations={"hydeas": "Notecraft"})
+
+    assert corrector.transcribe("AUDIO") == "open Notecraft for the Claude agent"
+
+
 def test_correcting_transcriber_delegates_warmup_to_the_inner_model():
     inner = FakeTranscriber("hi")
     CorrectingTranscriber(inner, ["Notecraft"]).warmup()

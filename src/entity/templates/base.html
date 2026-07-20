@@ -12,7 +12,7 @@
   <nav class="topbar">
     {%- for path, name in [("/", "Conversation"), ("/profile", "Profile"),
                            ("/persona", "Persona"), ("/memory", "Memory"),
-                           ("/agents", "Agents")] %}
+                           ("/translations", "Translations"), ("/agents", "Agents")] %}
     <a class="btn topbtn{{ ' here' if here == path }}" href="{{ path }}">{{ name }}</a>
     {%- endfor %}
     <span class="saved" id="saved" aria-live="polite"></span>

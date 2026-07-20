@@ -1,4 +1,4 @@
-from entity.vocabulary import correct_terms, scan_terms
+from entity.vocabulary import DEFAULT_TRANSLATIONS, correct_terms, scan_terms
 
 
 def test_a_near_miss_token_is_corrected_to_the_known_term():
@@ -69,6 +69,41 @@ def test_multi_word_terms_do_not_disturb_single_word_matching():
     terms = ["Bayesian inference", "Notecraft"]
     assert correct_terms("open notcraft now", terms) == "open Notecraft now"
     assert correct_terms("nothing to see here", terms) == "nothing to see here"
+
+
+def test_a_named_translation_is_applied_exactly():
+    # Some mishearings are not near misses at all - "Claude agent" comes back as "cloud agent",
+    # which is two perfectly ordinary words no similarity score will ever flag. Those are named
+    # outright, in a list he can read and add to.
+    said = correct_terms("how's our cloud agent doing", [], translations={"cloud agent": "Claude agent"})
+
+    assert said == "how's our Claude agent doing"
+
+
+def test_a_translation_is_heard_however_it_was_capitalised_and_keeps_the_sentence_punctuation():
+    translations = {"cloud agent": "Claude agent"}
+
+    assert correct_terms("Ask the Cloud Agent.", [], translations=translations) == \
+        "Ask the Claude agent."
+    assert correct_terms("(cloud agent)", [], translations=translations) == "(Claude agent)"
+
+
+def test_a_named_translation_wins_over_a_near_miss():
+    # The whole point of naming one is that it beats the guess, and the guess can be a perfect
+    # match: a folder called "cloud" makes "Cloud" a known term, so what he says as "Claude" and
+    # Parakeet writes as "cloud" would be corrected confidently to the wrong word.
+    said = correct_terms("ask cloud about it", ["Cloud"], translations={"cloud": "Claude"})
+
+    assert said == "ask Claude about it"
+
+
+def test_the_translations_that_ship_are_the_ones_actually_heard():
+    # Counted in his own session transcripts rather than imagined: these are the words this app is
+    # about, arriving as ordinary English no similarity score will ever flag.
+    assert DEFAULT_TRANSLATIONS["cloud agent"] == "Claude agent"
+    assert DEFAULT_TRANSLATIONS["work tree"] == "worktree"
+    # Looked up lowercased, so a left-hand side with a capital in it would simply never match.
+    assert all(heard == heard.lower() for heard in DEFAULT_TRANSLATIONS)
 
 
 def test_scan_turns_directory_names_into_spoken_terms(tmp_path):

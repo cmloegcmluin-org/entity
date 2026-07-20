@@ -19,6 +19,20 @@ _SPLIT = re.compile(r"^(\W*)(.*?)(\W*)$")  # leading punctuation, the bare word,
 _SEPARATORS = re.compile(r"[ _\-]+")
 _SENTENCE_END = (".", "!", "?")
 
+# Mishearings that similarity can never catch, because what comes back is ordinary English. Every
+# one of these was counted in real session transcripts: "Claude" arrived as "cloud" seven times
+# against seven correct ones, and "worktree" as "Work Tree". Kept to what was actually observed and
+# to this app's own vocabulary - anything personal belongs in his own list, which the window shows
+# these beside so the whole set is one thing to read.
+DEFAULT_TRANSLATIONS = {
+    "cloud agent": "Claude agent",
+    "cloud agents": "Claude agents",
+    "claud agent": "Claude agent",
+    "claud agents": "Claude agents",
+    "work tree": "worktree",
+    "work trees": "worktrees",
+}
+
 # Generic folder names that are ordinary English (or infrastructure) and so aren't worth biasing
 # toward - and, being common words, would invite false corrections of normal speech.
 DEFAULT_STOPWORDS = frozenset({
@@ -81,33 +95,67 @@ def scan_terms(roots, *, min_length=4, stopwords=DEFAULT_STOPWORDS):
     return terms
 
 
-def _match_at(tokens, start, run_together, by_length, longest, threshold):
-    """The (window size, term) of the LONGEST run of words at `start` that matches a known term, or
-    None. Longest-first so "Bayesian inference" wins over a stray one-word match inside it.
+def translations_in_force(his=None):
+    """Every named translation that will actually be applied: the ones that ship, with his own
+    written over them. One rule in one place, because the window shows this list as the list in
+    force and a second merge somewhere else would eventually disagree with it."""
+    return DEFAULT_TRANSLATIONS | dict(his or {})
 
-    A run of words is only compared against terms of the same word count - two ordinary words are
-    never glued into a coined name. A SINGLE token is the exception: it's compared against every
-    term with the spaces closed up, because speech-to-text routinely runs a two-word name together
-    ("Git Bash" comes back as the one word "GitMash") - and with only one token in play, there's no
-    neighbouring word for the term to wrongly swallow."""
-    for size in range(min(longest, len(tokens) - start), 0, -1):
+
+def _lookups(terms, translations):
+    """Every table a match needs, built once per call.
+
+    `named` is the exact list - what he heard on the left, what he said on the right, looked up by
+    word count. `nearly` is the fuzzy one, also by word count, so two ordinary words are never
+    glued into a coined name. `run_together` is every term with its spaces closed up, for the case
+    where speech-to-text ran a whole name into one token."""
+    named, nearly = {}, {}
+    for heard, said in dict(translations).items():
+        named.setdefault(len(heard.split()), {})[heard.lower()] = said
+    for term in terms:
+        nearly.setdefault(len(term.split()), []).append((term.lower(), term))
+    return {
+        "named": named,
+        "nearly": nearly,
+        "run_together": [(_letters(term), term) for term in terms],
+        "longest": max([*named, *nearly, 1]),
+    }
+
+
+def _match_at(tokens, start, lookups, threshold):
+    """The (window size, term) of the LONGEST run of words at `start` that matches something known,
+    or None. Longest-first so "Bayesian inference" wins over a stray one-word match inside it.
+
+    A named translation is checked before the fuzzy one at each size, because it is the case where
+    similarity cannot help: "cloud agent" for "Claude agent" is two ordinary English words, and no
+    threshold that leaves normal speech alone will ever catch it.
+
+    A SINGLE token is the fuzzy exception: it's compared against every term with the spaces closed
+    up, because speech-to-text routinely runs a two-word name together ("Git Bash" comes back as
+    the one word "GitMash") - and with only one token in play, there's no neighbouring word for the
+    term to wrongly swallow."""
+    for size in range(min(lookups["longest"], len(tokens) - start), 0, -1):
         window = tokens[start:start + size]
         if size > 1 and any(token[2].endswith(_SENTENCE_END) for token in window[:-1]):
             continue  # never glue a phrase together across a sentence boundary
         words = " ".join(token[1] for token in window if token[1])
         if not words:
             continue
+        named = lookups["named"].get(size, {}).get(words.lower())
+        if named is not None:
+            return size, named
         if size == 1:
-            match = _closest(_letters(words), run_together, threshold)
+            match = _closest(_letters(words), lookups["run_together"], threshold)
         else:
-            match = _closest(words.lower(), by_length.get(size, ()), threshold)
+            match = _closest(words.lower(), lookups["nearly"].get(size, ()), threshold)
         if match is not None:
             return size, match
     return None
 
 
-def correct_terms(text, terms, *, threshold=0.82):
-    """Rewrite `text`, replacing each near-miss with the closest known term above `threshold`.
+def correct_terms(text, terms, *, translations=(), threshold=0.82):
+    """Rewrite `text`, replacing each near-miss with the closest known term above `threshold`, and
+    each phrase named in `translations` with what he actually said.
 
     A term can be one word or several - domain vocabulary usually is ("Bayesian inference"), so runs
     of words are matched as phrases, longest first, not one token at a time. Punctuation is peeled
@@ -117,20 +165,16 @@ def correct_terms(text, terms, *, threshold=0.82):
     The 0.82 default was set from real recordings: below ~0.78 ordinary words start getting
     corrupted - "are" -> a project called "Arena" (0.75), and worst of all the turn terminator
     "over" -> "Overlay" (0.73), which would stop a turn from ever ending. 0.82 sits clear of that
-    cliff while still catching real near-misses ("notcraft"/"Notecraft" scores 0.94)."""
-    if not text or not terms:
+    cliff while still catching real near-misses ("notcraft"/"Notecraft" scores 0.94). What that
+    threshold can never reach is what `translations` is for."""
+    if not text or (not terms and not translations):
         return text
-    # Both comparison forms, built once: phrases matched word-for-word, and every term with its
-    # spaces closed up for the case where speech-to-text ran the whole name into one token.
-    by_length = {}
-    for term in terms:
-        by_length.setdefault(len(term.split()), []).append((term.lower(), term))
-    run_together = [(_letters(term), term) for term in terms]
+    lookups = _lookups(terms, translations)
     tokens = [_SPLIT.match(token).groups() for token in text.split()]
     out = []
     index = 0
     while index < len(tokens):
-        found = _match_at(tokens, index, run_together, by_length, max(by_length), threshold)
+        found = _match_at(tokens, index, lookups, threshold)
         if found is None:
             prefix, word, suffix = tokens[index]
             out.append(f"{prefix}{word}{suffix}")

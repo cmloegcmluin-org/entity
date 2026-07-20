@@ -17,15 +17,19 @@ async function write(where, body) {
   announce("Saved");
 }
 
+/* Where a box writes itself back to, and what it has to say to be understood there. */
+function destination(box) {
+  if (box.dataset.learned) return ["/memory", { body: box.value }];
+  if (box.dataset.translations) return ["/translations", { body: box.value }];
+  return ["/profile", { heading: box.dataset.heading, body: box.value,
+                        checklist: box.dataset.checklist || "false" }];
+}
+
 for (const box of document.querySelectorAll(".writing")) {
   let waiting = null;
   box.addEventListener("input", () => {
     clearTimeout(waiting);
-    waiting = setTimeout(() => {
-      if (box.dataset.learned) return write("/memory", { body: box.value });
-      write("/profile", { heading: box.dataset.heading, body: box.value,
-                          checklist: box.dataset.checklist || "false" });
-    }, AFTER);
+    waiting = setTimeout(() => write(...destination(box)), AFTER);
   });
 }
 

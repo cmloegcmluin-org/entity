@@ -25,6 +25,8 @@ from entity.memory import (
     load_learned,
     load_lexicon,
     load_profile,
+    load_translations,
+    translation_pairs,
     user_name,
 )
 from entity.outbox import Outbox
@@ -165,11 +167,14 @@ def _open_ears(announce):
     from entity.recorder import AudioRecorder
     from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
-    # Bias transcription toward the user's own vocabulary, so their coined names survive it.
+    # Bias transcription toward the user's own vocabulary, so their coined names survive it, and
+    # swap outright the phrases that come back as ordinary English ("cloud agent"). The window's
+    # Translations page shows both lists, so nothing here is applied unseen.
     terms = _vocab_terms()
     if terms:
         announce(f"(custom vocabulary: {len(terms)} of your terms, e.g. {', '.join(sorted(terms)[:3])})")
-    transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms)
+    transcriber = CorrectingTranscriber(ParakeetTranscriber(), terms,
+                                        translations=translation_pairs(load_translations()))
     transcriber.warmup()  # load the 2.4 GB model now, not on the first spoken turn
 
     # Don't trust the OS default input - it is often an idle headset or a virtual device that
@@ -413,7 +418,11 @@ def main(argv=None):
 
     from entity.chord import ChordListener, SubmitChord, foreground_is_ours
     from entity.desktop import open_window
-    from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_PROFILE_PATH
+    from entity.memory import (
+        DEFAULT_LEARNED_PATH,
+        DEFAULT_PROFILE_PATH,
+        DEFAULT_TRANSLATIONS_PATH,
+    )
     from entity.no_console import silence_child_consoles
     from entity.transcript import past_lines
     from entity.mirror import Mirror
@@ -439,6 +448,10 @@ def main(argv=None):
         on_mic=lambda recording: mic.get("set_recording", lambda _: None)(recording),
         on_auto_listen=lambda on: mic.get("set_auto_listen", lambda _: None)(on),
         profile_path=DEFAULT_PROFILE_PATH, learned_path=DEFAULT_LEARNED_PATH,
+        translations_path=DEFAULT_TRANSLATIONS_PATH,
+        # The same list the mic is about to be built with, so the page says what is in force
+        # rather than what could be.
+        terms=_vocab_terms(),
         persona=_persona(), agent_logs_dir=AGENT_LOGS,
     )
     # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this

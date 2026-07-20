@@ -27,6 +27,10 @@ DEFAULT_LEARNED_PATH = _RUNTIME / "learned.md"
 DEFAULT_LEXICON_PATH = _RUNTIME / "lexicon.md"
 # One line naming the lexicon file, when it isn't the one above - see `lexicon_path`.
 LEXICON_POINTER = _RUNTIME / "lexicon-path.txt"
+# His own "heard -> said" list. Beside the lexicon rather than inside it: a lexicon entry is a real
+# word to get right, a translation has a WRONG side, and the lexicon is shared with whatever else
+# transcribes him - a syntax it doesn't know would read as a term he never uses.
+DEFAULT_TRANSLATIONS_PATH = _RUNTIME / "translations.md"
 
 # `{user}` is filled in from the profile's own title line by `compose_persona` - see `user_name`.
 USER_PLACEHOLDER = "{user}"
@@ -47,6 +51,10 @@ _LEXICON_INTRO = (
 
 # A gloss can follow the term after " - " / " — " / ": "; the term itself is the head of the line.
 _GLOSS = re.compile(r"\s+[—–-]\s+|:\s+")
+
+# What separates the two sides of a translation. "->" is what he wrote it as; "→" is what a page
+# showing it back to him renders, and either has to read back in.
+_ARROW = re.compile(r"\s*(?:->|→)\s*")
 
 CONSOLIDATION_PROMPT = (
     "Our conversation is ending. List, as short bullet points (each starting with '-'), any NEW and "
@@ -121,6 +129,40 @@ def lexicon_terms(text):
         if term:
             terms.append(term)
     return terms
+
+
+def load_translations(path=DEFAULT_TRANSLATIONS_PATH):
+    return _read(path)
+
+
+def translation_pairs(text):
+    """His own list of what it keeps mishearing: {what came back: what he said}.
+
+    One per line, with the arrow he wrote in his own ticket - "cloud agent" -> "Claude agent". A
+    line without one is not a translation and is left out rather than guessed at; the left side is
+    lowercased because that is the side it gets looked up by."""
+    pairs = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line[0] in "-*•":
+            line = line[1:].strip()
+        sides = _ARROW.split(line, maxsplit=1)
+        if len(sides) != 2:
+            continue
+        heard, said = (side.strip() for side in sides)
+        if heard and said:
+            pairs[heard.lower()] = said
+    return pairs
+
+
+def save_translations(text, path=DEFAULT_TRANSLATIONS_PATH):
+    """Write his list back. His file, his wording - stored exactly as typed, so what he reads next
+    time is what he wrote rather than a normalised version of it."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
 def compose_persona(base_persona, profile, learned="", lexicon=""):

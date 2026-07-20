@@ -62,9 +62,10 @@ def test_the_bar_reaches_every_page_that_used_to_be_a_tab(tmp_path):
     profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
     client = _client(profile_path=profile, persona="BREVITY IS YOUR MOST IMPORTANT RULE.")
 
-    for path in ("/", "/profile", "/persona", "/memory", "/agents"):
+    pages = ("/", "/profile", "/persona", "/memory", "/translations", "/agents")
+    for path in pages:
         page = client.get(path).get_data(as_text=True)
-        assert page.count('class="btn topbtn') == 5  # every page reaches every other one
+        assert page.count('class="btn topbtn') == len(pages)  # every page reaches every other one
         assert f'href="{path}"' in page
 
 
@@ -107,6 +108,23 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
     assert "- [x] live captions" in saved  # ticked, not removed - the record that it was done
     assert "- [ ] plain line" in saved     # and a plain line joined the list it was meant to
     assert "☑" not in saved                # what is drawn never reaches the file
+
+
+def test_every_translation_in_force_is_on_the_page_and_his_own_save_back(tmp_path):
+    # "can we have an explicit list of translations I can see" - so the ones that ship are listed
+    # beside his own, rather than being applied invisibly.
+    translations = tmp_path / "translations.md"
+    translations.write_text("hydeas -> Notecraft\n", encoding="utf-8")
+    client = _client(translations_path=translations, terms=["Notecraft", "Git Bash"])
+
+    page = client.get("/translations").get_data(as_text=True)
+    assert "cloud agent" in page and "Claude agent" in page  # one that ships
+    assert "hydeas" in page and "Notecraft" in page           # one of his
+    assert "Notecraft" in page and "Git Bash" in page        # and what the fuzzy pass snaps to
+
+    client.post("/translations", data={"body": "hydeas -> Notecraft\nhi deas -> Notecraft"})
+
+    assert "hi deas -> Notecraft" in translations.read_text(encoding="utf-8")
 
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):

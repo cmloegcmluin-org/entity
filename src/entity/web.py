@@ -22,9 +22,12 @@ from entity.memory import (
     profile_sections,
     save_learned,
     save_section,
+    save_translations,
+    translation_pairs,
 )
 from entity.mirror import SIDES, TranscriptModel, sessions
 from entity.tailing import LogTail, discover
+from entity.vocabulary import translations_in_force
 
 SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 
@@ -107,13 +110,17 @@ class Agents:
 
 
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None, mirror=None,
-               profile_path=None, learned_path=None, persona="", agent_logs_dir=None,
-               clock=None):
+               profile_path=None, learned_path=None, translations_path=None, terms=(), persona="",
+               agent_logs_dir=None, clock=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
-    is a live session behind it - without one the model is whatever was put in it."""
+    is a live session behind it - without one the model is whatever was put in it.
+
+    `terms` is the vocabulary transcription is biased toward, as it stood when the session opened -
+    shown, not used, so he can see what it is snapping his words to."""
     app = Flask(__name__)
     profile_path = Path(profile_path) if profile_path else None
     learned_path = Path(learned_path) if learned_path else None
+    translations_path = Path(translations_path) if translations_path else None
     agents = Agents(agent_logs_dir, clock)
 
     def _profile_text():
@@ -208,6 +215,33 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     @app.get("/persona")
     def show_persona():
         return render_template("persona.html", here="/persona", persona=persona)
+
+    def _his_translations():
+        if translations_path is None or not translations_path.exists():
+            return ""
+        return translations_path.read_text(encoding="utf-8")
+
+    @app.get("/translations")
+    def translations():
+        """What it is quietly rewriting, written out. "Cloud agent" for "Claude agent" is a
+        correction he cannot see happening and cannot argue with, and he asked to see the lot -
+        the ones that ship and the ones he adds, in one list, with the words the fuzzy pass snaps
+        toward underneath them."""
+        his = translation_pairs(_his_translations())
+        in_force = translations_in_force(his)
+        return render_template(
+            "translations.html", here="/translations",
+            rows=[{"heard": heard, "said": in_force[heard], "his": heard in his}
+                  for heard in sorted(in_force)],
+            mine=_his_translations(),
+            terms=sorted(terms, key=str.lower),
+        )
+
+    @app.post("/translations")
+    def write_translations():
+        if translations_path is not None:
+            save_translations(request.form["body"], translations_path)
+        return ("", 204)
 
     @app.get("/memory")
     def memory():

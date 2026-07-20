@@ -94,6 +94,17 @@ body.page { padding: 10px; }
 .checklist label { display: flex; gap: 9px; align-items: baseline; cursor: pointer; }
 .checklist input { accent-color: var(--accent); margin: 0; flex: none; }
 .checklist li.done span { color: var(--dim); }
+/* What it heard, and what he actually said. A rule is two things and an arrow between them, so it
+   reads as one line rather than as a table to scan across. */
+.swaps, .terms { list-style: none; margin: 0; padding: 0; }
+.swaps li { display: flex; align-items: baseline; gap: 9px; padding: 2px 0; flex-wrap: wrap; }
+.swaps .heard { color: var(--dim); }
+.swaps .arrow { color: var(--accent); }
+.stock { margin-left: auto; font-size: .72rem; color: var(--dim); }
+/* The words the fuzzy pass snaps to: a list to skim, not a column to read down. */
+.terms { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.terms li { color: var(--past); }
+.note { margin: 0 0 10px; color: var(--dim); font-size: .82rem; }
 .as-text { margin-top: 10px; }
 .as-text summary { font-size: .76rem; color: var(--dim); cursor: pointer; }
 .as-text .writing { margin-top: 6px; }

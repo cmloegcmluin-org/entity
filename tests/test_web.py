@@ -1,5 +1,5 @@
-from entity.gui import TranscriptFeed, TranscriptModel
-from entity.web import Mirror, create_app
+from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
+from entity.web import create_app
 
 
 def _model(*lines):
@@ -84,6 +84,29 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     saved = profile.read_text(encoding="utf-8")
     assert "- swim, three times a week" in saved
     assert "- better voice" in saved  # the section beside it is untouched
+
+
+def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants for you (roadmap, not now)\n"
+                       "- [x] hear only his voice\n- live captions\nplain line\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/profile").get_data(as_text=True)
+    # A box to click, not `- [x]` spelled out for the reader to decode - and any line with words
+    # on it is an item, since they are typed in plain.
+    assert page.count("<input type=\"checkbox\"") == 3
+    assert page.count('<li class="done">') == 1
+
+    # Ticking one writes the whole list back as markdown, which is the form the brain reads.
+    client.post("/profile", data={"heading": "Enhancements he wants for you (roadmap, not now)",
+                                  "checklist": "true",
+                                  "body": "☑ hear only his voice\n☑ live captions\n☐ plain line"})
+
+    saved = profile.read_text(encoding="utf-8")
+    assert "- [x] live captions" in saved  # ticked, not removed - the record that it was done
+    assert "- [ ] plain line" in saved     # and a plain line joined the list it was meant to
+    assert "☑" not in saved                # what is drawn never reaches the file
 
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):

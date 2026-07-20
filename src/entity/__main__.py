@@ -16,8 +16,8 @@ from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import DEFAULT_LONG_ANSWER_CHARS, Conversation
-from entity.gui import TranscriptFeed
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
+from entity.mirror import TranscriptFeed
 from entity.memory import (
     append_learned,
     compose_persona,

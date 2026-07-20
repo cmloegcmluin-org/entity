@@ -16,9 +16,14 @@ from pathlib import Path
 
 from flask import Flask, render_template, request
 
-from entity.bubbles import SIDES
-from entity.gui import TranscriptModel, sessions
-from entity.memory import profile_sections, save_learned, save_section
+from entity.memory import (
+    checklist_shown,
+    checklist_stored,
+    profile_sections,
+    save_learned,
+    save_section,
+)
+from entity.mirror import SIDES, TranscriptModel, sessions
 from entity.tailing import LogTail, discover
 
 SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
@@ -28,6 +33,10 @@ SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 # ("Enhancements he wants for you (roadmap, not now)").
 SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
             ("Goals", "Goals"), ("Projects", "Projects"))
+# The enhancements list is a checklist: an item that gets done is ticked, never removed - it is the
+# only record that a complaint was heard and acted on. The page shows a real checkbox per line and
+# stores the markdown back, so what the brain reads is unchanged.
+CHECKLISTS = ("Enhancements",)
 
 
 def _said(entry, label="", speakers=SPEAKERS):
@@ -44,7 +53,7 @@ def _said(entry, label="", speakers=SPEAKERS):
         "label": label,
         "historical": entry["historical"],
         "bubble": entry["role"] in SIDES,
-        "side": SIDES[entry["role"]][0] if entry["role"] in SIDES else "",
+        "side": SIDES.get(entry["role"], ""),
     }
 
 
@@ -63,42 +72,14 @@ def _thread(entries, since, speakers=SPEAKERS):
     }
 
 
-class Mirror:
-    """What the pages show: the conversation, the mic's state, and what dictation has typed.
+def _items(body):
+    """A checklist's lines as things to tick: whether each is done, and what it says.
 
-    The Tk window drained the feed on a timer of its own. Here the page's poll is the timer, so
-    nothing is pumped while nothing is looking - and the ops arrive in the order they were sent,
-    because one place drains them."""
-
-    def __init__(self, feed, *, clock=None):
-        self.model = TranscriptModel(clock=clock) if clock else TranscriptModel()
-        self._feed = feed
-        self.state = "muted"  # the mic starts off; nothing is heard until it is turned on
-        self.level = 0.0
-        self._typed = []      # dictation's words, waiting for the page to put them in the box
-        self._send = False    # dictation said "over": the box is to be sent as it stands
-
-    def drain(self):
-        """Take everything the conversation and the dictation pump have said since last time."""
-        for op, payload in self._feed.drain():
-            if op == "state":
-                self.state = payload
-            elif op == "level":
-                self.level = payload
-            elif op == "draft":
-                self._typed.append(payload)
-            elif op == "submit":
-                self._send = True
-            else:
-                self.model.apply(op, payload)
-
-    def dictated(self):
-        """The words dictation has typed since the last poll, and whether to send the box.
-
-        Taken, not read: handed over twice they would be typed into the box twice."""
-        typed, self._typed = self._typed, []
-        send, self._send = self._send, False
-        return typed, send
+    Any line with words on it is an item - they are typed in plain, and boxing only what is
+    already punctuated as a bullet left additions sitting outside the list they were meant to
+    join. A blank line is the gap that was left, and stays one."""
+    return [{"done": line.startswith("☑"), "text": line[1:].strip(), "blank": not line.strip()}
+            for line in checklist_shown(body).splitlines()]
 
 
 class Agents:
@@ -197,17 +178,28 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         sections = []
         for title, stem in SECTIONS:
             heading = next((head for head in found if head.lower().startswith(stem.lower())), None)
-            if heading is not None:
-                sections.append({"title": title, "heading": heading, "body": found[heading]})
+            if heading is None:
+                continue
+            ticked = title in CHECKLISTS
+            sections.append({
+                "title": title, "heading": heading, "checklist": ticked,
+                "body": found[heading],
+                # A box to click, not `- [x]` spelled out for the reader to decode.
+                "items": _items(found[heading]) if ticked else [],
+            })
         return render_template("profile.html", here="/profile", sections=sections)
 
     @app.post("/profile")
     def write_profile():
         """Save one section back, keeping what was there when the page was drawn - so a save can
-        tell an edit from a change the brain made underneath it."""
+        tell an edit from a change the brain made underneath it. A checklist goes back as the
+        markdown the file keeps and the brain reads, never as the boxes drawn from it."""
         if profile_path is not None:
             heading = request.form["heading"]
-            save_section(profile_path, heading, request.form["body"],
+            body = request.form["body"]
+            if request.form.get("checklist") == "true":
+                body = checklist_stored(body)
+            save_section(profile_path, heading, body,
                          keeping=_profile_text().get(heading, ""))
         return ("", 204)
 

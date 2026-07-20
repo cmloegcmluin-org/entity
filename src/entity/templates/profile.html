@@ -9,8 +9,29 @@
   {% for section in sections %}
   <section class="section">
     <h2>{{ section.title }}</h2>
+    {% if section.checklist %}
+    {#- An item that gets done is ticked, never removed: a done item is the only record that a
+        complaint was heard and acted on. Dimmed rather than struck through, so it stays legible
+        - "that makes it impossible to read; simply dim the text when it has been checked". -#}
+    <ul class="checklist" data-heading="{{ section.heading }}">
+      {% for item in section["items"] if not item.blank %}
+      <li class="{{ 'done' if item.done }}">
+        <label>
+          <input type="checkbox" {{ 'checked' if item.done }}>
+          <span>{{ item.text }}</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    <details class="as-text">
+      <summary>Edit as text</summary>
+      <textarea class="writing" data-heading="{{ section.heading }}" data-checklist="true"
+                aria-label="{{ section.title }}">{{ section.body }}</textarea>
+    </details>
+    {% else %}
     <textarea class="writing" data-heading="{{ section.heading }}"
               aria-label="{{ section.title }}">{{ section.body }}</textarea>
+    {% endif %}
   </section>
   {% else %}
   <p class="empty">No profile is loaded, so there is nothing here to edit.</p>

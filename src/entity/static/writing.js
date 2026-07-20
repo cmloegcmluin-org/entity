@@ -12,16 +12,33 @@ function announce(what) {
   setTimeout(() => saved.classList.remove("showing"), 1600);
 }
 
+async function write(where, body) {
+  await fetch(where, { method: "POST", body: new URLSearchParams(body) });
+  announce("Saved");
+}
+
 for (const box of document.querySelectorAll(".writing")) {
   let waiting = null;
   box.addEventListener("input", () => {
     clearTimeout(waiting);
-    waiting = setTimeout(async () => {
-      const where = box.dataset.learned ? "/memory" : "/profile";
-      const body = { body: box.value };
-      if (!box.dataset.learned) body.heading = box.dataset.heading;
-      await fetch(where, { method: "POST", body: new URLSearchParams(body) });
-      announce("Saved");
+    waiting = setTimeout(() => {
+      if (box.dataset.learned) return write("/memory", { body: box.value });
+      write("/profile", { heading: box.dataset.heading, body: box.value,
+                          checklist: box.dataset.checklist || "false" });
     }, AFTER);
+  });
+}
+
+/* A checklist writes back the whole list every time one box is ticked: an item that gets done is
+   ticked, never removed, so what is stored is the list with one mark changed. */
+for (const list of document.querySelectorAll(".checklist")) {
+  list.addEventListener("change", (event) => {
+    if (event.target.type !== "checkbox") return;
+    event.target.closest("li").classList.toggle("done", event.target.checked);
+    const body = [...list.querySelectorAll("li")].map((row) => {
+      const ticked = row.querySelector("input").checked;
+      return `${ticked ? "☑" : "☐"} ${row.querySelector("span").textContent}`;
+    }).join("\n");
+    write("/profile", { heading: list.dataset.heading, body, checklist: "true" });
   });
 }

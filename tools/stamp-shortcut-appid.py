@@ -2,7 +2,7 @@
 are the same taskbar button.
 
 Windows matches a pinned shortcut to a running window by AppUserModelID. The Entity process
-declares one (entity.gui.APP_ID); without the same id on the .lnk, pinning it gives a second,
+declares one (entity.mirror.APP_ID); without the same id on the .lnk, pinning it gives a second,
 separate button - the pin sitting inert while the running app lights up somewhere else entirely. Run once after install-start-menu.ps1, and again if that shortcut is ever recreated.
 """
 
@@ -14,7 +14,7 @@ from win32com.propsys import propsys, pscon
 from win32com.shell import shell
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from entity.gui import APP_ID  # noqa: E402  - the one definition of the id, not a copy of it
+from entity.mirror import APP_ID  # noqa: E402  - the one definition of the id, not a copy of it
 
 STGM_READWRITE = 0x00000002  # loading a .lnk read-only makes every write Access Denied
 

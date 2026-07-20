@@ -81,11 +81,13 @@ Test fixtures use invented facts. When you add a comment here, write the failure
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 5-second handoff. `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, and it
-reports whether it is recording so nothing speaks over the user. `gui.py` mirrors everything through
-one thread-safe feed into Tk; anything that can be wrong lives outside Tk and is tested without a
-display. `bubbles.py` is one tinted box per message — a real widget, because a Tk tag's background
-paints the whole line box; it also underlines whatever a message names that can be opened, which
-`links.py` decides and opens. `agent_desk.py` holds each agent as a live session in-process (handles
+reports whether it is recording so nothing speaks over the user. The window is a local web app, the
+same shape as Notecraft: `mirror.py` is the conversation as a window shows it — the message model,
+the thread-safe feed everything crosses on, and where each session starts — with no window in it,
+so all of it is tested without a display; `web.py` serves it, `templates/` and `static/` are the
+pages, and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
+holding the view) rather than a browser tab. `links.py` decides what a message names that can be
+opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets) and streams the whole exchange into its log; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
@@ -94,8 +96,8 @@ held, and it says which one a reply just named.
 `brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
-obvious designs are wrong. Tk touches only the main thread; the conversation, the dictation pump
-and the keyboard hook run on workers.
+obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump
+and the keyboard hook run on workers, and the page's own poll is what drains the feed.
 
 ## Open work
 

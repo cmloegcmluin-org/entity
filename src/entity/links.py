@@ -29,12 +29,72 @@ _LEADING, _TRAILING = "\"'<([{", ".,;:!?\"'>)]}"
 
 
 def link_in(word):
-    """What this word opens, or None.
-
-    A path with a space in it cannot be told from a path followed by another word, so those are
-    not offered rather than offered wrong."""
+    """What this one word opens, or None."""
     target = word.strip().lstrip(_LEADING).rstrip(_TRAILING)
     return target if _LINK.fullmatch(target) else None
+
+
+MAX_PATH_WORDS = 8  # a path with more spaces than this is not worth probing the disk over
+
+
+def link_parts(text, *, exists=os.path.exists):
+    """`text` split into what can be opened and what cannot, as [{"text", "link"}].
+
+    The hard case is a space: "C:\\Users\\ada\\Field Notes\\inbox" cannot be told from a
+    path followed by another word by looking at the text alone - which is why a single broken link
+    is what he saw. So the filesystem is asked. A drive-letter or UNC match is extended across the
+    following words to the longest run that actually exists on disk; a run that exists nowhere
+    stays the one word it was, exactly as before, and a URL (which can hold no space) is always the
+    one word. The page draws only what this returns, so the rule lives here, where it is tested."""
+    words = text.split(" ")
+    parts, plain, index = [], [], 0
+    while index < len(words):
+        if link_in(words[index]) is None:
+            plain.append(words[index])
+            index += 1
+            continue
+        if plain:
+            parts.append({"text": " ".join(plain) + " ", "link": ""})
+            plain = []
+        span, target = _widest(words, index, exists)
+        raw = " ".join(words[index:index + span])
+        lead = raw[:len(raw) - len(raw.lstrip(_LEADING))]  # the sentence's own "(" stays outside
+        trail = raw[len(lead) + len(target):]              # and its own trailing "." does too
+        for piece in ({"text": lead, "link": ""}, {"text": target, "link": target},
+                      {"text": trail + " ", "link": ""}):
+            if piece["text"]:
+                parts.append(piece)
+        index += span
+    if plain:
+        parts.append({"text": " ".join(plain), "link": ""})
+    return parts
+
+
+def offers(target, *, exists=os.path.exists):
+    """Would this module, shown exactly this string, turn the whole of it into one link?
+
+    What `/open` asks before opening anything: a POST that opens whatever it is handed is a way to
+    run things by talking to the port, so it opens only what the page was actually offered - and
+    "offered" is defined by the very function that offered it, spaces and all."""
+    return [part["link"] for part in link_parts(target, exists=exists) if part["link"]] == [target]
+
+
+def _widest(words, index, exists):
+    """How many words the path at `index` really spans, and the path itself. The one-word match is
+    the floor - offered whether or not it exists, since Entity names files a moment before making
+    them. A wider run only wins when the disk confirms it, so a real word after a real path is
+    never swallowed into it."""
+    base = link_in(words[index])
+    if base.startswith(("http://", "https://")):
+        return 1, base
+    widest_span, widest = 1, base
+    for span in range(2, min(MAX_PATH_WORDS, len(words) - index) + 1):
+        # `base` already proved this is a drive/UNC path; an extension across a space cannot match
+        # `_LINK` (it forbids whitespace), so existence on disk is the whole test for one.
+        candidate = " ".join(words[index:index + span]).lstrip(_LEADING).rstrip(_TRAILING)
+        if exists(candidate):
+            widest_span, widest = span, candidate
+    return widest_span, widest
 
 
 # What a person says instead of reading an address out. A stand-in rather than nothing: dropping

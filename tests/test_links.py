@@ -54,3 +54,46 @@ def test_a_file_not_written_yet_opens_the_nearest_folder_that_is_there(tmp_path)
     open_link(str(inbox / "not-yet.md"), shell=opened.append)
 
     assert opened == [str(inbox)]
+
+
+def test_a_path_with_a_space_is_one_link_when_the_disk_confirms_it():
+    from entity.links import link_parts
+
+    # "C:\Users\ada\Field Notes\inbox." broke on the space and came out a broken link.
+    # The filesystem settles it: the run that exists is the whole path, folder-with-a-space and all.
+    real = r"C:\Users\ada\Field Notes\inbox"
+    parts = link_parts(f"It's in {real}.", exists=lambda p: p == real)
+
+    assert [p["link"] for p in parts if p["link"]] == [real]
+    # Not one word lost, and the "." stays the sentence's, outside the link. (Words rejoin on
+    # single spaces, so the reconstruction can carry one trailing space the box never shows.)
+    assert "".join(p["text"] for p in parts).rstrip() == f"It's in {real}."
+
+
+def test_a_real_word_after_a_real_path_is_not_swallowed_into_it():
+    from entity.links import link_parts
+
+    here = r"C:\ada\notes"
+    parts = link_parts(f"{here} and then lunch", exists=lambda p: p == here)
+
+    assert [p["link"] for p in parts if p["link"]] == [here]  # only the path, not "notes and then"
+
+
+def test_a_path_that_exists_nowhere_is_still_the_one_word_it_was():
+    from entity.links import link_parts
+
+    parts = link_parts(r"See C:\ada\gone.md now", exists=lambda p: False)
+
+    # Entity names a file a moment before making it, so a single-token path is offered regardless;
+    # only EXTENDING across a space needs the disk.
+    assert [p["link"] for p in parts if p["link"]] == [r"C:\ada\gone.md"]
+
+
+def test_only_what_the_module_would_offer_can_be_opened():
+    from entity.links import offers
+
+    real = r"C:\Users\ada\Field Notes\inbox"
+    assert offers("https://ex.com/x") is True
+    assert offers(real, exists=lambda p: p == real) is True  # the spaced path it just handed out
+    assert offers("not a link at all") is False
+    assert offers(real, exists=lambda p: False) is False  # a spaced path that exists nowhere

@@ -334,14 +334,22 @@ def test_a_message_naming_a_path_hands_it_over_as_something_to_open():
         f"Filed it at {named}, see https://ex.com/x")
 
 
-def test_only_what_was_offered_as_a_link_can_be_opened():
+def test_only_what_was_offered_as_a_link_can_be_opened(tmp_path):
     opened = []
     client = _client(opener=opened.append)
 
     assert client.post("/open", data={"target": "https://ex.com/x"}).status_code == 204
     # A POST that opens whatever string it is handed is a way to run things by talking to the port.
     assert client.post("/open", data={"target": "not a link at all"}).status_code == 400
-    assert opened == ["https://ex.com/x"]
+
+    # A real path with a space in it - the case that broke - opens, because the same rule that
+    # offered it says it exists; an invented one with a space does not.
+    spaced = tmp_path / "Field Notes"
+    spaced.mkdir()
+    assert client.post("/open", data={"target": str(spaced)}).status_code == 204
+    assert client.post("/open", data={"target": str(tmp_path / "Made Up")}).status_code == 400
+
+    assert opened == ["https://ex.com/x", str(spaced)]
 
 
 def test_the_one_click_yes_and_the_bin_are_both_on_the_page():

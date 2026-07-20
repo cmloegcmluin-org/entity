@@ -25,7 +25,7 @@ from entity.memory import (
     save_translations,
     translation_pairs,
 )
-from entity.links import link_in, open_link
+from entity.links import link_parts, offers, open_link
 from entity.mirror import SIDES, TranscriptModel, sessions
 from entity.tailing import LogTail, discover
 from entity.vocabulary import translations_in_force
@@ -37,32 +37,6 @@ SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 # ("Enhancements he wants for you (roadmap, not now)").
 SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
             ("Goals", "Goals"), ("Projects", "Projects"))
-
-
-def _parts(text):
-    """A message split into what can be opened and what cannot.
-
-    Entity names paths and addresses constantly, and reading one back to retype it is the thing
-    this saves. The server decides what is a link - `links.link_in` is where the rules live and
-    where they are tested - so the page only draws what it is handed."""
-    parts, plain = [], []
-    for word in text.split(" "):
-        target = link_in(word)
-        if target is None:
-            plain.append(word)
-            continue
-        if plain:
-            parts.append({"text": " ".join(plain) + " ", "link": ""})
-            plain = []
-        # The sentence's own punctuation stays outside the link, so a full stop after a filename
-        # is not part of the filename.
-        head, _, rest = word.partition(target)
-        parts.append({"text": head, "link": ""}) if head else None
-        parts.append({"text": target, "link": target})
-        parts.append({"text": rest + " ", "link": ""})
-    if plain:
-        parts.append({"text": " ".join(plain), "link": ""})
-    return [part for part in parts if part["text"]]
 
 
 def _said(entry, label="", speakers=SPEAKERS):
@@ -80,8 +54,9 @@ def _said(entry, label="", speakers=SPEAKERS):
         "historical": entry["historical"],
         "bubble": entry["role"] in SIDES,
         "side": SIDES.get(entry["role"], ""),
-        # What in it can be opened, worked out here so the page only draws it.
-        "parts": _parts(entry["text"]) if entry["role"] in SIDES else [],
+        # What in it can be opened, worked out here so the page only draws it. Space-aware, so a
+        # path with a folder like "Field Notes" in it is one link, not one broken one.
+        "parts": link_parts(entry["text"]) if entry["role"] in SIDES else [],
     }
 
 
@@ -253,7 +228,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         Only what this same server offered as a link: the page can ask for anything, and a POST
         that opens whatever string it is handed is a way to run things by talking to the port."""
         target = request.form["target"]
-        if link_in(target) != target:
+        if not offers(target):  # the same rule that offered it, so a spaced path still opens
             return ("", 400)
         opener(target)
         return ("", 204)

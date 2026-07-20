@@ -456,8 +456,13 @@ def main(argv=None):
     )
     # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
     # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
-    ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
-                              focused=foreground_is_ours)).start()
+    # Held in a name for the app's lifetime, and asked whether it took: a hook that fails to
+    # install is the one place this can die in silence, so it says so on screen rather than the
+    # chord just quietly doing nothing.
+    chord = ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
+                                      focused=foreground_is_ours))
+    if not chord.start():
+        feed.push("line", "(Win+Enter to submit is unavailable - the keyboard hook didn't install)")
 
     def worker():
         try:

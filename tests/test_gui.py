@@ -387,6 +387,13 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         ticked = profile.read_text(encoding="utf-8")
         assert "- [x] better voice" in ticked  # ticked in the file, still there to read
 
+        # A selection has to be startable at the left edge of a line, which in this tab is a box.
+        # The pane's own padding reports column 0 exactly as the box does, so claiming the column
+        # rather than the box's pixels made the whole left margin of every line a checkbox:
+        # dragging from there selected nothing and silently ticked an item instead.
+        assert window.drag_across_line("2 · Enhancements", 1) == "☑ better voice"
+        assert window.section_struck_rows("2 · Enhancements") == [1]  # and the drag ticked nothing
+
         # Copying has to work in every tab, not only the conversation. Right-click is the copy
         # that works with a hand on the mouse, and the section tabs had no <Button-3> bound at
         # all - measured - so a list he could read was a list he could not get a line out of.

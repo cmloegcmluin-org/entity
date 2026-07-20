@@ -397,19 +397,27 @@ class EntityWindow:
         return pane
 
     def _clicked_box(self, event, label):
-        """A click ON the box ticks or unticks that line. Anywhere else in the line is an ordinary
-        click, because this pane is still a document he edits and selects text in."""
+        """A click on the box itself ticks or unticks that line. Anywhere else is an ordinary
+        click, because this pane is still a document he edits and selects text in.
+
+        Past the pane's own left padding, at that. The padding reports column 0 exactly as the box
+        does, so a column test alone made the whole left margin of every line a checkbox - and a
+        selection dragged from the edge of a line, which is how a line gets selected, ticked an
+        item and started nothing. Measured against the padding rather than the box's drawn
+        rectangle, because a notebook page nobody has opened yet reports every glyph as one pixel
+        wide, and a rule that reads the layout would be answering that."""
         pane = self._sections[label]["pane"]
-        row = pane.index(f"@{event.x},{event.y}").split(".")[0]
-        line = pane.get(f"{row}.0", f"{row}.end")
-        if not line[:1] in (EMPTY_BOX.strip(), FULL_BOX.strip()):
-            return None
-        if int(pane.index(f"@{event.x},{event.y}").split(".")[1]) > 1:
+        if event.x < int(pane.cget("padx")):
+            return None  # the margin beside the line, not the line
+        row, column = (int(part) for part in pane.index(f"@{event.x},{event.y}").split("."))
+        if column > 1:
             return None  # they clicked the words, not the box
-        ticked = line[:1] == FULL_BOX.strip()
+        shown = pane.get(f"{row}.0", f"{row}.1")
+        if shown not in (EMPTY_BOX.strip(), FULL_BOX.strip()):
+            return None
         pane.delete(f"{row}.0", f"{row}.1")
-        pane.insert(f"{row}.0", (EMPTY_BOX if ticked else FULL_BOX).strip())
-        self._show_done(pane, int(row))
+        pane.insert(f"{row}.0", (EMPTY_BOX if shown == FULL_BOX.strip() else FULL_BOX).strip())
+        self._show_done(pane, row)
         self._mark_dirty(label)
         return "break"  # the click has been spent on the box; don't also move the caret there
 
@@ -944,11 +952,24 @@ class EntityWindow:
     def click_checkbox(self, label, row):
         """Click the box on one line, where the mouse would land - so the binding is exercised, not
         just the function behind it. A box that ticks only when called directly is not a checkbox."""
-        pane = self._sections[label]["pane"]
-        pane.update_idletasks()
+        pane = self._front(label)
         left, top, _, height = pane.bbox(f"{row}.0")
         pane.event_generate("<Button-1>", x=left + 1, y=top + height // 2)
         pane.update()
+
+    def drag_across_line(self, label, row):
+        """Drag from the left edge of a line to the end of it, the way a reader selects one, and
+        hand back what came up selected."""
+        pane = self._front(label)
+        pane.tag_remove("sel", "1.0", "end")
+        _, top, _, height = pane.bbox(f"{row}.0")
+        last = pane.bbox(f"{row}.end-1c")
+        y, far = top + height // 2, last[0] + last[2]
+        pane.event_generate("<Button-1>", x=1, y=y)
+        pane.event_generate("<B1-Motion>", x=far, y=y)
+        pane.event_generate("<ButtonRelease-1>", x=far, y=y)
+        pane.update()
+        return pane.get("sel.first", "sel.last") if pane.tag_ranges("sel") else ""
 
     def section_struck_rows(self, label):
         """Which lines of a checklist tab are struck through - what a finished item looks like."""

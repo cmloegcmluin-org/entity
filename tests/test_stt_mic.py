@@ -3,7 +3,7 @@ import threading
 import numpy as np
 
 from entity.mic import BackgroundMicrophone
-from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _is_backchannel, _strip_terminator
+from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _is_invented, _strip_terminator
 
 
 class FakeMic:
@@ -49,20 +49,30 @@ def test_strip_terminator_handles_case_and_punctuation():
     assert _strip_terminator("Over", "over") == ""
 
 
-def test_is_backchannel_spots_filler_but_keeps_real_words_and_the_terminator():
-    assert _is_backchannel("Mm-hmm. Yeah. Uh.", "over") is True
-    assert _is_backchannel("yeah", "over") is True
-    assert _is_backchannel("Hey, I'm confused.", "over") is False  # real words, not filler
-    assert _is_backchannel("yeah over", "over") is False  # carries the terminator - a real end
-    assert _is_backchannel("", "over") is False
+def test_is_invented_spots_filler_but_keeps_real_words_and_the_terminator():
+    assert _is_invented("Mm-hmm. Yeah. Uh.", "over") is True
+    assert _is_invented("yeah", "over") is True
+    assert _is_invented("Hey, I'm confused.", "over") is False  # real words, not filler
+    assert _is_invented("yeah over", "over") is False  # carries the terminator - a real end
+    assert _is_invented("", "over") is False
 
 
 def test_okay_hallucinations_are_treated_as_backchannel():
     # Parakeet fills their pauses with "Okay." too; those must not pile up in front of their real turn.
-    assert _is_backchannel("Okay.", "over") is True
-    assert _is_backchannel("Okay okay okay", "over") is True
-    assert _is_backchannel("Alright.", "over") is True
-    assert _is_backchannel("okay do the thing", "over") is False  # real words survive
+    assert _is_invented("Okay.", "over") is True
+    assert _is_invented("Okay okay okay", "over") is True
+    assert _is_invented("Alright.", "over") is True
+    assert _is_invented("okay do the thing", "over") is False  # real words survive
+
+
+def test_the_models_stock_answer_to_silence_is_not_a_turn():
+    # "Thank you." is what Parakeet returns for a stretch it can find no words in - five times in one
+    # replayed 20-minute session, not once actually said. It's the same invention as "Okay." and
+    # "Yeah.", which are already dropped; it just isn't a single word, so the word set can't see it.
+    assert _is_invented("Thank you.", "over") is True
+    assert _is_invented("Thanks!", "over") is True
+    assert _is_invented("thank you for doing that", "over") is False  # a real sentence survives
+    assert _is_invented("thank you over", "over") is False  # carries the terminator - a real end
 
 
 def test_pure_backchannel_noise_is_dropped_from_the_turn():

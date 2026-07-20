@@ -39,6 +39,12 @@ _BACKCHANNEL = {
     "okay", "ok", "kay", "alright", "aright",  # Parakeet fills their pauses with these too
 }
 
+# Not every invention is one word. Handed a stretch it can find no speech in, Parakeet answers with
+# the likeliest thing anyone ever says, and "Thank you." is the one that kept landing in the draft
+# box - five times in a replayed 20-minute session, not once actually said. The whole chunk has to BE
+# the phrase; "thank you for doing that" is a sentence and stays.
+_STOCK_PHRASES = {"thank you", "thanks"}
+
 # Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).
 STOP_WORDS = ("stop", "shut up", "quiet", "enough", "wait")
 
@@ -85,14 +91,15 @@ def carries_speech(voiced, min_run=MIN_VOICED_RUN):
     return False
 
 
-def _is_backchannel(text, terminator):
-    """True if the chunk is nothing but hallucinated filler words - and doesn't carry the terminator,
-    so a real 'yeah, over' still ends the turn."""
+def _is_invented(text, terminator):
+    """True if the chunk is nothing the user said - filler the model hears in near-silence, or its
+    stock answer to a stretch with no words in it. Never true of a chunk carrying the terminator, so
+    a real 'yeah, over' still ends the turn."""
     words = [re.sub(r"[^a-z]", "", w.lower()) for w in text.split()]
     words = [w for w in words if w]
     if not words or terminator in words:
         return False
-    return all(w in _BACKCHANNEL for w in words)
+    return all(w in _BACKCHANNEL for w in words) or " ".join(words) in _STOCK_PHRASES
 
 
 class NoiseFloor:
@@ -224,7 +231,7 @@ class MicSTT:
         if not carries_speech(voiced):
             return None
         text = self._transcriber.transcribe(np.concatenate(chunk)).strip()
-        if text and not _is_backchannel(text, self._terminator):
+        if text and not _is_invented(text, self._terminator):
             segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence
         without_terminator = _strip_terminator(" ".join(segments), self._terminator)
         if without_terminator is not None:

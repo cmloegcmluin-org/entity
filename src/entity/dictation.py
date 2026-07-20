@@ -33,7 +33,7 @@ from entity.stt_mic import (
     PAUSE_FRAMES,
     STOP_WORDS,
     NoiseFloor,
-    _is_backchannel,
+    _is_invented,
     _is_stop_bark,
     _strip_terminator,
     carries_speech,
@@ -228,11 +228,11 @@ class Dictation:
             return
         without_over = _strip_terminator(text, self._terminator)
         if without_over is not None:
-            if without_over and not _is_backchannel(without_over, self._terminator):
+            if without_over and not _is_invented(without_over, self._terminator):
                 self._on_draft(without_over)
             self._on_submit_request()  # "over" still submits - old muscle memory, same meaning
             return
-        if _is_backchannel(text, self._terminator):
+        if _is_invented(text, self._terminator):
             return  # Parakeet's hallucinated filler on near-silence, not them
         self._on_draft(text)
 
@@ -242,7 +242,7 @@ class Dictation:
         for phrase in self._mutes:
             if spoken != phrase and spoken.endswith(" " + phrase):
                 kept = text.strip()[: -len(phrase)].rstrip(" ,.;:!?-")
-                if kept and not _is_backchannel(kept, self._terminator):
+                if kept and not _is_invented(kept, self._terminator):
                     self._on_draft(kept)
                 return
 

@@ -21,8 +21,7 @@ async function write(where, body) {
 function destination(box) {
   if (box.dataset.learned) return ["/memory", { body: box.value }];
   if (box.dataset.translations) return ["/translations", { body: box.value }];
-  return ["/profile", { heading: box.dataset.heading, body: box.value,
-                        checklist: box.dataset.checklist || "false" }];
+  return ["/profile", { heading: box.dataset.heading, body: box.value }];
 }
 
 for (const box of document.querySelectorAll(".writing")) {
@@ -43,6 +42,6 @@ for (const list of document.querySelectorAll(".checklist")) {
       const ticked = row.querySelector("input").checked;
       return `${ticked ? "☑" : "☐"} ${row.querySelector("span").textContent}`;
     }).join("\n");
-    write("/profile", { heading: list.dataset.heading, body, checklist: "true" });
+    write("/profile", { heading: list.dataset.heading, body });
   });
 }

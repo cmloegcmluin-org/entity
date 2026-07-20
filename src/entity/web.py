@@ -37,10 +37,6 @@ SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
 # ("Enhancements he wants for you (roadmap, not now)").
 SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
             ("Goals", "Goals"), ("Projects", "Projects"))
-# The enhancements list is a checklist: an item that gets done is ticked, never removed - it is the
-# only record that a complaint was heard and acted on. The page shows a real checkbox per line and
-# stores the markdown back, so what the brain reads is unchanged.
-CHECKLISTS = ("Enhancements",)
 
 
 def _said(entry, label="", speakers=SPEAKERS):
@@ -109,6 +105,13 @@ def persona_paragraphs(text):
             lead = found.group(1) if found else ""
             blocks.append({"lead": lead, "body": part[found.end():] if found else part})
     return blocks
+
+
+def _heading(found, stem):
+    """Which of the profile's own headings this section means. Matched on the stem, because a
+    profile glosses its headings however it likes ("Enhancements he wants for you (roadmap, not
+    now)")."""
+    return next((head for head in found if head.lower().startswith(stem.lower())), None)
 
 
 def _items(body):
@@ -217,34 +220,28 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.get("/profile")
     def profile():
-        """The four sections, down one page. Matched by prefix, since a profile glosses its own
-        headings, and shown in the profile's order rather than ours where both agree."""
+        """The four sections, down one page, every one of them a checklist. They are the same kind
+        of thing - a list of lines under a heading - and only Enhancements drew boxes, so three of
+        the four handed him raw markdown to decode. Matched by prefix, since a profile glosses its
+        own headings, and shown in the profile's order rather than ours where both agree."""
         found = _profile_text()
-        sections = []
-        for title, stem in SECTIONS:
-            heading = next((head for head in found if head.lower().startswith(stem.lower())), None)
-            if heading is None:
-                continue
-            ticked = title in CHECKLISTS
-            sections.append({
-                "title": title, "heading": heading, "checklist": ticked,
-                "body": found[heading],
-                # A box to click, not `- [x]` spelled out for the reader to decode.
-                "items": _items(found[heading]) if ticked else [],
-            })
+        sections = [
+            # A box to click, not `- [x]` spelled out for the reader to decode.
+            {"title": title, "heading": heading, "body": found[heading],
+             "items": _items(found[heading])}
+            for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
+            if heading is not None
+        ]
         return render_template("profile.html", here="/profile", sections=sections)
 
     @app.post("/profile")
     def write_profile():
         """Save one section back, keeping what was there when the page was drawn - so a save can
-        tell an edit from a change the brain made underneath it. A checklist goes back as the
-        markdown the file keeps and the brain reads, never as the boxes drawn from it."""
+        tell an edit from a change the brain made underneath it. It goes back as the markdown the
+        file keeps and the brain reads, never as the boxes drawn from it."""
         if profile_path is not None:
             heading = request.form["heading"]
-            body = request.form["body"]
-            if request.form.get("checklist") == "true":
-                body = checklist_stored(body)
-            save_section(profile_path, heading, body,
+            save_section(profile_path, heading, checklist_stored(request.form["body"]),
                          keeping=_profile_text().get(heading, ""))
         return ("", 204)
 

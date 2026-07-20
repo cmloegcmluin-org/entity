@@ -83,7 +83,9 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     client.post("/profile", data={"heading": "Goals", "body": "- swim, three times a week"})
 
     saved = profile.read_text(encoding="utf-8")
-    assert "- swim, three times a week" in saved
+    # A bullet written before the boxes existed comes back as an unticked one, so the list
+    # upgrades itself the first time he touches it rather than needing a migration run.
+    assert "- [ ] swim, three times a week" in saved
     assert "- better voice" in saved  # the section beside it is untouched
 
 
@@ -101,7 +103,6 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
 
     # Ticking one writes the whole list back as markdown, which is the form the brain reads.
     client.post("/profile", data={"heading": "Enhancements he wants for you (roadmap, not now)",
-                                  "checklist": "true",
                                   "body": "☑ hear only his voice\n☑ live captions\n☐ plain line"})
 
     saved = profile.read_text(encoding="utf-8")
@@ -161,6 +162,25 @@ def test_a_paragraph_that_is_already_markdown_is_left_as_it_was():
 
     assert [block["body"] for block in blocks] == ["## Goals\n- swim\n- cello", "plain words after it"]
     assert all(block["lead"] == "" for block in blocks)
+
+
+def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
+    # "consistent styling of all the tabs (all checkboxes, same font)". Enhancements was the only
+    # one with boxes; the other three showed him the markdown and left him to decode it.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- better voice\n\n## Life context\n- new to the city\n\n"
+                       "## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/profile").get_data(as_text=True)
+
+    assert page.count('<ul class="checklist"') == 4  # every section, not just the one
+    assert page.count('<input type="checkbox"') == 4
+
+    # And a tick in any of them still writes markdown back, which is what the brain reads.
+    client.post("/profile", data={"heading": "Goals", "body": "☑ swim"})
+
+    assert "- [x] swim" in profile.read_text(encoding="utf-8")
 
 
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):

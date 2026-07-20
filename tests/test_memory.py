@@ -260,11 +260,30 @@ def test_a_checklist_is_shown_as_boxes_and_stored_as_markdown():
     stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
 
     assert checklist_shown(stored) == (
-        "☐ better voice\n☑ speaker enrollment\n☐ a bullet from before the boxes\n\nprose"
+        "☐ better voice\n☑ speaker enrollment\n☐ a bullet from before the boxes\n\n☐ prose"
     )
     assert checklist_stored(checklist_shown(stored)) == (
-        "- [ ] better voice\n- [x] speaker enrollment\n- [ ] a bullet from before the boxes\n\nprose"
+        "- [ ] better voice\n- [x] speaker enrollment\n- [ ] a bullet from before the boxes\n\n- [ ] prose"
     )
+
+
+def test_every_line_he_types_into_the_checklist_becomes_an_item():
+    # "The enhancements tab should simply assume that any newline is a checklist item." He types
+    # them in as plain lines; a tab that boxed only the ones already punctuated as bullets left his
+    # own additions sitting there as prose, outside the list they were meant to join.
+    from entity.memory import checklist_shown, checklist_stored
+
+    assert checklist_shown("- [x] done\ntyped straight in\n\nafter a gap") == (
+        "☑ done\n☐ typed straight in\n\n☐ after a gap"
+    )
+    assert checklist_stored("☑ done\ntyped straight in") == "- [x] done\n- [ ] typed straight in"
+
+
+def test_a_blank_line_stays_a_blank_line():
+    from entity.memory import checklist_shown, checklist_stored
+
+    assert checklist_shown("one\n\ntwo") == "☐ one\n\n☐ two"  # the gap he left is his
+    assert checklist_stored("☐ one\n\n☐ two") == "- [ ] one\n\n- [ ] two"
 
 
 def test_a_box_ticked_in_the_window_is_stored_as_a_ticked_one():

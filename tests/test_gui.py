@@ -149,6 +149,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
     # poorly enough to flake. Laid out for real because a withdrawn window reports every width as
     # 1, and the bubbles can only be checked where they actually landed.
     from entity.gui import EntityWindow
+    from entity.memory import append_enhancement
 
     profile = tmp_path / "profile.md"
     profile.write_text(
@@ -376,17 +377,21 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
         assert window.section_text("2 · Enhancements").strip() == "☐ better voice"
-        assert window.section_struck_rows("2 · Enhancements") == []
+        assert window.section_dimmed_rows("2 · Enhancements") == []
 
         window.click_checkbox("2 · Enhancements", 1)
 
         assert window.section_text("2 · Enhancements").strip() == "☑ better voice"
-        assert window.section_struck_rows("2 · Enhancements") == [1]  # and it reads as done
+        assert window.section_dimmed_rows("2 · Enhancements") == [1]  # and it reads as done
         ticks[0] += window.AUTOSAVE_AFTER + 1
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()
         ticked = profile.read_text(encoding="utf-8")
         assert "- [x] better voice" in ticked  # ticked in the file, still there to read
+        # Done is DIMMED, not struck through: "that makes it impossible to read; simply dim the
+        # text when it has been checked". A finished item is still an item he has to be able to read.
+        assert window.section_dimmed_rows("2 · Enhancements") == [1]
+        assert not window.section_tag_option("2 · Enhancements", "done", "overstrike")
 
         # A path or an address in the conversation is a thing to CLICK, not a thing to read out
         # and retype somewhere else. Entity writes real Windows paths here constantly, and the
@@ -413,7 +418,7 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         # rather than the box's pixels made the whole left margin of every line a checkbox:
         # dragging from there selected nothing and silently ticked an item instead.
         assert window.drag_across_line("2 · Enhancements", 1) == "☑ better voice"
-        assert window.section_struck_rows("2 · Enhancements") == [1]  # and the drag ticked nothing
+        assert window.section_dimmed_rows("2 · Enhancements") == [1]  # and the drag ticked nothing
 
         # Copying has to work in every tab, not only the conversation. Right-click is the copy
         # that works with a hand on the mouse, and the section tabs had no <Button-3> bound at
@@ -421,10 +426,37 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert window.copy_by_menu("2 · Enhancements", "1.2", "1.8") == "better"
         assert window.copy_by_menu("4 · Goals", "1.2", "1.7") == "learn"
         assert window.copy_by_menu("6 · Persona", "1.0", "1.3") == "You"
-        # And the highlight has to be visible where it lands: the strike-through tag is made after
-        # the pane, so unless the selection is raised over it, a ticked line highlights under a
-        # tag that dims it.
+        # And the highlight has to be visible where it lands: the done tag is made after the pane,
+        # so unless the selection is raised over it, a ticked line highlights under the tag that
+        # dims it.
         assert window.tag_order("2 · Enhancements")[-1] == "sel"
+
+        # And a line he types straight in is an item too - "the enhancements tab should simply
+        # assume that any newline is a checklist item" - so his own additions join the list rather
+        # than sitting outside it as prose.
+        window.set_section_text("2 · Enhancements", "☑ better voice" + chr(10) + "typed straight in")
+        ticks[0] += window.AUTOSAVE_AFTER + 1
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert "- [ ] typed straight in" in profile.read_text(encoding="utf-8")
+
+        # A refresh must not yank him back to the top. Autosaving what he is typing forces a
+        # re-read, and the re-read used to rewrite the pane from scratch - so every pause while
+        # composing threw him to line one of a list this long.
+        window.set_section_text("2 · Enhancements",
+                                chr(10).join(f"☐ item {n}" for n in range(60)))
+        ticks[0] += window.AUTOSAVE_AFTER + 1
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        window.scroll_section_to_end("2 · Enhancements")
+        assert window.section_scroll("2 · Enhancements") > 0.1  # he really is reading further down
+
+        append_enhancement("one Entity filed while he was reading", path=profile)
+        for _ in range(window.SLOW_POLL_EVERY * 3):
+            window._drain_once()
+
+        assert "one Entity filed" in window.section_text("2 · Enhancements")  # the tab did re-read
+        assert window.section_scroll("2 · Enhancements") > 0.1  # and left him where he was
 
         # What it has learned is visible the moment it lands, and an edit of it sticks.
         for _ in range(window.SLOW_POLL_EVERY):

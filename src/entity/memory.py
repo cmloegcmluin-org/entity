@@ -218,11 +218,16 @@ def checklist_shown(body):
 
 
 def _as_box(line):
+    """One line as a box. ANY line with words on it is an item - "the enhancements tab should simply
+    assume that any newline is a checklist item" - because he types them in plain, and boxing only
+    the ones already punctuated as bullets left his own additions sitting outside the list they were
+    meant to join. A blank line is the gap he left, and stays one."""
     match = _BULLET.match(line)
-    if match is None:
+    item = (match.group("item") if match else line).strip()
+    if not item:
         return line
-    ticked = (match.group("tick") or " ") != " "
-    return (FULL_BOX if ticked else EMPTY_BOX) + match.group("item").strip()
+    ticked = match is not None and (match.group("tick") or " ") != " "
+    return (FULL_BOX if ticked else EMPTY_BOX) + item
 
 
 def checklist_stored(body):
@@ -239,9 +244,9 @@ def _as_markdown(line):
     if shown is not None:
         return _bullet(shown.group(1) == FULL_BOX.strip(), shown.group(2))
     bullet = _BULLET.match(line)
-    if bullet is None:
-        return line  # a blank line, or prose the section carries around its list
-    return _bullet((bullet.group("tick") or " ") != " ", bullet.group("item"))
+    if bullet is not None:
+        return _bullet((bullet.group("tick") or " ") != " ", bullet.group("item"))
+    return line if not line.strip() else _bullet(False, line)  # a plain line is an item too
 
 
 def _bullet(ticked, item):

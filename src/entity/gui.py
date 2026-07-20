@@ -392,7 +392,10 @@ class EntityWindow:
         pane.bind("<KeyRelease>", lambda event, name=label: self._mark_dirty(name))
         checklist = heading in self.CHECKLIST_HEADINGS
         if checklist:
-            pane.tag_configure("done", overstrike=True, foreground=DIM)
+            # Dimmed, never struck through: "that makes it impossible to read; simply dim the text
+            # when it has been checked". A done item is still the record of a complaint he may want
+            # to go back and read, so it has to stay legible.
+            pane.tag_configure("done", foreground=DIM)
             pane.tag_raise("sel")  # made after the pane, so it would otherwise dim the highlight
             pane.bind("<Button-1>", lambda event, name=label: self._clicked_box(event, name))
         self._sections[label] = {"pane": pane, "heading": heading, "edited": None, "loaded": "",
@@ -700,12 +703,19 @@ class EntityWindow:
                 continue  # mid-edit; never overwrite what is being typed
             body = sections.get(find_heading(sections, section["heading"]), "")
             shown = checklist_shown(body) if section["checklist"] else body
-            if shown != section["pane"].get("1.0", "end-1c").rstrip():
-                section["pane"].delete("1.0", "end")
-                section["pane"].insert("end", shown)
+            pane = section["pane"]
+            if shown != pane.get("1.0", "end-1c").rstrip():
+                # Where he was reading, and where his caret was, survive the rewrite. Autosaving
+                # what he types forces a re-read, so rebuilding the pane from scratch threw him to
+                # line one of a sixty-item list every time he paused for a second and a half.
+                at, caret = pane.yview()[0], pane.index("insert")
+                pane.delete("1.0", "end")
+                pane.insert("end", shown)
                 if section["checklist"]:
                     for row in range(1, len(shown.splitlines()) + 1):
-                        self._show_done(section["pane"], row)
+                        self._show_done(pane, row)
+                pane.mark_set("insert", caret)
+                pane.yview_moveto(at)
             section["loaded"] = body  # what the edit started from, so a save can tell it from Entity's
 
     # ---- lifecycle ------------------------------------------------------------------------------
@@ -987,10 +997,23 @@ class EntityWindow:
         pane.update()
         return pane.get("sel.first", "sel.last") if pane.tag_ranges("sel") else ""
 
-    def section_struck_rows(self, label):
-        """Which lines of a checklist tab are struck through - what a finished item looks like."""
+    def section_dimmed_rows(self, label):
+        """Which lines of a checklist tab are marked done - dimmed, so they can still be read."""
         pane = self._sections[label]["pane"]
         return sorted({int(str(index).split(".")[0]) for index in pane.tag_ranges("done")})
+
+    def section_tag_option(self, label, tag, option):
+        return self._sections[label]["pane"].tag_cget(tag, option)
+
+    def section_scroll(self, label):
+        """How far down the tab is scrolled, 0.0 at the top - what a refresh must not throw away."""
+        return self._sections[label]["pane"].yview()[0]
+
+    def scroll_section_to_end(self, label):
+        pane = self._sections[label]["pane"]
+        pane.update_idletasks()
+        pane.yview_moveto(1.0)
+        pane.update_idletasks()
 
     def agent_tab_text(self, name):
         return self._tails[name][1].text()

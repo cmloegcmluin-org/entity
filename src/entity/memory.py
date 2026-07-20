@@ -206,6 +206,46 @@ ENHANCEMENTS_HEADING = "Enhancements"
 # a personal file the running app may be autosaving at the same moment.
 _BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?P<item>.*)$")
 UNTICKED, TICKED = "- [ ] ", "- [x] "
+# What the window shows in place of the markdown. A box you can see and click is the whole point of
+# his asking for this; `- [x]` spelled out is a thing to decode, not a thing to read.
+EMPTY_BOX, FULL_BOX = "☐ ", "☑ "
+_SHOWN = re.compile(r"^([☐☑])\s*(.*)$")
+
+
+def checklist_shown(body):
+    """The stored markdown as the window renders it: a box per item, everything else untouched."""
+    return "\n".join(_as_box(line) for line in body.splitlines())
+
+
+def _as_box(line):
+    match = _BULLET.match(line)
+    if match is None:
+        return line
+    ticked = (match.group("tick") or " ") != " "
+    return (FULL_BOX if ticked else EMPTY_BOX) + match.group("item").strip()
+
+
+def checklist_stored(body):
+    """What the window shows, back as markdown - the form the file keeps and the brain reads.
+
+    Not quite the inverse: a bullet written before the boxes existed comes back as `- [ ]`, so the
+    list upgrades itself the first time he touches it rather than needing a migration run over a
+    personal file the app may be autosaving at that moment."""
+    return "\n".join(_as_markdown(line) for line in body.splitlines())
+
+
+def _as_markdown(line):
+    shown = _SHOWN.match(line)
+    if shown is not None:
+        return _bullet(shown.group(1) == FULL_BOX.strip(), shown.group(2))
+    bullet = _BULLET.match(line)
+    if bullet is None:
+        return line  # a blank line, or prose the section carries around its list
+    return _bullet((bullet.group("tick") or " ") != " ", bullet.group("item"))
+
+
+def _bullet(ticked, item):
+    return (TICKED if ticked else UNTICKED) + item.strip()
 
 
 def find_heading(sections, stem):

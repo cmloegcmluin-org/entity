@@ -251,6 +251,28 @@ def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
     assert "- [x] better voice" in path.read_text(encoding="utf-8")
 
 
+def test_a_checklist_is_shown_as_boxes_and_stored_as_markdown():
+    # The tab is where he actually reads this list, so in the window the boxes have to BE boxes -
+    # while the file stays markdown, because that same file is what the brain loads as standing
+    # context and what he reads outside the app.
+    from entity.memory import checklist_shown, checklist_stored
+
+    stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
+
+    assert checklist_shown(stored) == (
+        "☐ better voice\n☑ speaker enrollment\n☐ a bullet from before the boxes\n\nprose"
+    )
+    assert checklist_stored(checklist_shown(stored)) == (
+        "- [ ] better voice\n- [x] speaker enrollment\n- [ ] a bullet from before the boxes\n\nprose"
+    )
+
+
+def test_a_box_ticked_in_the_window_is_stored_as_a_ticked_one():
+    from entity.memory import checklist_stored
+
+    assert checklist_stored("☑ better voice") == "- [x] better voice"
+
+
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
     # The window's Goals/Projects/Enhancements panes are editable; saving one writes that section
     # back into the profile without disturbing a word of the others.

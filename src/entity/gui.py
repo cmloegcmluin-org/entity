@@ -22,7 +22,16 @@ import time
 from pathlib import Path
 
 from entity.bubbles import NAME_FONT, SIDES, Thread
-from entity.memory import find_heading, profile_sections, save_learned, save_section
+from entity.memory import (
+    EMPTY_BOX,
+    FULL_BOX,
+    checklist_shown,
+    checklist_stored,
+    find_heading,
+    profile_sections,
+    save_learned,
+    save_section,
+)
 from entity.tailing import LogTail, discover
 from entity.theme import ACCENT, BG, DIM, FG, PANEL, SELECTION
 from entity.transcript import parse_line
@@ -161,6 +170,10 @@ class EntityWindow:
     CONVERSATION_TAB = "1 · Conversation"
     PERSONA_TAB = "6 · Persona"
     MEMORY_TAB = "7 · Memory"
+    # Sections whose bullets are things to be DONE rather than things that are true. They render as
+    # boxes you click, and a done one is ticked and struck through - never taken away, because a
+    # ticked line is the only evidence a complaint was heard and answered.
+    CHECKLIST_HEADINGS = ("Enhancements",)
 
     def __init__(self, feed, *, on_stop, on_close, on_submit=None, on_mic=None,
                  profile_path=None, agent_logs_dir=None, persona=None, learned_path=None,
@@ -331,8 +344,37 @@ class EntityWindow:
         remember to save is one you lose."""
         pane = self._make_pane(self._tabs, readonly=False)
         pane.bind("<KeyRelease>", lambda event, name=label: self._mark_dirty(name))
-        self._sections[label] = {"pane": pane, "heading": heading, "edited": None, "loaded": ""}
+        checklist = heading in self.CHECKLIST_HEADINGS
+        if checklist:
+            pane.tag_configure("done", overstrike=True, foreground=DIM)
+            pane.bind("<Button-1>", lambda event, name=label: self._clicked_box(event, name))
+        self._sections[label] = {"pane": pane, "heading": heading, "edited": None, "loaded": "",
+                                 "checklist": checklist}
         return pane
+
+    def _clicked_box(self, event, label):
+        """A click ON the box ticks or unticks that line. Anywhere else in the line is an ordinary
+        click, because this pane is still a document he edits and selects text in."""
+        pane = self._sections[label]["pane"]
+        row = pane.index(f"@{event.x},{event.y}").split(".")[0]
+        line = pane.get(f"{row}.0", f"{row}.end")
+        if not line[:1] in (EMPTY_BOX.strip(), FULL_BOX.strip()):
+            return None
+        if int(pane.index(f"@{event.x},{event.y}").split(".")[1]) > 1:
+            return None  # they clicked the words, not the box
+        ticked = line[:1] == FULL_BOX.strip()
+        pane.delete(f"{row}.0", f"{row}.1")
+        pane.insert(f"{row}.0", (EMPTY_BOX if ticked else FULL_BOX).strip())
+        self._show_done(pane, int(row))
+        self._mark_dirty(label)
+        return "break"  # the click has been spent on the box; don't also move the caret there
+
+    @staticmethod
+    def _show_done(pane, row):
+        """Strike a ticked line through, so what is finished reads as finished at a glance."""
+        pane.tag_remove("done", f"{row}.0", f"{row}.end")
+        if pane.get(f"{row}.0", f"{row}.1") == FULL_BOX.strip():
+            pane.tag_add("done", f"{row}.0", f"{row}.end")
 
     def _build_controls(self, tk):
         """Everything to do with talking, together in one row along the bottom, with the contents
@@ -416,8 +458,11 @@ class EntityWindow:
             edited = section["edited"]
             if edited is None or self._now() - edited < self.AUTOSAVE_AFTER:
                 continue
-            save_section(self._profile_path, self._heading_for(label),
-                         section["pane"].get("1.0", "end-1c"), keeping=section["loaded"])
+            body = section["pane"].get("1.0", "end-1c")
+            if section["checklist"]:
+                body = checklist_stored(body)  # boxes back to markdown; the FILE stays markdown
+            save_section(self._profile_path, self._heading_for(label), body,
+                         keeping=section["loaded"])
             section["edited"] = None
             self._profile_stamp = None  # re-read next slow poll, so the pane shows what landed
 
@@ -558,9 +603,13 @@ class EntityWindow:
             if section["edited"] is not None:
                 continue  # mid-edit; never overwrite what is being typed
             body = sections.get(find_heading(sections, section["heading"]), "")
-            if body != section["pane"].get("1.0", "end-1c").rstrip():
+            shown = checklist_shown(body) if section["checklist"] else body
+            if shown != section["pane"].get("1.0", "end-1c").rstrip():
                 section["pane"].delete("1.0", "end")
-                section["pane"].insert("end", body)
+                section["pane"].insert("end", shown)
+                if section["checklist"]:
+                    for row in range(1, len(shown.splitlines()) + 1):
+                        self._show_done(section["pane"], row)
             section["loaded"] = body  # what the edit started from, so a save can tell it from Entity's
 
     # ---- lifecycle ------------------------------------------------------------------------------
@@ -722,6 +771,20 @@ class EntityWindow:
         pane.delete("1.0", "end")
         pane.insert("end", body)
         self._mark_dirty(label)
+
+    def click_checkbox(self, label, row):
+        """Click the box on one line, where the mouse would land - so the binding is exercised, not
+        just the function behind it. A box that ticks only when called directly is not a checkbox."""
+        pane = self._sections[label]["pane"]
+        pane.update_idletasks()
+        left, top, _, height = pane.bbox(f"{row}.0")
+        pane.event_generate("<Button-1>", x=left + 1, y=top + height // 2)
+        pane.update()
+
+    def section_struck_rows(self, label):
+        """Which lines of a checklist tab are struck through - what a finished item looks like."""
+        pane = self._sections[label]["pane"]
+        return sorted({int(str(index).split(".")[0]) for index in pane.tag_ranges("done")})
 
     def agent_tab_text(self, name):
         return self._tails[name][1].text()

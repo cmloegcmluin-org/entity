@@ -292,6 +292,24 @@ def test_the_real_window_renders_a_thread_takes_edits_and_ends_with_the_conversa
         assert "- learn to swim, three times a week" in saved
         assert "- better voice" in saved and "- new to the city" in saved  # others untouched
 
+        # The enhancements list is a checklist he clicks, not markdown he decodes: the tab shows a
+        # box per item, clicking one ticks it and strikes it through, and the file keeps the item -
+        # "as you check items off from the enhancements list, I don't want them deleted forever."
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        assert window.section_text("2 · Enhancements").strip() == "☐ better voice"
+        assert window.section_struck_rows("2 · Enhancements") == []
+
+        window.click_checkbox("2 · Enhancements", 1)
+
+        assert window.section_text("2 · Enhancements").strip() == "☑ better voice"
+        assert window.section_struck_rows("2 · Enhancements") == [1]  # and it reads as done
+        ticks[0] += window.AUTOSAVE_AFTER + 1
+        for _ in range(window.SLOW_POLL_EVERY):
+            window._drain_once()
+        ticked = profile.read_text(encoding="utf-8")
+        assert "- [x] better voice" in ticked  # ticked in the file, still there to read
+
         # What it has learned is visible the moment it lands, and an edit of it sticks.
         for _ in range(window.SLOW_POLL_EVERY):
             window._drain_once()

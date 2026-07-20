@@ -27,6 +27,18 @@ from entity.steps import SAID, render
 from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
+# Attached to every task the desk hands out, because asking for it each time did not hold: the
+# brain wrote it into some dispatches and not others, and the round it forgot cost a whole review -
+# work shown off a stale branch reads as though features that had already merged were missing.
+STANDING_RULE = (
+    "\n\nStanding rule, from the person this work is for, and it holds however the task above is "
+    "worded: before you present ANY branch, build or running instance for them to look at, first "
+    "`git fetch origin` and rebase your branch onto the latest `origin/main`, then re-run the "
+    "tests on the rebased commit. Shown off a stale branch, work that other people have already "
+    "merged looks to them like it has gone missing, and they have lost a review round to that."
+)
+
+
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
@@ -59,11 +71,14 @@ class AgentDesk:
 
     def start(self, name, cwd, task):
         """Put a fresh agent on `task` in `cwd`. Returns immediately; the agent's reply arrives in
-        the Outbox when it lands."""
+        the Outbox when it lands.
+
+        The standing rule rides along with the task itself - not with every later message, since
+        the session keeps it, and repeating it would be most of what the agent's tab is made of."""
         agent = self._factory(name, cwd, self._decide)
         with self._lock:
             self._desked[name] = _Desked(agent, cwd, task, self._open_log(name))
-        self._dispatch(name, task)
+        self._dispatch(name, task + STANDING_RULE)
 
     def send(self, name, message):
         """Say something more to an agent already at the desk. False if there's no such agent -

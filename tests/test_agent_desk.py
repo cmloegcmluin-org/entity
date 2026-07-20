@@ -144,7 +144,26 @@ def test_a_follow_up_reaches_the_same_agent_not_a_new_one():
 
     assert _wait_for(lambda: bool(outbox))
     assert len(made) == 1  # the same agent, not a fresh one
-    assert made[0].messages == ["first task", "now do the other half"]
+    assert made[0].messages[0].startswith("first task")
+    # And a follow-up is only the follow-up: the session already carries the standing rule the
+    # desk attaches to a task, and repeating it every time would be most of what the tab holds.
+    assert made[0].messages[1] == "now do the other half"
+    desk.close()
+
+
+def test_every_task_carries_the_standing_rule_to_rebase_before_showing_work():
+    # "before presenting any agent branch/build to the user for verification, rebase it onto latest
+    # origin/main first so nothing recently merged (e.g. other features) appears missing." The
+    # brain wrote that into the dispatch on some days and not others. The desk attaches it to
+    # every task, which makes it a mechanism rather than a reminder.
+    desk, _, made = _desk()
+
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+
+    assert _wait_for(lambda: bool(made and made[0].messages))
+    sent = made[0].messages[0]
+    assert sent.startswith("fix the drive link")  # his ask first; the rule stands after it
+    assert "rebase" in sent and "origin/main" in sent
     desk.close()
 
 

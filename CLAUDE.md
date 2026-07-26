@@ -170,12 +170,15 @@ turn and streams the reply into the voice as it is written. `voice.py` is how a 
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: five typed in-process tools wired to
+model is in. `actions.py` is everything the brain can DO: seven typed in-process tools wired to
 the desk — its speech carries no control phrases and its options carry no built-in tools.
 `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, `scratch
 that` to take back what was just said, and it reports whether it is recording so nothing speaks
-over the user. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
+over the user. It is also the duplex ear: while the brain merely thinks the ear stays open and
+words land in the draft; while the voice is actually sounding, chunks are judged against the
+script being spoken (`covered_by`) — its own leak dropped, other words kept, and only a stop bark
+cuts the audio, so the TV can never kill a reply. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
 a word shown only once two readings running have agreed on it — read its docstring before changing
 any number in it, because every one was measured off real captured sessions. The window is a local
 web app: `mirror.py` is the conversation as a window shows it — the message model,

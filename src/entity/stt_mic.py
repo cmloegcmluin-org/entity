@@ -49,6 +49,31 @@ _STOCK_PHRASES = {"thank you", "thanks"}
 # Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).
 STOP_WORDS = ("stop", "shut up", "quiet", "enough", "wait")
 
+# What fraction of the heard words must appear in the script before the chunk counts as the
+# Entity's own voice arriving back through the mic. The measured leak (two captured incidents)
+# transcribed near-verbatim - coverage ~1.0 - while someone else's words against an unrelated
+# sentence sit near 0, so the middle is a wide gap, not a fitted bar.
+_COVERED = 0.5
+
+
+def covered_by(text, script):
+    """Whether `text`, heard while the Entity was speaking, is the Entity's own voice - judged by
+    its words being the words of `script`, the text actually being spoken.
+
+    Containment is checked against the script with its spaces squashed out, because the
+    transcriber splits and joins compounds freely ("dropdown" -> "drop down") and a word-set match
+    would turn that drift into "someone else is talking". The failure direction is deliberate:
+    a word wrongly counted as covered leans toward "its own voice", which is today's behavior -
+    never toward eating something new."""
+    words = re.findall(r"[a-z']+", text.lower())
+    if not words:
+        return True  # nothing heard is nothing new; treat as its own noise
+    squashed = re.sub(r"[^a-z']", "", script.lower())
+    if not squashed:
+        return False
+    hits = sum(1 for word in words if word in squashed)
+    return hits / len(words) >= _COVERED
+
 
 def rms(frame):
     frame = np.asarray(frame, dtype=np.float32)

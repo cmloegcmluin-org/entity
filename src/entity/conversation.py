@@ -251,7 +251,8 @@ class Conversation:
             self._unwritten.append(text)
         if record:  # a line already printed records itself; this is for the ones only they hear
             self._console.spoke(text)
-        stop_watching = None if self._floor_watched else self._watch_for_spoken_stop()
+        stop_watching = (None if self._floor_watched
+                         else self._watch_for_spoken_stop(script=lambda: as_spoken(text)))
         try:
             # Said, not written: an address becomes "the link" and a path becomes its filename. The
             # line above already showed the real thing, which is what they read and clicks - this is
@@ -277,19 +278,33 @@ class Conversation:
         if self._read_pause > 0 and not self._interrupted():
             self._sleep(self._read_pause)
 
-    def _watch_for_spoken_stop(self):
+    def _watch_for_spoken_stop(self, script=None, audio=None):
         """If the mic can catch a spoken stop word, listen for one for as long as we're speaking and
         set the interrupt when it lands. Returns a callable that stops and joins the watcher (so the
-        mic is free again before the next listen), or None when voice-stop isn't available."""
+        mic is free again before the next listen), or None when voice-stop isn't available.
+
+        A mic whose catch_stop can take them is also handed `script` (the words being spoken, so it
+        can tell the Entity's own leak from someone talking over it) and `audio` (whether sound is
+        in the air at all - while the brain merely thinks, the ear stays open). A mic with the bare
+        signature gets the bare call, unchanged."""
         catch_stop = getattr(self._stt, "catch_stop", None)
         if catch_stop is None or self._interrupt is None:
             return None
+        extras = {}
+        try:
+            supported = inspect.signature(catch_stop).parameters
+        except (TypeError, ValueError):
+            supported = {}
+        if script is not None and "script" in supported:
+            extras["script"] = script
+        if audio is not None and "audio" in supported:
+            extras["audio"] = audio
         speaking = threading.Event()
         speaking.set()
 
         def watch():
             try:
-                if catch_stop(speaking.is_set):  # they said "stop" while it was talking
+                if catch_stop(speaking.is_set, **extras):  # they said "stop" while it was talking
                     self._interrupt.set()
             except Exception as exc:
                 print(f"[voice-stop error] {exc!r}", file=sys.stderr)
@@ -303,11 +318,11 @@ class Conversation:
 
         return stop
 
-    def _hold_the_floor(self):
+    def _hold_the_floor(self, script=None, audio=None):
         """One stop-watcher held for a whole turn - think plus every sentence of streamed audio -
         so a spoken "stop" lands whenever it comes, without two readers ever sharing the mic.
         Returns a release callable; safe to call once whichever way the turn ends."""
-        stop_watching = self._watch_for_spoken_stop()
+        stop_watching = self._watch_for_spoken_stop(script=script, audio=audio)
         self._floor_watched = stop_watching is not None
 
         def release():
@@ -537,17 +552,28 @@ class Conversation:
         to stream (the system voice, a plain fake), the reply is spoken whole once it lands - the
         same behavior this loop always had, minus the stock phrases around it."""
         self._console.thinking()  # a "(thinking…)" indicator so a pause doesn't read as a hang
-        release_floor = self._hold_the_floor()
         open_stream = getattr(self._tts, "stream", None)
         reply = None
         if open_stream is not None and self._brain_streams:
             # Sentences are synthesized in their spoken form (a path becomes its filename) while
             # the record keeps the real text - the screen shows what gets clicked.
             reply = open_stream(interrupt=self._interrupt, spoken_form=as_spoken)
+        # What the voice is saying, as it accrues - the stop-watcher's measure of whether a chunk
+        # heard mid-reply is the Entity's own leak or someone talking over it. Spoken form, since
+        # that is what is audible and therefore what a leak transcribes.
+        spoken_parts = []
+
+        def carry(piece):
+            spoken_parts.append(piece)
+            reply.add(piece)
+
+        release_floor = self._hold_the_floor(
+            script=lambda: as_spoken("".join(spoken_parts)),
+            audio=(lambda: reply.sounding) if reply is not None else None)
         think_start = time.monotonic()
         try:
             said = self._think(self._with_system_notes(heard, offered),
-                               on_text=reply.add if reply is not None else None)
+                               on_text=carry if reply is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
@@ -576,6 +602,7 @@ class Conversation:
             if self._interrupted():  # the audio was cut partway - the record must say so
                 self._console.spoke("(cut off mid-utterance)")
         else:
+            spoken_parts.append(said)  # the floor's script: the whole reply is about to be audible
             self._speak_reply(said, known=True)  # if they hit Enter while it talks, this is cut off
         release_floor()
         if self._timings:

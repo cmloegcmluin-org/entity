@@ -23,10 +23,13 @@ knowing anything about Tk. `listen()` is the Conversation-facing half: it blocks
 hands over the (possibly edited) draft via `submit`, so the loop's think/speak flow is unchanged.
 
 Two things decide whether they are being heard: whether the mic is ARMED (their button, their spoken
-phrases) and whether the Entity is SPEAKING. It only takes dictation when armed and not speaking -
-because a mic that is live while the Entity talks hears the Entity: their very first draft box opened
-with "I do for you", the tail of its own spoken greeting. Chunks heard while it speaks are checked
-for a stop BARK instead, which is the barge-in. Arming survives a reply, so a conversation flows
+phrases) and whether the Entity's voice is actually SOUNDING. While the brain merely thinks, nothing
+is coming out of the speakers, so the ear stays open and words said then are drafted normally. While
+sound IS in the air, the mic mostly hears the Entity itself - their very first draft box opened with
+"I do for you", the tail of its own spoken greeting - so each chunk is judged against the script
+being spoken: its own words arriving back are dropped, someone ELSE'S words are kept as draft
+(talking over the reply must not mean being unheard), and only a stop BARK cuts the voice - so the
+TV, whose sentence once killed an utterance, can never kill a reply. Arming survives a reply, so a conversation flows
 without touching the button; only they can end it - by saying "over" or "stop listening", or by
 cutting the Entity off mid-sentence, since a stop should not turn straight around and start
 recording their next breath. Auto-listening goes one further and opens the mic each time a reply
@@ -46,6 +49,7 @@ from entity.stt_mic import (
     _is_invented,
     _is_stop_bark,
     _strip_terminator,
+    covered_by,
     rms,
 )
 
@@ -110,6 +114,8 @@ class Dictation:
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
         self._bark = None  # while the Entity speaks: an Event a stop bark should fire
+        self._stop_words = STOP_WORDS  # what counts as a bark, per the watcher that installed _bark
+        self._script = None  # while the Entity speaks: a callable for the words it is saying
         self._tail_pending = False  # end_speaking happened; the pump owes a grace window for the tail
 
     # ---- the Conversation-facing half ----------------------------------------------------------
@@ -131,20 +137,44 @@ class Dictation:
         """The window hands over the draft - as edited, which is the whole point of the box."""
         self._submitted.put(text.strip())
 
-    def catch_stop(self, active, words=STOP_WORDS):
-        """While the Entity talks, chunks become bark-checks instead of draft text. True the moment
-        they bark a stop; False once `active()` goes false (the reply finished on its own)."""
+    def catch_stop(self, active, words=STOP_WORDS, script=None, audio=None):
+        """The duplex watch, held for a whole reply turn. True the moment they bark a stop; False
+        once `active()` goes false (the reply finished on its own).
+
+        `audio` reports whether sound is actually in the air. While the brain merely THINKS,
+        nothing is - so the ear stays open and words said then are drafted normally; only the
+        span when the voice is sounding treats chunks as its own leak. Without `audio` (the
+        terminal path, one-shot lines) the whole watch counts as sounding, which is what it was.
+        `script` is the words being spoken - how a chunk heard mid-sound is told apart: its own
+        voice arriving back (covered by the script, dropped) or someone talking over it (kept as
+        draft, never lost - though only a stop BARK cuts the audio, so a TV sentence can't)."""
         bark = threading.Event()
         self._bark = bark
-        self.begin_speaking()
+        self._stop_words = words
+        self._script = script
+        sounding = False
         try:
+            if audio is None:
+                self.begin_speaking()
+                sounding = True
             while active():
+                if audio is not None:
+                    now = bool(audio())
+                    if now and not sounding:
+                        self.begin_speaking()
+                        sounding = True
+                    elif sounding and not now:
+                        self.end_speaking()
+                        sounding = False
                 if bark.wait(0.05):
                     return True
             return False
         finally:
             self._bark = None
-            self.end_speaking()
+            self._script = None
+            self._stop_words = STOP_WORDS
+            if sounding:
+                self.end_speaking()
 
     # ---- the window-facing half ----------------------------------------------------------------
 
@@ -287,9 +317,21 @@ class Dictation:
         text = without_hesitations(self._transcriber.transcribe(audio).strip())
         if not text:
             return
-        if speaking:  # its own voice, mostly - a bark check, never draft text
-            if self._bark is not None and _is_stop_bark(text, STOP_WORDS):
-                self._bark.set()
+        if self._bark is not None and _is_stop_bark(text, self._stop_words):
+            # A bark cuts the turn whenever a watch is up - sounding OR still thinking. The think
+            # phase used to be covered only because the whole watch counted as "speaking"; with
+            # the ear now open during it, the bark must fire on its own.
+            self._bark.set()
+            return
+        if speaking:  # sound is in the air: what the mic hears now is mostly its own voice
+            if (deliberate and self._script is not None and self._armed
+                    and not covered_by(text, self._script())
+                    and not _is_invented(text, self._terminator)):
+                # Words its own script does not contain: someone ELSE is talking over it. Kept as
+                # draft - talking over the reply must not mean being unheard - but never a cut:
+                # only a stop bark silences the voice, so the TV can pollute a draft box (as it
+                # always could when the mic was armed) yet can never kill a reply mid-sentence.
+                self._take_dictation(text, deliberate=True)
             return
         if armed:
             self._take_dictation(text, deliberate=deliberate)

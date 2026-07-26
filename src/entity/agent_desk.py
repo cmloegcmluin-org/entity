@@ -231,6 +231,24 @@ class AgentDesk:
             entry = self._desked.get(name)
             return entry.delivery.stage if entry is not None else None
 
+    def task_of(self, name):
+        """What `name` was put on - the first thing a senior read of its situation needs."""
+        with self._lock:
+            entry = self._desked.get(name)
+            return entry.task if entry is not None else None
+
+    def recent_log(self, name, limit=3000):
+        """The tail of an agent's exchange log - the situation as it actually unfolded, for the
+        foreman's senior read. The tail and not the whole file, because a day-long exchange would
+        drown the situation it ends on. Empty when there is nothing to read."""
+        if self._log_dir is None:
+            return ""
+        try:
+            text = (self._log_dir / f"{name}.log").read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        return text[-limit:]
+
     def digest(self):
         """The fleet as a few plain lines, for handing to a brain at the top of a turn.
 

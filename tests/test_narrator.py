@@ -167,3 +167,24 @@ def test_a_finished_agent_still_building_keeps_the_presentation_prompt():
     [(asked, _)] = brain.asked
     assert "see-it-running" in asked
     assert "close_agent_tab" not in asked
+
+
+def test_a_finished_narration_knows_the_foreman_exists_for_technical_snags():
+    # "a smarter Claude agent would take care of negotiating issues that come up with the working
+    # agents" - the brain is the router, so the option has to be in front of it where the wording
+    # is made, or every snag still lands on the user.
+    brain, outbox = FakeBrain(), Outbox()
+    Narrator(brain, outbox).tell("finished", "fixer", "I need to know which auth library to use.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "ask_foreman" in asked
+
+
+def test_a_quiet_narration_offers_the_foreman_as_the_prod():
+    brain, outbox = FakeBrain(), Outbox()
+    Narrator(brain, outbox).tell("quiet", "fixer", "been silent for 25 minutes")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "ask_foreman" in asked

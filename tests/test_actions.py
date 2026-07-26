@@ -54,8 +54,16 @@ def _call(tool, **args):
     return content["text"]
 
 
-def _tools(desk, **kwargs):
-    server, tools = fleet_actions(desk, **kwargs)
+class FakeForeman:
+    def __init__(self):
+        self.considered = []
+
+    def consider(self, name, question):
+        self.considered.append((name, question))
+
+
+def _tools(desk, foreman=None, **kwargs):
+    server, tools = fleet_actions(desk, foreman or FakeForeman(), **kwargs)
     return {tool.name: tool for tool in tools}
 
 
@@ -275,3 +283,14 @@ def test_record_verdict_relays_the_desks_refusal():
 
     assert desk.verdicts == []
     assert "presented" in said.lower()
+
+
+def test_ask_foreman_hands_the_stuck_agent_to_the_senior_layer():
+    desk, foreman = FakeDesk(), FakeForeman()
+    tools = _tools(desk, foreman=foreman)
+
+    said = _call(tools["ask_foreman"], name="gdoc-export",
+                 question="It wants to know which auth library to use.")
+
+    assert foreman.considered == [("gdoc-export", "It wants to know which auth library to use.")]
+    assert "foreman" in said.lower()

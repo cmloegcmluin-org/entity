@@ -474,3 +474,18 @@ def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
 
     assert "last heard 2026-07-19 08:20:15" in roster.read_text(encoding="utf-8")
     desk.close()
+
+
+def test_every_task_carries_the_standing_rule_that_review_means_their_eyes():
+    # "When I say that I want to be able to verify a feature, I'm not satisfied with running a
+    # test command." An agent handed back "run pytest" as the acceptance step; the rule that
+    # review means a live instance and click-steps now rides with every task, like the rebase rule.
+    desk, _, made = _desk()
+
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+
+    assert _wait_for(lambda: bool(made and made[0].messages))
+    sent = made[0].messages[0]
+    assert "own eyes" in sent and "live instance" in sent
+    assert "Never offer 'run the tests'" in sent
+    desk.close()

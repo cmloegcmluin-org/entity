@@ -55,3 +55,21 @@ def test_prepare_worktree_for_walks_up_to_the_first_existing_ancestor(tmp_path):
     prepare_worktree_for(str(new), run=fake_run)
 
     assert seen[0] == ["git", "-C", str(tmp_path), "rev-parse", "--show-toplevel"]
+
+
+def test_projects_are_the_git_repos_directly_under_the_workspace(tmp_path):
+    # "you should certainly come out of the gates knowing where my projects live." The brain had
+    # to ask where a repo was; the workspace's own directory listing already knew.
+    for name in ("highdeas", "entity"):
+        (tmp_path / name / ".git").mkdir(parents=True)
+    (tmp_path / "notes").mkdir()  # no .git - papers, not a project
+
+    from entity.worktrees import projects
+
+    assert projects(tmp_path) == ["entity", "highdeas"]
+
+
+def test_no_workspace_means_no_projects(tmp_path):
+    from entity.worktrees import projects
+
+    assert projects(tmp_path / "nowhere") == []

@@ -29,6 +29,16 @@ def find_worktrees(directory):
     return sorted(str(child) for child in path.iterdir() if child.is_dir() and is_worktree(child))
 
 
+def projects(workspace):
+    """The git repos directly under the user's workspace - the projects the brain must already
+    know the whereabouts of. It once asked where a repo was, and the answer was sitting in this
+    directory listing: "you should certainly come out of the gates knowing where my projects live"."""
+    path = Path(workspace).expanduser()
+    if not path.is_dir():
+        return []
+    return sorted(child.name for child in path.iterdir() if child.is_dir() and is_worktree(child))
+
+
 def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin", run=_run_hidden):
     """Create a fresh worktree at `path` on a new `branch` cut from CURRENT `origin/main`.
 

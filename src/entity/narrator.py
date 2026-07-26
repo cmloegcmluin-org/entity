@@ -19,8 +19,12 @@ PROMPTS = {
     "finished": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} just finished a "
         "turn and reported:\n{report}\n\nTell the user, in your own one or two short sentences: "
-        "is the thing they wanted DONE, or does it need a decision or a step from them? Never "
-        "relay the report's internals - no commit hashes, no test counts, no file lists.]"
+        "is the thing they wanted DONE, or does it need a decision or a step from them? If it is "
+        "ready to look at, give them the agent's own see-it-running steps - where to click and "
+        "what to watch happen. 'Run the tests' is never their verification; if the agent stood "
+        "nothing up for their eyes, say the review isn't ready and tell the agent to stand one "
+        "up. Never relay the report's internals - no commit hashes, no test counts, no branch "
+        "names, no file lists.]"
     ),
     "died": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} DIED mid-task: "

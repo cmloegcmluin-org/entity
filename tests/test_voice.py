@@ -86,6 +86,21 @@ def test_a_streamed_reply_is_spoken_sentence_by_sentence_in_order():
     assert spoken == "Both agents are green. The drive one wants a decision"
 
 
+def test_sentences_are_synthesized_in_their_spoken_form_but_recorded_raw():
+    # The screen shows the real path - it is what gets clicked - and nobody wants a minute of
+    # "see colon backslash users" out of the speaker. The transform feeds the engine only; what
+    # was said (for the record) stays the real text.
+    engine, player = FakeEngine(), FakePlayer()
+    speaker = Speaker(engine, play=player)
+
+    reply = speaker.stream(spoken_form=lambda text: text.replace("C:/deep/path.md", "path.md"))
+    reply.add("It's in C:/deep/path.md. ")
+    spoken = reply.done()
+
+    assert engine.synthesized == ["It's in path.md."]
+    assert spoken == "It's in C:/deep/path.md."
+
+
 def test_a_barge_in_cuts_the_reply_and_the_rest_stays_unspoken():
     # One stop silences all of it: the queued sentences drain unspoken, and done() reports only
     # what actually got out - the record must never claim words were heard that weren't.

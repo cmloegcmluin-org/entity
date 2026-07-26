@@ -90,12 +90,6 @@ class Console:
         self._line(text, show=False)
         self._messages("entity", text)  # they heard it, so a conversation view shows it
 
-    def dropped(self):
-        """A long call that had been left running was cancelled so they could be answered instead.
-        They were promised an answer that then never came; at minimum the record says why."""
-        self._line("(dropped the long call that was still running)")
-        self._messages("status", "(dropped the long call that was still running)")
-
     def heads_up(self, text):
         self._line(f"entity (heads-up)> {text}\n")  # marked so an unprompted line isn't mistaken for a reply
         self._messages("heads-up", text)

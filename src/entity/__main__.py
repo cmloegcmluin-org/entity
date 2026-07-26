@@ -16,7 +16,7 @@ from entity.actions import fleet_actions
 from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
-from entity.conversation import DEFAULT_LONG_ANSWER_CHARS, Conversation
+from entity.conversation import Conversation
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.mirror import TranscriptFeed
 from entity.memory import (
@@ -34,7 +34,9 @@ from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.transcript import Transcript, recent_turns
+from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice
 from entity.tts_system import NullTTS, SystemTTS
+from entity.voice import Speaker, play_samples
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
@@ -161,6 +163,32 @@ def _persona():
     )
 
 
+def _voice(announce):
+    """The voice, starting on whatever can speak RIGHT NOW and upgrading itself.
+
+    The neural voice needs a third of a gigabyte of model on disk. The first launch fetches it in
+    the background while the robot System.Speech voice serves; the swap lands mid-session the
+    moment the model is loaded, and every later launch starts neural after one warm-up sentence.
+    A machine that can't fetch or load it just stays on the robot voice and says so."""
+    voice = SwappableTTS(SystemTTS(rate=2))
+
+    def upgrade():
+        paths = ensure_voice(RUNTIME_DIR / "tts", announce=announce)
+        if paths is None:
+            announce("(couldn't fetch the neural voice - staying on the system one)")
+            return
+        engine = KokoroEngine(*paths)
+        try:
+            engine.say("Ready.")  # load the model here, off the startup path, and warm it
+        except Exception as exc:
+            announce(f"(the neural voice failed to load: {exc!r} - staying on the system one)")
+            return
+        voice.swap(Speaker(engine, play=play_samples))
+
+    threading.Thread(target=upgrade, daemon=True).start()
+    return voice
+
+
 def _build_ears(text_mode, stop, interrupt, announce=print):
     """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
     `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
@@ -234,7 +262,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     else:
         stt, mic, recorder = _build_ears(text_mode, stop, outbox.arrived, announce)
 
-    tts = NullTTS() if muted else SystemTTS(rate=2)
+    tts = NullTTS() if muted else _voice(announce)
 
     def watch_keys():
         for _ in sys.stdin:  # every Enter is a barge-in: shut the current reply up
@@ -294,10 +322,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     def converse():
         try:
             Conversation(
-                stt, brain, tts, outbox=outbox, interrupt=barge_in, wake=outbox.arrived,
+                stt, brain, tts, outbox=outbox, interrupt=barge_in,
                 console=console, read_pause=read_pause, timings=timings,
-                # The window shows them every word, so nothing needs to be offered first.
-                long_answer_chars=None if gui else DEFAULT_LONG_ANSWER_CHARS,
+                # The live truth about the fleet, in front of the brain every turn - so a status
+                # question is answered in the breath it was asked, with no file read in between.
+                briefing=lambda: f"{desk.digest()}\nFresh agents start on {desk.running_on()}.",
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
         except KeyboardInterrupt:
             stop.set()

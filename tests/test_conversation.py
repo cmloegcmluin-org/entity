@@ -2,28 +2,8 @@ import threading
 import time
 
 from entity.console import Console
-from entity.conversation import (
-    Conversation,
-    Turn,
-    _default_reassurance,
-    _humanize_elapsed,
-    _is_affirmative,
-)
+from entity.conversation import Conversation, Turn
 from entity.outbox import Outbox
-
-
-class VariableBrain:
-    """Replies long to a big ask, short to anything else - so the long-answer gate can be exercised
-    without a real (slow, wordy) model."""
-
-    WALL = "This is a very long answer. " * 40  # comfortably past the gate threshold
-
-    def __init__(self):
-        self.heard = []
-
-    def respond(self, utterance):
-        self.heard.append(utterance)
-        return self.WALL if "everything" in utterance else "a short reply"
 
 
 class FakeSTT:
@@ -48,6 +28,8 @@ class FakeBrain:
 
 
 class FakeTTS:
+    """A one-shot voice with no stream(): the fallback shape (system voice, muted runs)."""
+
     def __init__(self):
         self.spoken = []
 
@@ -70,10 +52,10 @@ def test_a_barge_in_before_the_reply_leaves_it_unspoken():
             return "a fifteen-minute novella they never wanted"
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), InterruptingBrain(), tts, acknowledgement="ACK", interrupt=interrupt)
+    convo = Conversation(FakeSTT(["hi"]), InterruptingBrain(), tts, interrupt=interrupt)
     convo.turn()
 
-    assert tts.spoken == ["ACK"]  # the ack got out before the cut; the reply is silenced
+    assert tts.spoken == []  # the reply is silenced, and no canned line takes its place
 
 
 def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
@@ -84,7 +66,7 @@ def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
             events.append(f"say:{text}")
 
     console = Console(echo=lambda line: events.append(f"print:{line}"))
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), RecordingTTS(), acknowledgement="ACK", console=console)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), RecordingTTS(), console=console)
 
     convo.turn()
 
@@ -100,20 +82,19 @@ def test_a_path_is_shown_whole_and_spoken_the_way_a_person_would_say_it():
             return r"It's in C:\Users\ada\workspace\entity\runtime\profile.md."
 
     tts, shown = FakeTTS(), []
-    convo = Conversation(FakeSTT(["where"]), PathBrain(), tts, acknowledgement="ACK",
-                         console=Console(echo=shown.append))
+    convo = Conversation(FakeSTT(["where"]), PathBrain(), tts, console=Console(echo=shown.append))
 
     convo.turn()
 
     assert any(r"C:\Users\ada\workspace\entity\runtime\profile.md" in line for line in shown)
-    assert tts.spoken == ["ACK", "It's in profile.md."]
+    assert tts.spoken == ["It's in profile.md."]
 
 
 def test_timings_prints_a_think_and_speak_readout_when_enabled():
     lines = []
     convo = Conversation(
         FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
-        acknowledgement="ACK", timings=True, console=Console(echo=lines.append),
+        timings=True, console=Console(echo=lines.append),
     )
 
     convo.turn()
@@ -125,7 +106,7 @@ def test_no_timings_readout_when_disabled():
     lines = []
     convo = Conversation(
         FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
-        acknowledgement="ACK", timings=False, console=Console(echo=lines.append),
+        timings=False, console=Console(echo=lines.append),
     )
 
     convo.turn()
@@ -136,7 +117,7 @@ def test_no_timings_readout_when_disabled():
 def test_a_thinking_indicator_is_shown_while_it_thinks():
     shown = []
     console = Console(echo=shown.append)
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), acknowledgement="ACK", console=console)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), console=console)
 
     convo.turn()
 
@@ -147,7 +128,7 @@ def test_it_pauses_after_a_reply_to_give_a_beat_to_read():
     slept = []
     convo = Conversation(
         FakeSTT(["hi"]), FakeBrain(), FakeTTS(),
-        acknowledgement="ACK", read_pause=1.5, sleep=slept.append,
+        read_pause=1.5, sleep=slept.append,
     )
 
     convo.turn()
@@ -175,439 +156,12 @@ def test_read_pause_is_skipped_when_he_barges_in():
 
     convo = Conversation(
         FakeSTT(["hi"]), InterruptingBrain(), FakeTTS(),
-        acknowledgement="ACK", read_pause=1.5, sleep=slept.append, interrupt=interrupt,
+        read_pause=1.5, sleep=slept.append, interrupt=interrupt,
     )
 
     convo.turn()
 
     assert slept == []  # they're cutting in - don't make them wait out a read pause
-
-
-def test_is_affirmative_reads_a_yes_but_not_a_no():
-    assert _is_affirmative("yes") and _is_affirmative("yeah go ahead") and _is_affirmative("sure, hit me")
-    assert _is_affirmative("okay") and _is_affirmative("let's hear it")
-    assert not _is_affirmative("no thanks") and not _is_affirmative("not now") and not _is_affirmative("nope")
-    assert not _is_affirmative("maybe later")  # "later" is a decline, not a yes
-    assert not _is_affirmative("don't go ahead")  # a negated yes is that negation, not a yes
-    assert _is_affirmative("it's not great, but yes")  # a real yes beside an unrelated negative
-
-
-def test_a_short_answer_is_spoken_immediately_not_gated():
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK", long_answer_chars=100)
-
-    turn = convo.turn()
-
-    assert tts.spoken == ["ACK", "reply to hi"]  # short reply: no "ready?" gate
-    assert turn.said == "reply to hi"
-
-
-def test_a_long_answer_is_offered_first_then_delivered_on_a_yes():
-    brain = VariableBrain()
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["tell me everything", "yes"]), brain, tts,
-                         acknowledgement="ACK", long_answer_chars=100)
-
-    first = convo.turn()
-
-    assert first.said == convo.ready_question  # it asked instead of dumping the wall of text
-    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # nothing dumped yet
-
-    convo.turn()  # they say "yes"
-
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # the yes released the full answer
-
-
-def test_a_declined_long_answer_is_dropped_and_the_new_utterance_is_handled():
-    brain = VariableBrain()
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["tell me everything", "no thanks"]), brain, tts,
-                         acknowledgement="ACK", long_answer_chars=100)
-
-    convo.turn()  # offers "ready?"
-    convo.turn()  # "no thanks"
-
-    assert not any(line.startswith("This is a very long answer.") for line in tts.spoken)  # they declined, so it was never delivered
-    assert "a short reply" in tts.spoken  # and "no thanks" was handled as an ordinary turn
-    assert [_words(u) for u in brain.heard] == ["tell me everything", "no thanks"]
-
-
-def test_a_yes_delivers_the_offer_even_with_tv_negatives_in_the_same_turn():
-    # From the real session: their "yes, I am ready for the longer answer" arrived in the same turn
-    # as TV chatter ("I'm not super far..."), and the "not" silently vetoed their yes - the answer they
-    # was promised evaporated. A yes anywhere in the turn outranks stray negatives.
-    brain = VariableBrain()
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["tell me everything",
-                 "I'm not super far and not having a great time. Uh, yes, I am ready for the longer answer"]),
-        brain, tts, acknowledgement="ACK", long_answer_chars=100,
-    )
-
-    convo.turn()  # offers "ready?"
-    convo.turn()  # TV garbage + their real yes
-
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # their yes won; the answer was finally delivered
-
-
-def test_speech_that_answers_neither_way_leaves_the_offer_standing():
-    # TV dialogue with no yes and no no used to silently destroy the offer before they could answer.
-    # If it isn't an answer, it isn't an answer - the offer waits for one.
-    brain = VariableBrain()
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["tell me everything", "press R to unleash a brief burst of teeth", "okay"]),
-        brain, tts, acknowledgement="ACK", long_answer_chars=100,
-    )
-
-    convo.turn()  # offers "ready?"
-    convo.turn()  # TV garbage: neither yes nor no - handled as its own turn, offer kept
-    convo.turn()  # their real yes, one turn later
-
-    assert "a short reply" in tts.spoken  # the garbage still got an ordinary answer
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)  # and their okay still released the held answer
-
-
-def test_gating_off_speaks_even_a_long_answer_straight_away():
-    brain = VariableBrain()
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["tell me everything"]), brain, tts,
-                         acknowledgement="ACK", long_answer_chars=None)
-
-    turn = convo.turn()
-
-    assert turn.said == VariableBrain.WALL  # gate disabled -> spoken as before
-    assert any(line.startswith("This is a very long answer.") for line in tts.spoken)
-
-
-def test_a_slow_think_detaches_to_the_background_and_frees_the_loop():
-    release = threading.Event()
-
-    class SlowBrain:
-        def respond(self, utterance):
-            release.wait(2.0)  # never lands before the detach window
-            return "the finished long-running answer"
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["do the slow thing", ""]), SlowBrain(), tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30,
-    )
-
-    first = convo.turn()
-
-    assert first is None  # it didn't block - the loop is free to listen again
-    assert any(line in tts.spoken for line in convo.detach_replies)  # told it's running in the background
-
-    bg_done = convo._background["done"]
-    release.set()
-    assert bg_done.wait(2.0)  # the background call finishes on its own thread
-
-    convo.turn()  # the lull it woke: the answer goes out on its own
-
-    late = [line for line in tts.spoken if "the finished long-running answer" in line]
-    assert late and late[0].startswith('On "do the slow thing')  # kept, and tied to its question
-    assert convo.ready_question not in tts.spoken  # and there was nothing for them to say yes to
-
-
-def test_talking_again_cancels_the_detached_call_instead_of_deflecting_the_user():
-    # They were bounced with a canned "still finishing your last one" every time they spoke, which threw
-    # their words away and locked them out of the conversation. Their live turn outranks the stale call.
-    release = threading.Event()
-    calls = []
-    cancelled = []
-
-    class SlowBrain:
-        def respond(self, utterance):
-            calls.append(utterance)
-            if len(calls) == 1:
-                release.wait(2.0)  # the first call hangs until it's cancelled
-                return "stale"
-            return "fresh answer"
-
-        def interrupt(self):
-            cancelled.append(True)
-            release.set()  # the real brain's interrupt frees the one session the same way
-
-    convo = Conversation(
-        FakeSTT(["slow one", "what about this"]), SlowBrain(), FakeTTS(),
-        acknowledgement="ACK", detach_after=0.05, patience=30,
-    )
-
-    convo.turn()  # detaches
-    second = convo.turn()  # they speak again while it's still running
-
-    assert cancelled == [True]  # the stale call was cancelled, not left to block them
-    assert second.said == "fresh answer"  # and their new turn actually got answered
-    assert [_words(u) for u in calls] == ["slow one", "what about this"]
-
-
-def test_a_finished_background_answer_is_spoken_when_they_speak_again():
-    # The worst half-hour this program has had. They asked, heard "I'll get back to you on that",
-    # waited, and asked again - and asking is what destroyed the answer, because a call that had
-    # already FINISHED was cancelled and thrown away as though it were still running. Every push for
-    # the answer made it less likely, never more, so pressing harder looked exactly like being
-    # ignored. An answer that exists is never something to cancel.
-    release = threading.Event()
-    holder = {}
-
-    class SlowBrain:
-        def __init__(self):
-            self.cancelled = False
-
-        def respond(self, utterance):
-            if utterance == "how is it going":
-                release.wait(2.0)
-                return "the answer they were promised"
-            return "reply to their new turn"
-
-        def interrupt(self):
-            self.cancelled = True
-
-    class TalkingWhileItLands(FakeSTT):
-        """It finishes WHILE they are mid-sentence, so the top-of-turn collect has already been and
-        gone by the time their words arrive - which is the ordinary case, not a corner one."""
-
-        def listen(self):
-            heard = super().listen()
-            if heard == "you are taking too long":
-                release.set()
-                assert holder["convo"]._background["done"].wait(2.0)
-            return heard
-
-    brain = SlowBrain()
-    tts = FakeTTS()
-    convo = Conversation(
-        TalkingWhileItLands(["how is it going", "you are taking too long"]), brain, tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30, long_answer_chars=None,
-    )
-    holder["convo"] = convo
-
-    convo.turn()  # detaches: "I'll get back to you on that."
-    convo.turn()  # they push for it, and it lands while they are saying so
-
-    late = [line for line in tts.spoken if "the answer they were promised" in line]
-    assert late and late[0].startswith('On "how is it going')  # kept, and tied to its question
-    assert brain.cancelled is False  # nothing to cancel: it had already answered
-
-
-def test_a_late_answer_names_the_question_it_is_answering():
-    # "See there again an example of you responding to something that I said several messages ago.
-    # The last time I mentioned logs was one, two, three, four, five, six, seven messages ago. So it
-    # doesn't make sense for you to phrase things like you just did, like as if we were just talking
-    # about logs." A detached answer lands after they have moved on, and arrived with nothing tying it
-    # to what it answered - so a perfectly good answer read as a non-sequitur.
-    release = threading.Event()
-
-    class SlowBrain:
-        def respond(self, utterance):
-            if "agents keep dying" in utterance:
-                release.wait(2.0)
-                return "That one didn't die - it finished hours ago and went idle."
-            return "a fresh reply"
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["why do these agents keep dying", ""]), SlowBrain(), tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30, long_answer_chars=None,
-    )
-
-    convo.turn()  # detaches
-    release.set()
-    assert convo._background["done"].wait(2.0)
-    convo.turn()  # the lull it woke, and the answer goes out
-
-    late = [line for line in tts.spoken if "didn't die" in line][0]
-    assert "why do these agents keep dying" in late  # their own words, so it lands as an answer
-    assert late.endswith("That one didn't die - it finished hours ago and went idle.")
-
-
-def test_a_reply_with_nothing_to_say_says_nothing():
-    # A directive that succeeded with no aside comes back empty: the ack already confirmed receipt,
-    # and "collapsed into a single 'Got it.'" is what they asked for. An empty reply must not become
-    # a blank "entity>" line or an empty utterance.
-    lines = []
-
-    class SilentBrain:
-        def respond(self, utterance):
-            return ""
-
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["file that"]), SilentBrain(), tts, acknowledgement="Got it.",
-                         long_answer_chars=None, console=Console(echo=lines.append))
-
-    turn = convo.turn()
-
-    assert tts.spoken == ["Got it."]  # the one utterance they asked for
-    assert turn is not None and turn.said == ""  # the turn still completed
-    assert not any(line.startswith("entity>") for line in lines)  # and no blank reply line
-
-
-def test_a_late_silent_success_still_closes_the_promise():
-    # A slow directive says "I'll get back to you on that." before its silent success lands - and a
-    # promise to get back that is never followed by ANYTHING is this program's original sin: they
-    # waited half an hour on exactly that line. So a late empty reply is not silence, it is the
-    # smallest possible closure, tied to what it closes.
-    release = threading.Event()
-
-    class SlowSilentBrain:
-        def respond(self, utterance):
-            release.wait(2.0)
-            return ""
-
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["file both of those", ""]), SlowSilentBrain(), tts,
-                         acknowledgement="ACK", detach_after=0.05, patience=30,
-                         long_answer_chars=None)
-
-    convo.turn()  # detaches: the promise is made
-    release.set()
-    assert convo._background["done"].wait(2.0)
-    convo.turn()  # the lull: the promise is closed, minimally
-
-    closures = [line for line in tts.spoken if "file both of those" in line and "ACK" not in line]
-    assert closures == ['On "file both of those" - handled.']
-
-
-def test_a_prompt_answer_is_not_prefaced_with_the_question():
-    # Only a LATE one needs tying back. Repeating their question at them when they have just asked it
-    # would be one more stock phrase in a conversation they already called a waste of their time.
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["did it work"]), FakeBrain(), tts, long_answer_chars=None)
-
-    convo.turn()
-
-    assert "reply to did it work" in tts.spoken
-
-
-def test_a_dropped_call_is_shown_so_the_promise_does_not_vanish_silently():
-    # They were told "I'll let you know when it's ready" and then never heard back, because their next
-    # words quietly killed the call. Whatever else happens, the record shows it was dropped.
-    lines = []
-    release = threading.Event()
-
-    class SlowBrain:
-        # Hangs until cancelled, rather than racing a sleep against the turn: only a call that is
-        # genuinely still running is dropped now, so a fixture that might have finished first would
-        # be testing whichever branch it happened to land in.
-        def respond(self, utterance):
-            if utterance == "slow one":
-                release.wait(2.0)
-            return "answer"
-
-        def interrupt(self):
-            release.set()
-
-    convo = Conversation(
-        FakeSTT(["slow one", "what about this"]), SlowBrain(), FakeTTS(),
-        acknowledgement="ACK", detach_after=0.05, patience=30, cancel_wait=0.1,
-        console=Console(echo=lines.append, overwrite=lines.append),
-    )
-
-    convo.turn()  # detaches
-    convo.turn()  # they speak again - the detached call is dropped for them
-
-    assert any("dropped" in line for line in lines)
-
-
-def test_every_long_wait_says_the_one_line_he_asked_for():
-    # They asked for this sentence literally; the flowery variations were worse than repetition.
-    class SlowBrain:
-        def respond(self, utterance):
-            time.sleep(0.2)
-            return "answer"
-
-        def interrupt(self):
-            pass
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["one", "two", "three"]), SlowBrain(), tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30, cancel_wait=0.1,
-    )
-
-    for _ in range(3):
-        convo.turn()
-
-    said = [line for line in tts.spoken if line in convo.detach_replies]
-    assert said == ["I'll get back to you on that."] * 3
-
-def test_a_finished_background_answer_wakes_a_lull():
-    wake = threading.Event()
-    release = threading.Event()
-
-    class SlowBrain:
-        def respond(self, utterance):
-            release.wait(2.0)
-            return "bg answer"
-
-    convo = Conversation(
-        FakeSTT(["slow"]), SlowBrain(), FakeTTS(),
-        detach_after=0.05, patience=30, wake=wake,
-    )
-
-    convo.turn()  # detaches, arms the reaper
-
-    assert not wake.is_set()
-    release.set()
-    assert wake.wait(2.0)  # when the answer lands, the lull is broken so it can be offered promptly
-
-
-def test_a_collected_answer_is_gated_on_its_length_like_any_other_reply():
-    # "That wasn't a very long message. Why did you say you had a longer answer for me?" - the
-    # background path announced EVERY answer it collected, however short, so a forty-character reply
-    # arrived as "I've got a longer answer for you - ready for it?" and then sat unclaimed for
-    # twenty-one minutes before they said yes to it. A collected answer is a reply like any other.
-    def collected(answer, **settings):
-        release = threading.Event()
-
-        class SlowBrain:
-            def respond(self, utterance):
-                release.wait(2.0)
-                return answer
-
-        tts = FakeTTS()
-        convo = Conversation(FakeSTT(["slow", ""]), SlowBrain(), tts, acknowledgement="ACK",
-                             detach_after=0.05, patience=30, **settings)
-        convo.turn()  # detaches
-        release.set()
-        assert convo._background["done"].wait(2.0)
-        convo.turn()  # collects
-        return convo, tts
-
-    convo, tts = collected("Started 1 agent.", long_answer_chars=100)
-
-    assert any(line.endswith("Started 1 agent.") for line in tts.spoken)  # short: just said
-    assert convo.ready_question not in tts.spoken
-
-    convo, tts = collected("A wall of an answer. " * 20, long_answer_chars=100)
-
-    assert convo.ready_question in tts.spoken  # a genuinely big one is still offered first
-    assert convo._offered is not None
-
-
-def test_a_background_error_is_dropped_not_offered():
-    release = threading.Event()
-
-    class BoomBrain:
-        def respond(self, utterance):
-            release.wait(2.0)
-            raise RuntimeError("background boom")
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["slow", "hi"]), BoomBrain(), tts,
-        acknowledgement="ACK", detach_after=0.05, patience=30,
-    )
-
-    convo.turn()  # detaches
-    bg_done = convo._background["done"]
-    release.set()
-    assert bg_done.wait(2.0)
-    convo.turn()  # collects the failed background call
-
-    assert convo.ready_question not in tts.spoken  # a failed background call is dropped, never offered
-    assert convo._offered is None
 
 
 def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
@@ -633,19 +187,15 @@ def test_a_barge_in_while_thinking_cancels_the_brain_and_returns_to_listening():
 
     def barge():
         thinking.wait(2.0)
-        interrupt.set()  # they hit Enter / says "stop" while it's still thinking
+        interrupt.set()  # they hit Enter / say "stop" while it's still thinking
 
     threading.Thread(target=barge, daemon=True).start()
-    convo = Conversation(
-        FakeSTT(["do the big thing"]), brain, tts,
-        acknowledgement="ACK", interrupt=interrupt, patience=30,
-    )
+    convo = Conversation(FakeSTT(["do the big thing"]), brain, tts, interrupt=interrupt)
     turn = convo.turn()
 
     assert turn is None  # the turn was abandoned - the loop is free to listen again
     assert brain.interrupted is True  # the brain was told to drop the in-flight call
-    assert "an essay they never wanted to sit through" not in tts.spoken  # cancelled reply stayed unsaid
-    assert tts.spoken == ["ACK"]  # only the heard-you ack made it out
+    assert tts.spoken == []  # the cancelled reply stayed unsaid
 
 
 def test_a_barge_in_while_thinking_does_not_start_the_next_brain_call_until_the_last_unwinds():
@@ -673,7 +223,7 @@ def test_a_barge_in_while_thinking_does_not_start_the_next_brain_call_until_the_
         interrupt.set()
 
     threading.Thread(target=barge, daemon=True).start()
-    convo = Conversation(FakeSTT(["go"]), brain, FakeTTS(), interrupt=interrupt, patience=30)
+    convo = Conversation(FakeSTT(["go"]), brain, FakeTTS(), interrupt=interrupt)
     convo.turn()
     order.append("turn_returned")
 
@@ -712,10 +262,7 @@ def test_a_spoken_stop_word_while_thinking_cancels_the_brain():
 
     brain = SlowInterruptibleBrain()
     tts = FakeTTS()
-    convo = Conversation(
-        SpokenStopSTT(), brain, tts,
-        acknowledgement="ACK", interrupt=interrupt, patience=30,
-    )
+    convo = Conversation(SpokenStopSTT(), brain, tts, interrupt=interrupt)
     turn = convo.turn()
 
     assert turn is None
@@ -723,43 +270,15 @@ def test_a_spoken_stop_word_while_thinking_cancels_the_brain():
     assert "a monologue they tried to stop" not in tts.spoken
 
 
-def test_check_ins_still_fire_while_a_stop_watcher_holds_the_mic():
-    # A slow think runs a stop-watcher on the mic; a spoken check-in must not need its own second
-    # watcher (two readers corrupt one mic) yet must still be spoken.
-    class QuietMicSTT:
-        def listen(self):
-            return "go"
-
-        def catch_stop(self, active):
-            while active():
-                time.sleep(0.005)
-            return False  # they never say stop
-
-    class SlowBrain:
-        def respond(self, utterance):
-            time.sleep(0.15)
-            return "done"
-
-    tts = FakeTTS()
-    convo = Conversation(
-        QuietMicSTT(), SlowBrain(), tts,
-        acknowledgement="ACK", reassurer=lambda seconds: "WAIT",
-        patience=0.02, check_in=0.02, interrupt=threading.Event(),
-    )
-    convo.turn()
-
-    assert "WAIT" in tts.spoken and tts.spoken[-1] == "done"  # check-ins survive the held mic
-
-
 def test_a_stale_interrupt_is_cleared_at_the_start_of_a_turn():
     interrupt = threading.Event()
     interrupt.set()  # left over from cutting off the previous turn
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK", interrupt=interrupt)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, interrupt=interrupt)
 
     convo.turn()
 
-    assert tts.spoken == ["ACK", "reply to hi"]  # the stale flag didn't gag this fresh turn
+    assert tts.spoken == ["reply to hi"]  # the stale flag didn't gag this fresh turn
 
 
 def test_the_interrupt_is_forwarded_to_the_tts_so_a_reply_in_progress_can_be_killed():
@@ -786,7 +305,7 @@ def test_a_spoken_stop_word_cuts_the_voice_off():
         def catch_stop(self, active):
             return True
 
-    convo = Conversation(StopHearingSTT(), FakeBrain(), FakeTTS(), acknowledgement="ACK", interrupt=interrupt)
+    convo = Conversation(StopHearingSTT(), FakeBrain(), FakeTTS(), interrupt=interrupt)
     convo.turn()
 
     assert interrupt.is_set()  # the spoken "stop" tripped the same interrupt the Enter key does
@@ -824,54 +343,22 @@ def test_a_trailing_farewell_still_ends_the_conversation():
 
 
 def test_a_plain_sentence_is_not_mistaken_for_a_command():
-    convo = Conversation(FakeSTT(["tell me about the weather"]), FakeBrain(), FakeTTS(), acknowledgement="ACK")
+    convo = Conversation(FakeSTT(["tell me about the weather"]), FakeBrain(), FakeTTS())
     turn = convo.turn()
     assert turn.farewell is False and turn.said == "reply to tell me about the weather"
-
-
-def test_the_check_in_says_processing_your_request_not_working_on_it():
-    assert "processing your request" in _default_reassurance(30)
-    assert "working on it" not in _default_reassurance(30)
 
 
 def test_turn_transcribes_thinks_and_speaks():
     stt = FakeSTT(["hello"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts, acknowledgement="ACK")
+    convo = Conversation(stt, brain, tts)
 
     turn = convo.turn()
 
     assert brain.heard == ["hello"]
-    assert tts.spoken == ["ACK", "reply to hello"]  # heard-you beat first, then the real reply
+    assert tts.spoken == ["reply to hello"]  # the reply itself is the whole exchange - no stock lines
     assert turn == Turn(heard="hello", said="reply to hello")
-
-
-def test_a_real_turn_acknowledges_the_instant_it_hears_you_before_thinking():
-    events = []
-
-    class WatchfulBrain:
-        def respond(self, utterance):
-            events.append("think")
-            return "reply"
-
-    class WatchfulTTS:
-        def speak(self, text, *, interrupt=None):
-            events.append(f"say:{text}")
-
-    convo = Conversation(FakeSTT(["hi"]), WatchfulBrain(), WatchfulTTS(), acknowledgement="mm-hm")
-    convo.turn()
-
-    # the acknowledgement is spoken BEFORE the brain is even asked, so there's no dead air
-    assert events == ["say:mm-hm", "think", "say:reply"]
-
-
-def test_no_acknowledgement_for_blank_farewell_or_suspend():
-    for utterance in ["   ", "goodbye entity", "suspend"]:
-        tts = FakeTTS()
-        convo = Conversation(FakeSTT([utterance]), FakeBrain(), tts, acknowledgement="ACK")
-        convo.turn()
-        assert "ACK" not in tts.spoken  # nothing to think about, so nothing to acknowledge
 
 
 def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
@@ -897,7 +384,7 @@ def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys
 
 def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named():
     # "when several are ready, tell them which and let them choose the order." Run together they
-    # arrived as a wall - and a long enough one to be offered as "ready for it?" rather than heard.
+    # arrived as a wall nobody could take one piece at a time.
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
@@ -933,12 +420,14 @@ def test_a_list_already_read_out_is_not_recited_every_turn():
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
-                         outbox=outbox, long_answer_chars=None)
+                         outbox=outbox)
 
     convo.turn()  # the roll call, then a question that names none of them
     convo.turn()
 
-    assert len([line for line in tts.spoken if "Which first?" in line]) == 1
+    # Counted as announcements, not substrings: the fake brain echoes its whole prompt back, and
+    # the system note in it legitimately quotes the roll call it was told about.
+    assert len([line for line in tts.spoken if line.startswith("Two waiting.")]) == 1
 
 
 def test_once_the_list_is_worked_through_the_next_single_notice_is_simply_spoken():
@@ -967,7 +456,7 @@ def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said()
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
-                         outbox=outbox, long_answer_chars=None)
+                         outbox=outbox)
 
     convo.turn()  # a roll call of two, then a question that names none of them
     outbox.push("drive-export: green and pushed", about="drive-export")
@@ -979,11 +468,11 @@ def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said()
 
 def test_without_an_outbox_the_loop_is_unchanged():
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts, acknowledgement="ACK")
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts)
 
     convo.turn()
 
-    assert tts.spoken == ["ACK", "reply to hi"]  # outbox=None interposes nothing
+    assert tts.spoken == ["reply to hi"]  # outbox=None interposes nothing
 
 
 def test_a_message_arriving_during_a_lull_is_spoken_on_the_next_pass():
@@ -1007,87 +496,6 @@ def test_a_message_arriving_during_a_lull_is_spoken_on_the_next_pass():
     convo.run()
 
     assert tts.spoken == ["the deploy agent hit an error", convo.farewell_reply]
-
-
-def test_the_default_acknowledgement_is_the_plain_line_he_asked_for():
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts)  # no override -> the default
-
-    convo.turn()
-
-    # Their own word for it, after counting the stock phrases they were getting per turn and calling
-    # them a waste of their time. Not "Mm-hm." et al either, which read aloud as "m m".
-    assert tts.spoken[0] == "Got it."
-
-
-def test_a_slow_reply_checks_in_so_it_does_not_read_as_a_crash():
-    class SlowBrain:
-        def respond(self, utterance):
-            time.sleep(0.15)  # longer than patience, shorter than the 30s recheck default
-            return f"reply to {utterance}"
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["hello"]), SlowBrain(), tts,
-        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.02,
-    )
-    convo.turn()
-
-    assert tts.spoken == ["ACK", "WAIT", "reply to hello"]  # heard-you, one check-in, then the reply
-
-
-def test_a_long_think_keeps_checking_in_again_and_again():
-    class VerySlowBrain:
-        def respond(self, utterance):
-            time.sleep(0.3)  # many recheck intervals long
-            return "done"
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["hello"]), VerySlowBrain(), tts,
-        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.02, check_in=0.02,
-    )
-    convo.turn()
-
-    assert tts.spoken.count("WAIT") >= 2  # it keeps reassuring, not just once
-    assert tts.spoken[0] == "ACK" and tts.spoken[-1] == "done"
-
-
-def test_the_check_in_reports_how_long_it_has_been():
-    assert _humanize_elapsed(6) == "about 5 seconds"
-    assert _humanize_elapsed(33) == "about 35 seconds"
-    assert _humanize_elapsed(60) == "about 1 minute"
-    assert _humanize_elapsed(150) == "about 2 minutes and 30 seconds"
-    assert "40 seconds" in _default_reassurance(41)  # the spoken line carries the elapsed time
-
-
-def test_a_quick_reply_gets_no_check_in():
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["hello"]), FakeBrain(), tts,
-        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=30,
-    )
-    convo.turn()
-
-    assert tts.spoken == ["ACK", "reply to hello"]  # fast enough that "WAIT" never fires
-
-
-def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
-    class SlowBoom:
-        def respond(self, utterance):
-            time.sleep(0.05)
-            raise RuntimeError("hiccup after a pause")
-
-    tts = FakeTTS()
-    convo = Conversation(
-        FakeSTT(["hello"]), SlowBoom(), tts,
-        acknowledgement="ACK", reassurer=lambda seconds: "WAIT", patience=0.01,
-    )
-    turn = convo.turn()
-
-    assert turn.error is True
-    assert tts.spoken[0] == "ACK"
-    assert "hiccup after a pause" in tts.spoken[-1]  # the off-thread error re-raised, and named
 
 
 class TerminatedEmptySTT:
@@ -1149,7 +557,7 @@ def test_run_loops_until_should_continue_is_false():
     stt = FakeSTT(["one", "two", "three"])
     brain = FakeBrain()
     tts = FakeTTS()
-    convo = Conversation(stt, brain, tts, acknowledgement="ACK")
+    convo = Conversation(stt, brain, tts)
 
     checks = {"n": 0}
 
@@ -1160,7 +568,7 @@ def test_run_loops_until_should_continue_is_false():
     convo.run(should_continue=should_continue)
 
     assert brain.heard == ["one", "two"]
-    assert tts.spoken == ["ACK", "reply to one", "ACK", "reply to two"]
+    assert tts.spoken == ["reply to one", "reply to two"]
 
 
 def test_farewell_ends_the_conversation_without_asking_the_brain():
@@ -1195,6 +603,20 @@ def test_brain_failure_is_spoken_and_loop_survives():
 
     assert any("network hiccup" in line for line in tts.spoken)
     assert tts.spoken[-1] == convo.farewell_reply
+
+
+def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
+    class SlowBoom:
+        def respond(self, utterance):
+            time.sleep(0.05)
+            raise RuntimeError("hiccup after a pause")
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hello"]), SlowBoom(), tts)
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert "hiccup after a pause" in tts.spoken[-1]  # the off-thread error re-raised, and named
 
 
 def test_run_reports_each_completed_turn_to_on_turn():
@@ -1290,16 +712,15 @@ def test_it_does_not_claim_to_be_listening_while_it_is_asleep():
 
 
 def test_what_he_hears_is_in_the_record_even_when_the_terminal_does_not_show_it():
-    # Reading a session back and seeing no check-ins made it look like none fired, when in fact they
-    # had heard them - the record has to hold everything they heard, printed or not.
+    # Reading a session back has to hold everything they heard, printed or not - the farewell here
+    # is spoken and recorded even though the terminal shows its own goodbye elsewhere.
     recorded = []
     console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), acknowledgement="ACK", console=console)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), FakeTTS(), console=console)
 
     convo.turn()
 
-    assert "ACK" in recorded  # spoken, deliberately not printed, still recorded
-    assert recorded.count("entity> reply to hi\n") == 1  # and a printed reply isn't recorded twice
+    assert recorded.count("entity> reply to hi\n") == 1  # a printed reply isn't recorded twice
 
 
 def test_a_reply_cut_off_mid_utterance_is_noted_in_the_record():
@@ -1314,7 +735,7 @@ def test_a_reply_cut_off_mid_utterance_is_noted_in_the_record():
             interrupt.set()  # the watcher (or Enter) kills the utterance partway through
 
     convo = Conversation(FakeSTT(["hi"]), FakeBrain(), CutOffTTS(),
-                         acknowledgement="ACK", interrupt=interrupt, console=console)
+                         interrupt=interrupt, console=console)
 
     convo.turn()
 
@@ -1329,26 +750,11 @@ def test_a_voice_failure_is_noted_in_the_record_not_lost_to_stderr():
         def speak(self, text, *, interrupt=None):
             raise RuntimeError("powershell exploded")
 
-    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), BrokenTTS(), acknowledgement="ACK", console=console)
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), BrokenTTS(), console=console)
 
     convo.turn()  # must not crash the loop
 
     assert any("voice failed" in line and "powershell exploded" in line for line in recorded)
-
-
-def test_a_long_heads_up_is_offered_rather_than_read_out_in_full():
-    # An agent's thirty-line report was read at them line after line, verbatim, with no warning -
-    # the exact opposite of being insulated from the agent's internals.
-    outbox = Outbox()
-    outbox.push("WALL. " * 200)
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts,
-                         outbox=outbox, long_answer_chars=100)
-
-    convo.turn()
-
-    assert convo.ready_question in tts.spoken  # asked first
-    assert not any(line.startswith("WALL.") for line in tts.spoken)  # nothing dumped
 
 
 def test_whatever_the_outbox_has_to_say_is_one_utterance_to_stop():
@@ -1359,8 +765,7 @@ def test_whatever_the_outbox_has_to_say_is_one_utterance_to_stop():
     outbox.push("first agent finished")
     outbox.push("second agent finished")
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts,
-                         outbox=outbox, long_answer_chars=None)
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
 
     convo.turn()
 
@@ -1374,32 +779,20 @@ def test_news_that_cannot_be_delivered_yet_does_not_wedge_the_loop():
     # an empty turn whenever that flag is set - so the loop spun, their submissions were never read,
     # and only a restart got them out. Declining to deliver must never leave the flag standing.
     outbox = Outbox()
-    convo = Conversation(FakeSTT(["tell me everything"]), VariableBrain(), FakeTTS(),
-                         outbox=outbox, long_answer_chars=100)
 
-    convo.turn()  # a long answer is offered, so an offer is now pending
+    class MidSentenceSTT(FakeSTT):
+        def is_mid_utterance(self):
+            return True  # they are talking the whole time
+
+    convo = Conversation(MidSentenceSTT(["never read"]), FakeBrain(), FakeTTS(), outbox=outbox)
     outbox.push("the fixer agent has news")
-    convo._deliver_outbox()  # can't speak over a pending offer
+
+    convo._deliver_outbox()  # can't speak over them - but must still drain
 
     assert not outbox.arrived.is_set()  # nothing latched, so listening works normally
 
 
-def test_news_held_back_is_delivered_once_it_can_be():
-    outbox = Outbox()
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["tell me everything", "no thanks", "goodbye entity"]),
-                         VariableBrain(), tts, outbox=outbox, long_answer_chars=100)
-
-    convo.turn()  # offers
-    outbox.push("the fixer agent has news")
-    convo._deliver_outbox()  # held: an offer is pending
-    convo.turn()  # "no thanks" clears the offer
-    convo.turn()  # now it can be said
-
-    assert any("fixer" in line for line in tts.spoken)  # held, not lost
-
-
-def test_it_stays_quiet_while_they_are_mid_sentence():
+def test_it_stays_quiet_while_they_are_mid_sentence_then_delivers():
     outbox = Outbox()
     outbox.push("the fixer agent has news")
     tts = FakeTTS()
@@ -1411,77 +804,14 @@ def test_it_stays_quiet_while_they_are_mid_sentence():
             return self.talking
 
     stt = MicSTT(["", "goodbye entity"])
-    convo = Conversation(stt, FakeBrain(), tts, outbox=outbox, long_answer_chars=None)
+    convo = Conversation(stt, FakeBrain(), tts, outbox=outbox)
 
     convo.turn()
     assert not any("fixer" in line for line in tts.spoken)  # they're talking; it does not break in
 
     stt.talking = False
     convo.turn()
-    assert any("fixer" in line for line in tts.spoken)
-
-
-def test_a_finished_answer_goes_out_while_the_mic_sits_armed():
-    # The window's mic is a STATE, not a walkie-talkie - it stays armed for a whole conversation. Read
-    # as "their mic is on", the quiet-while-they-talk guard silenced every unprompted line and every
-    # collected answer for the entire session, so a detached call could not be delivered at all: the
-    # guard's meaning drifted when the mic changed shape underneath it while its words stayed the
-    # same. What it protects against is talking OVER them, and that is being mid-sentence.
-    release = threading.Event()
-
-    class SlowBrain:
-        def respond(self, utterance):
-            release.wait(2.0)
-            return "the finished answer"
-
-    class WindowMic(FakeSTT):
-        armed = True  # they turned the mic on at the start and left it on, as the window intends
-        talking = False
-
-        def is_mid_utterance(self):
-            return self.talking
-
-    stt = WindowMic(["slow", "", ""])
-    tts = FakeTTS()
-    convo = Conversation(stt, SlowBrain(), tts, acknowledgement="ACK",
-                         detach_after=0.05, patience=30, long_answer_chars=None)
-
-    convo.turn()  # detaches
-    release.set()
-    assert convo._background["done"].wait(2.0)
-
-    stt.talking = True
-    convo.turn()
-
-    assert not any("the finished answer" in line for line in tts.spoken)  # mid-sentence: it waits
-
-    stt.talking = False
-    convo.turn()
-
-    assert any("the finished answer" in line for line in tts.spoken)  # they've stopped - it speaks
-
-
-def test_a_long_reply_is_cut_short_rather_than_half_read():
-    # They are never asked "ready for it?" any more, and they disliked hearing only part of what was
-    # written: a reply is CUT at a sentence, so what they read is exactly what they hear.
-    lines = []
-    tts = FakeTTS()
-
-    class WordyBrain:
-        def respond(self, utterance):
-            return ("First, the short answer. Second, some detail they can read. " + "Padding. " * 60)
-
-    convo = Conversation(FakeSTT(["hi"]), WordyBrain(), tts, long_answer_chars=None,
-                         spoken_chars=80, console=Console(echo=lines.append))
-
-    convo.turn()
-
-    shown = chr(10).join(lines)
-    spoken = [line for line in tts.spoken if "First," in line][0]
-    assert len(spoken) <= 100 and spoken.startswith("First, the short answer.")
-    assert spoken in shown  # the same words on screen as in their ear
-    assert "Padding. Padding. Padding." not in shown  # the wall never reaches them at all
-    assert convo.ready_question not in tts.spoken  # and they were never asked
+    assert any("fixer" in line for line in tts.spoken)  # they stopped - held news goes out
 
 
 def test_a_brain_failure_says_what_actually_broke():
@@ -1495,7 +825,7 @@ def test_a_brain_failure_says_what_actually_broke():
             raise RuntimeError("the CLI exited with code 1")
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None)
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts)
 
     turn = convo.turn()
 
@@ -1517,7 +847,7 @@ def test_a_failure_names_the_error_underneath_the_librarys_guess():
                 raise RuntimeError("Claude Code not found at: C:/present/claude.exe") from underneath
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None)
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts)
 
     turn = convo.turn()
 
@@ -1525,75 +855,13 @@ def test_a_failure_names_the_error_underneath_the_librarys_guess():
     assert "C:/gone/config.json" in turn.said  # and what had actually gone missing
 
 
-def test_a_failure_is_never_cut_short_of_its_cause():
-    # Truncating the one line that explains a wedged session is the same defect as not printing it.
-    class BrokenBrain:
-        def respond(self, utterance):
-            raise RuntimeError("a stack of detail " * 30)
-
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts, long_answer_chars=None,
-                         spoken_chars=60)
-
-    turn = convo.turn()
-
-    assert turn.said.rstrip().endswith("detail")  # all of it, not a sentence's worth
-    assert "…" not in turn.said
-
-
-def test_the_numbered_steps_he_asked_for_survive_the_brevity_cut():
-    # They asked what they had to set up and heard "...here are the real steps, from the agent: 1." -
-    # then nothing. The splitter reads "1." as the end of a sentence, so the cut fell between the
-    # number and its step and handed them a list marker with no step attached. They said so: "you
-    # started telling me the steps, but then all you said was the number one and nothing more."
-    # The persona already promises them a walkthrough in full, however long; only chatter is cut.
-    steps = ("Here are the real steps. 1. Open the Google console and pick your existing project. "
-             "2. Enable the Drive and Docs APIs. 3. Create an OAuth client and download the JSON. "
-             "4. Run the authorize script and approve the consent screen in your browser.")
-    lines = []
-
-    class StepsBrain:
-        def respond(self, utterance):
-            return steps
-
-    tts = FakeTTS()
-    convo = Conversation(FakeSTT(["what do I have to set up"]), StepsBrain(), tts,
-                         long_answer_chars=None, spoken_chars=80,
-                         console=Console(echo=lines.append))
-
-    convo.turn()
-
-    assert steps in tts.spoken  # every step reached them, not just the number
-    assert "approve the consent screen" in chr(10).join(lines)  # and the last one is on screen too
-
-
-def test_a_reply_that_was_cut_is_reported_back_on_the_next_turn():
-    # Truncating silently taught it nothing: it never saw the cut, so the next turn began with no
-    # evidence any of it happened. Now the cut is part of what it hears next.
-    heard = []
-
-    class WordyBrain:
-        def respond(self, utterance):
-            heard.append(utterance)
-            return "First. Second. " + "Padding. " * 60
-
-    convo = Conversation(FakeSTT(["hi", "and again"]), WordyBrain(), FakeTTS(),
-                         long_answer_chars=None, spoken_chars=60)
-
-    convo.turn()
-    convo.turn()
-
-    assert heard[0] == "hi"  # the first turn is untouched
-    assert "CUT OFF" in heard[1] and "and again" in heard[1]  # the second carries the consequence
-
-
 def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
     # "If what I consider to be one Entity is actually a bunch of disconnected fakers who aren't
     # aware of each other, then the flimsy occasional illusion of you being a coherent Entity is
     # worse than useless." They kept quoting lines back that the brain had no record of, because the
-    # app speaks in its name - the acknowledgement, the handoff line, an agent's notice - and none
-    # of it ever reached the brain. Asked about one, it said "I have no record of typing that
-    # myself", which was true, and read as gaslighting.
+    # app speaks in its name - an agent's notice, a held roll call - and none of it ever reached the
+    # brain. Asked about one, it said "I have no record of typing that myself", which was true, and
+    # read as gaslighting.
     heard = []
 
     class NotingBrain:
@@ -1604,7 +872,7 @@ def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed")
     convo = Conversation(FakeSTT(["", "what did you just say to me"]), NotingBrain(), FakeTTS(),
-                         outbox=outbox, acknowledgement="Message received.", long_answer_chars=None)
+                         outbox=outbox)
 
     convo.turn()  # a lull: the agent's notice goes out in its name, unwritten by it
     convo.turn()  # and now they ask about it
@@ -1614,9 +882,7 @@ def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
 
 
 def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
-    # Only lines it is NOT already aware of. Its own reply is in its context already, and the
-    # acknowledgement fires on every single turn - the persona carries that one as a standing fact,
-    # so the ledger doesn't repeat it into every prompt for the rest of the session.
+    # Only lines it is NOT already aware of. Its own reply is in its context already.
     heard = []
 
     class NotingBrain:
@@ -1624,27 +890,151 @@ def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
             heard.append(utterance)
             return "the drive icon opens the folder now"
 
-    convo = Conversation(FakeSTT(["did it work", "thanks"]), NotingBrain(), FakeTTS(),
-                         acknowledgement="Message received.", long_answer_chars=None)
+    convo = Conversation(FakeSTT(["did it work", "thanks"]), NotingBrain(), FakeTTS())
 
     convo.turn()
     convo.turn()
 
-    assert heard[1] == "thanks"  # nothing to report: it wrote its own last line, and knows the ack
+    assert heard[1] == "thanks"  # nothing to report: it wrote its own last line itself
 
 
-def test_a_reply_that_fitted_is_not_complained_about():
+class StreamingTTS(FakeTTS):
+    """A voice with stream(): sentences sound as the reply is written, like the neural Speaker."""
+
+    def __init__(self):
+        super().__init__()
+        self.replies = []
+
+    def stream(self, *, interrupt=None):
+        reply = self.Reply(self, interrupt)
+        self.replies.append(reply)
+        return reply
+
+    class Reply:
+        def __init__(self, tts, interrupt):
+            self._tts = tts
+            self._interrupt = interrupt
+            self.deltas = []
+            self.finished = False
+
+        def add(self, delta):
+            self.deltas.append(delta)
+
+        def done(self):
+            self.finished = True
+            heard = "".join(self.deltas)
+            if self._interrupt is not None and self._interrupt.is_set():
+                heard = heard[: len(heard) // 2]  # the cut came partway through the audio
+            self._tts.spoken.append(heard)
+            return heard
+
+
+class StreamingBrain:
+    """A brain that streams its reply out in deltas before returning it whole."""
+
+    def __init__(self, text="Both are green. The drive one wants a decision."):
+        self._text = text
+        self.heard = []
+
+    def respond(self, utterance, *, on_text=None):
+        self.heard.append(utterance)
+        if on_text is not None:
+            middle = len(self._text) // 2
+            on_text(self._text[:middle])
+            on_text(self._text[middle:])
+        return self._text
+
+
+def test_a_streaming_voice_speaks_the_reply_as_the_brain_writes_it():
+    # The whole point of the rebuild: the deltas reach the voice DURING the think, so first words
+    # are heard while the rest of the reply is still being written - no ack, no handoff line.
+    tts = StreamingTTS()
+    brain = StreamingBrain()
+    convo = Conversation(FakeSTT(["how's it going"]), brain, tts)
+
+    turn = convo.turn()
+
+    [reply] = tts.replies
+    assert "".join(reply.deltas) == "Both are green. The drive one wants a decision."
+    assert reply.finished  # the loop waited out the audio before listening again
+    assert turn.said == "Both are green. The drive one wants a decision."
+
+
+def test_a_streamed_reply_reaches_the_screen_and_the_record_whole():
+    lines, recorded = [], []
+    console = Console(echo=lines.append, record=recorded.append)
+    convo = Conversation(FakeSTT(["status"]), StreamingBrain(), StreamingTTS(), console=console)
+
+    convo.turn()
+
+    assert any("Both are green." in line for line in lines)  # on screen
+    assert any("Both are green." in line for line in recorded)  # and on the record
+
+
+def test_a_streamed_reply_cut_off_partway_is_recorded_as_cut():
+    # What was heard and what is on the record must agree: after a barge-in the record says the
+    # voice was killed partway, instead of showing the reply as delivered.
+    recorded = []
+    console = Console(echo=lambda _: None, overwrite=lambda _: None, record=recorded.append)
+    interrupt = threading.Event()
+
+    class BargedBrain(StreamingBrain):
+        def respond(self, utterance, *, on_text=None):
+            said = super().respond(utterance, on_text=on_text)
+            interrupt.set()  # they cut in while the audio is still going out
+            return said
+
+    convo = Conversation(FakeSTT(["status"]), BargedBrain(), StreamingTTS(),
+                         interrupt=interrupt, console=console)
+
+    convo.turn()
+
+    assert any("cut off" in line for line in recorded)
+
+
+def test_a_brain_without_streaming_still_works_with_a_streaming_voice():
+    # ConsoleSTT runs the same loop with the same voice; a brain fake with the plain respond()
+    # signature must not be forced to grow one.
+    tts = StreamingTTS()
+    convo = Conversation(FakeSTT(["hi"]), FakeBrain(), tts)
+
+    turn = convo.turn()
+
+    assert turn.said == "reply to hi"
+    assert "reply to hi" in tts.spoken  # spoken whole through speak(), not streamed
+
+
+def test_the_fleet_briefing_is_in_front_of_the_brain_every_turn():
+    # "How's it going" must be answerable THIS turn: the state of every agent rides into the brain
+    # as text the app composed, so no tool call and no file read stands between the question and
+    # its answer.
     heard = []
 
-    class BriefBrain:
+    class NotingBrain:
         def respond(self, utterance):
             heard.append(utterance)
-            return "Short enough."
+            return "reply"
 
-    convo = Conversation(FakeSTT(["hi", "again"]), BriefBrain(), FakeTTS(),
-                         long_answer_chars=None, spoken_chars=60)
+    convo = Conversation(FakeSTT(["how's it going"]), NotingBrain(), FakeTTS(),
+                         briefing=lambda: "fixer: working - task: fix the drive link")
 
     convo.turn()
+
+    assert heard[0].startswith("[Fleet briefing")
+    assert "fixer: working" in heard[0]
+    assert heard[0].rstrip().endswith("how's it going")  # their words close the message
+
+
+def test_an_empty_briefing_adds_nothing():
+    heard = []
+
+    class NotingBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "reply"
+
+    convo = Conversation(FakeSTT(["hi"]), NotingBrain(), FakeTTS(), briefing=lambda: "")
+
     convo.turn()
 
-    assert heard == ["hi", "again"]  # nothing added when nothing was lost
+    assert heard == ["hi"]

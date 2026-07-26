@@ -114,9 +114,11 @@ enforces some; code enforces the rest, and where only the persona enforces somet
 a known weakness rather than a solution.
 
 - **Insulate the user from agents.** An agent's own words never reach them — not commit hashes, not
-  test counts, not "I reran the suite myself". `relay.notice()` is the only door: agent name, first
-  sentence, capped, and a pointer to its tab. Handed the raw stream, a person cannot tell whether
-  they are talking to Entity or to the agent; the code, not the model, has to prevent it.
+  test counts, not "I reran the suite myself". Every agent event (finished, died, wrote, quiet) goes
+  through `narrator.py`: one trip through the brain, which composes the one or two sentences the
+  user hears in its own voice. `relay.notice()` survives only as the fallback when the brain cannot
+  answer — news must never die with a wedged session. Handed the raw stream, a person cannot tell
+  whether they are talking to Entity or to the agent; the code, not the model, has to prevent it.
 - **Brevity is the product.** The persona holds replies to a couple of short sentences, and the
   voice speaks them as they are written, so a barge-in is the user's own length limit. The old
   260-character cut and its told-you-it-was-cut system note are gone WITH their reason: they
@@ -186,7 +188,10 @@ used to be lost to context resets) and streams the whole exchange into its log; 
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named.
+held, and it says which one a reply just named. `narrator.py` is how any agent event becomes
+speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
+words each one as its own sentence (composed news skips the unwritten-lines ledger - the brain
+remembers what it wrote), and the plain capped notice is only the cannot-answer fallback.
 `brain_sdk.py` holds the persona and the session: the FAST tier (Haiku), `tools=[]`, replies
 streamed delta by delta — a talker that pulls levers, never an investigator; the agents it starts
 are where Opus-tier work happens. `memory.py` is the profile, what Entity has learned, and the lexicon.

@@ -29,8 +29,9 @@ hand the turn back (silence detection was too flaky). To end, say or type **"goo
 
 **Cut it off** — while it's *speaking* or *thinking* — by pressing **Enter** or saying **"stop"**
 ("shut up" / "quiet" / "enough" / "wait" also work); it drops the reply and goes back to listening.
-A slow request keeps working in the background instead of blocking, and in a terminal a long answer
-is offered ("ready for it?") before it's spoken rather than dumped on you.
+Replies are spoken **as they are written**, sentence by sentence — first words in a couple of
+seconds, one stop silencing everything still queued — with no stock phrases around them: no
+acknowledgement line, no "I'll get back to you on that", no length gate.
 
 ## What you put in `runtime/`
 
@@ -56,30 +57,42 @@ One persistent Claude session held open through the Agent SDK (`entity.brain_sdk
 Keeping a single warm session — instead of re-spawning the `claude` CLI every turn — is what
 makes it feel live:
 
+- It runs the **fast model tier** (Haiku), because talking is a fast job: its work is to answer,
+  decide, and pull levers — never to investigate. `tools=[]` strips every built-in tool, so
+  nothing it does mid-turn can take longer than a breath; what it knows about the fleet arrives
+  as text in the turn (the desk's briefing), so "how's it going" is answered in the breath it
+  was asked.
 - `setting_sources=[]` loads **none** of your user/project/local settings, so the Entity never
   inherits your global coding `CLAUDE.md` or hooks. (Loading them made it answer in quoted-block
   reply format and fire that format's Stop hook every turn, which exploded latency to ~50s.)
-- It keeps its native tools, with `permission_mode="bypassPermissions"`, because a spoken
-  conversation has no terminal to approve in — a gated tool would simply hang. The coding agents
-  it dispatches are the opposite: those run approval-gated (`entity.supervised_agent`).
+- Acting goes through five **typed in-process tools** (`entity.actions`): `start_agent`,
+  `tell_agent`, `set_next_agent_model`, `file_improvement`, `close_agent_tab` — with
+  `permission_mode="bypassPermissions"`, because a spoken conversation has no terminal to approve
+  in. The coding agents it dispatches are the opposite: those run approval-gated
+  (`entity.supervised_agent`) on Opus-tier models.
+- Replies **stream**: each text delta reaches the voice as the model writes it, so the first
+  sentence is sounding while the rest is still forming.
 - One session threads every turn, so it remembers what you just said. Once the conversation has
   grown past a token budget it **compacts** — a fresh session reseeded with the last few turns
   verbatim, so turns stay fast however long you talk.
 - Runs on the **Claude Max subscription** — OAuth is read independently of settings, so no API key.
 
 The SDK is async; `SdkBrain` runs it on a private background event loop so the rest of the app
-keeps a plain synchronous `respond(text) -> text`. Per-turn latency is a few seconds and varies
-with the server; a startup warmup absorbs the worst first-turn cold start.
+keeps a plain synchronous `respond(text) -> text`. A startup warmup absorbs the worst first-turn
+cold start.
 
 ## Agents
 
 Driving Claude Code agents is not a mode — it's something you ask for in conversation. The brain
-answers with a marker line, `entity.supervising_brain` acts on it, and you hear a short
-confirmation instead of the marker:
+calls a typed tool (`entity.actions`, an in-process MCP server wired to the desk), and what you
+hear is its own sentence about what it set in motion — never a control phrase:
 
-- `[SUPERVISE] <worktree>` — start a fresh agent there, with your requirements as its task.
-- `[TELL] <name>: <message>` — say something more to an agent already running.
-- `[IMPROVE] <one line>` — file an enhancement into your profile, visible in the window at once.
+- `start_agent(path, task)` — a fresh agent in that worktree (a new path is cut from
+  `origin/main` first), with your requirements as its task.
+- `tell_agent(name, message)` — say something more to an agent already running; an undeliverable
+  message comes back as a failure it has to tell you about, never a claimed delivery.
+- `file_improvement(item)` — file an enhancement into your profile, visible in the window at once.
+- `set_next_agent_model(choice)` / `close_agent_tab(name)` — the other levers, same shape.
 
 Each agent is a live session the desk can always reach, its roster is a file that survives a
 context reset, and the whole exchange is written to `runtime/agent-logs/<name>.log` — which the
@@ -96,15 +109,17 @@ Three swappable adapters behind small interfaces, tied together by one orchestra
 
 - `SpeechToText.listen() -> str` — `Dictation` in the window, `MicSTT` ("over"-terminated) in a
   terminal, `ConsoleSTT` with `--text`.
-- `Brain.respond(utterance) -> str` — `SdkBrain`, wrapped by `SupervisingBrain`.
-- `TextToSpeech.speak(text)` — `SystemTTS` (Windows System.Speech via PowerShell, no package) or
-  `NullTTS` when muted.
+- `Brain.respond(utterance, on_text=...) -> str` — `SdkBrain`, streaming its reply out as it is
+  written, acting through `entity.actions`.
+- `TextToSpeech` — `Speaker` (`entity.voice`) speaking Kokoro sentences as they form, with
+  `SystemTTS` (Windows System.Speech via PowerShell) serving until the model is fetched and
+  `NullTTS` when muted; `SwappableTTS` swaps the upgrade in mid-session.
 - `Conversation` — the listen → think → speak loop, with farewell exit and error resilience.
 
 Swapping any layer touches one adapter and nothing else. Speech-in is split two ways: `mic`
-(hardware capture) and `transcribe` (local Parakeet via `onnx-asr`). The window (`gui`) is a
-mirror, not a second implementation — everything that can be wrong lives outside Tk and is tested
-without a display.
+(hardware capture) and `transcribe` (local Parakeet via `onnx-asr`). The window is a mirror, not
+a second implementation — everything that can be wrong lives outside it and is tested without a
+display.
 
 ## Develop
 

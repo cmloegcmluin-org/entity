@@ -604,3 +604,124 @@ def test_an_entry_with_no_session_id_cannot_be_revived_and_is_skipped(tmp_path):
     desk, _, _ = _desk(state=state)
 
     assert desk.revive() == []
+
+
+def _finished(desk, outbox, name="fixer", cwd="/wt/fixer", task="a task"):
+    """Start one agent and wait until its first turn is done - the usual bench for delivery tests."""
+    desk.start(name, cwd, task)
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    return name
+
+
+def test_presented_work_shows_in_the_digest_awaiting_a_verdict():
+    desk, outbox, _ = _desk()
+    _finished(desk, outbox)
+
+    desk.present("fixer", "Open localhost:5300 and click Export.")
+
+    assert "presented, awaiting their verdict" in desk.digest()
+    desk.close()
+
+
+def test_work_cannot_be_presented_while_the_agent_is_still_working():
+    # The steps come from the agent's report; marking mid-turn would present a thing that does
+    # not exist yet.
+    import pytest
+
+    from entity.delivery import DeliveryError
+
+    hold = threading.Event()
+    desk, _, made = _desk(hold=hold)
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: made and made[0].messages)
+
+    with pytest.raises(DeliveryError):
+        desk.present("fixer", "steps")
+    hold.set()
+    desk.close()
+
+
+def test_presenting_an_agent_the_desk_does_not_have_refuses():
+    import pytest
+
+    from entity.delivery import DeliveryError
+
+    desk, _, _ = _desk()
+
+    with pytest.raises(DeliveryError):
+        desk.present("nobody", "steps")
+
+
+def test_an_approved_verdict_dispatches_the_landing():
+    # After the user signs off, everything left is mechanical: the desk itself sends the agent
+    # to land the work - no one has to remember to ask.
+    desk, outbox, made = _desk()
+    _finished(desk, outbox)
+    desk.present("fixer", "steps")
+
+    desk.verdict("fixer", approved=True)
+
+    assert _wait_for(lambda: len(made[0].messages) == 2)
+    assert "signed off" in made[0].messages[1]
+    assert "approved, landing it" in desk.digest()
+    desk.close()
+
+
+def test_a_rejected_verdict_carries_the_feedback_back():
+    desk, outbox, made = _desk()
+    _finished(desk, outbox)
+    desk.present("fixer", "steps")
+
+    desk.verdict("fixer", approved=False, feedback="The button is on the wrong side.")
+
+    assert _wait_for(lambda: len(made[0].messages) == 2)
+    assert "The button is on the wrong side." in made[0].messages[1]
+    assert "awaiting their verdict" not in desk.digest()  # back to plain being-built
+    desk.close()
+
+
+def test_a_verdict_with_no_presentation_is_refused_by_the_desk():
+    import pytest
+
+    from entity.delivery import DeliveryError
+
+    desk, outbox, _ = _desk()
+    _finished(desk, outbox)
+
+    with pytest.raises(DeliveryError):
+        desk.verdict("fixer", approved=True)
+    desk.close()
+
+
+def test_the_delivery_stage_survives_into_the_state_file_and_back(tmp_path):
+    # A restart mid-loop must not lose where the work stood: presented work is still presented,
+    # its steps still on file, when the next process revives the fleet.
+    import json
+
+    state = tmp_path / "agents.json"
+    desk, outbox, _ = _desk(state=state)
+    _finished(desk, outbox)
+    desk.present("fixer", "Open localhost:5300.")
+    desk.close()
+
+    [entry] = json.loads(state.read_text(encoding="utf-8"))
+    assert entry["delivery"] == "ready"
+    assert entry["steps"] == "Open localhost:5300."
+
+    reborn, _, _ = _desk(state=state)
+    reborn.revive()
+    assert "presented, awaiting their verdict" in reborn.digest()
+    assert reborn.delivery_stage("fixer") == "ready"
+    reborn.close()
+
+
+def test_the_narrator_can_ask_which_stage_an_agent_is_at():
+    desk, outbox, _ = _desk()
+    assert desk.delivery_stage("fixer") is None  # unknown agent: no stage, not an error
+    _finished(desk, outbox)
+    desk.present("fixer", "steps")
+    desk.verdict("fixer", approved=True)
+
+    assert desk.delivery_stage("fixer") == "landing"
+    desk.close()

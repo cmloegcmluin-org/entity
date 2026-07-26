@@ -92,11 +92,16 @@ hear is its own sentence about what it set in motion — never a control phrase:
 - `tell_agent(name, message)` — say something more to an agent already running; an undeliverable
   message comes back as a failure it has to tell you about, never a claimed delivery.
 - `file_improvement(item)` — file an enhancement into your profile, visible in the window at once.
+- `mark_ready(name, steps)` / `record_verdict(name, verdict, feedback)` — the delivery loop as
+  code: presented work is recorded with its see-it-running steps, and a verdict can only be
+  recorded on work that was presented. Approval sends the agent to land it and — once it reports
+  the merge — wraps it up; rejection carries your feedback straight back.
 - `set_next_agent_model(choice)` / `close_agent_tab(name)` — the other levers, same shape.
 
 Each agent is a live session the desk can always reach, its roster is a file that survives a
 context reset, and the fleet itself survives a restart: the desk records every agent's CLI
-session in `runtime/agents.json`, and on startup it resumes each one — an agent caught mid-task
+session in `runtime/agents.json` — including where each piece of work stands in the loop — and on
+startup it resumes each one; an agent caught mid-task
 is told to pick up where it left off. Once you've signed off on an agent's work, Entity wraps it
 up on its own: the log is archived, the session ends, the worktree is removed. The whole exchange
 is written to `runtime/agent-logs/<name>.log` — which the window tails as its own tab. Not just what the agent says: every command it runs and what came

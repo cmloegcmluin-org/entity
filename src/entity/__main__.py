@@ -273,7 +273,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
                      seed_turns=recent_turns(TRANSCRIPTS))
     brain.warmup()
-    newsroom["narrator"] = Narrator(brain, outbox)  # from here on, news arrives in its own voice
+    # From here on, news arrives in the brain's own voice - and worded by where the work stands:
+    # a finished turn is presentation news while building, wrap-up news while landing approved work.
+    newsroom["narrator"] = Narrator(brain, outbox, stage_of=desk.delivery_stage)
     # "I close it and reopen it constantly": bring back every agent the last process recorded,
     # each resumed on its old session - one caught mid-task is told to pick back up. After the
     # narrator, so an instantly-finishing revival is narrated, not read out as a label.

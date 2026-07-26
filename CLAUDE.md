@@ -187,7 +187,10 @@ opened, and opens it. `agent_desk.py` holds each agent as a live session in-proc
 used to be lost to context resets), streams the whole exchange into its log, records the fleet in
 `runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught
 mid-task told to pick back up — and `retire()` wraps a finished agent up whole: log archived to
-closed/, session closed, worktree removed; `steps.py` decides
+closed/, session closed, worktree removed. `delivery.py` is the review loop as code — building →
+presented-with-steps → landing, a verdict impossible on work never presented, approval dispatching
+the landing and rejection the feedback mechanically, so the loop's order is a rule rather than a
+persona habit; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and

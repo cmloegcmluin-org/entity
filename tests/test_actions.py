@@ -11,6 +11,8 @@ class FakeDesk:
         self.told = []
         self.chosen = []
         self.retired = []
+        self.presented = []
+        self.verdicts = []
         self._known = set(known)
 
     def start(self, name, cwd, task):
@@ -30,6 +32,20 @@ class FakeDesk:
     def retire(self, name):
         self.retired.append(name)
         return name in self._known
+
+    def present(self, name, steps):
+        from entity.delivery import DeliveryError
+
+        if name not in self._known:
+            raise DeliveryError(f"no agent called {name} is at the desk")
+        self.presented.append((name, steps))
+
+    def verdict(self, name, approved, feedback=""):
+        from entity.delivery import DeliveryError
+
+        if name not in self._known:
+            raise DeliveryError("no verdict can be recorded - nothing has been presented")
+        self.verdicts.append((name, approved, feedback))
 
 
 def _call(tool, **args):
@@ -195,3 +211,67 @@ def test_resolve_expands_a_home_relative_fresh_path():
     # A brand-new worktree path named for new work won't exist yet, so it falls to the
     # explicit-path branch - which must still expand ~ so the agent's cwd is real.
     assert _resolve("~/work/new-agent") == [os.path.expanduser("~/work/new-agent")]
+
+
+def test_mark_ready_records_the_presentation_with_its_steps():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["mark_ready"], name="gdoc-export",
+                 steps="Open localhost:5300 and click Export.")
+
+    assert desk.presented == [("gdoc-export", "Open localhost:5300 and click Export.")]
+    assert "gdoc-export" in said
+
+
+def test_mark_ready_relays_the_desks_refusal():
+    # The refusal sentence IS the tool's answer - the model must hear why, or it will tell the
+    # user something was presented that wasn't.
+    desk = FakeDesk(known=())
+    tools = _tools(desk)
+
+    said = _call(tools["mark_ready"], name="ghost", steps="steps")
+
+    assert desk.presented == []
+    assert "no agent" in said.lower()
+
+
+def test_an_approving_verdict_reaches_the_desk():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["record_verdict"], name="gdoc-export", verdict="approved", feedback="")
+
+    assert desk.verdicts == [("gdoc-export", True, "")]
+    assert "land" in said.lower()
+
+
+def test_a_rejecting_verdict_carries_the_feedback():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["record_verdict"], name="gdoc-export", verdict="rejected",
+                 feedback="The button is on the wrong side.")
+
+    assert desk.verdicts == [("gdoc-export", False, "The button is on the wrong side.")]
+    assert "feedback" in said.lower()
+
+
+def test_a_verdict_word_that_is_neither_is_refused_without_touching_the_desk():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["record_verdict"], name="gdoc-export", verdict="maybe", feedback="")
+
+    assert desk.verdicts == []
+    assert "approved" in said and "rejected" in said  # the two words it must choose between
+
+
+def test_record_verdict_relays_the_desks_refusal():
+    desk = FakeDesk(known=())
+    tools = _tools(desk)
+
+    said = _call(tools["record_verdict"], name="ghost", verdict="approved", feedback="")
+
+    assert desk.verdicts == []
+    assert "presented" in said.lower()

@@ -18,6 +18,7 @@ from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
+from entity.delivery import DeliveryError
 from entity.memory import append_enhancement
 from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
@@ -28,7 +29,8 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "close_agent_tab"))
+                                "file_improvement", "close_agent_tab", "mark_ready",
+                                "record_verdict"))
 
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
@@ -110,7 +112,37 @@ def fleet_actions(desk, *, file_enhancement=append_enhancement, resolve=_resolve
                         "that name.")
         return _say(f"Closed {name}'s tab.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, close_agent_tab]
+    @tool("mark_ready", "Record that an agent's finished work is standing up for the user to SEE, "
+          "with the exact click-by-click steps from the agent's report. Call it the moment an "
+          "agent presents reviewable work; a verdict can only be recorded on work marked ready.",
+          {"name": str, "steps": str})
+    async def mark_ready(args):
+        name = str(args["name"]).strip()
+        try:
+            desk.present(name, str(args["steps"]))
+        except DeliveryError as refused:
+            return _say(str(refused))
+        return _say(f"Marked: {name}'s work is presented, awaiting their verdict.")
+
+    @tool("record_verdict", "Record the user's verdict on presented work, the moment they give "
+          "it. `verdict` is 'approved' or 'rejected'. Approval sends the agent to land the work; "
+          "rejection sends it back with `feedback` - their words on what was wrong.",
+          {"name": str, "verdict": str, "feedback": str})
+    async def record_verdict(args):
+        name = str(args["name"]).strip()
+        word = str(args["verdict"]).strip().lower()
+        if word not in ("approved", "rejected"):
+            return _say("Say a verdict of exactly approved or rejected.")
+        try:
+            desk.verdict(name, word == "approved", feedback=str(args.get("feedback") or ""))
+        except DeliveryError as refused:
+            return _say(str(refused))
+        if word == "approved":
+            return _say(f"Recorded. {name} is off to land it and will report when it's in.")
+        return _say(f"Recorded. {name} has their feedback and will present again.")
+
+    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, close_agent_tab,
+             mark_ready, record_verdict]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
 

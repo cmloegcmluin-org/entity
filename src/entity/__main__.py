@@ -34,7 +34,7 @@ from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.transcript import Transcript, recent_turns
-from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice, voice_choice
+from entity.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
 
@@ -164,31 +164,27 @@ def _persona():
 
 
 def _voice(announce):
-    """The voice, starting on whatever can speak RIGHT NOW and upgrading itself.
+    """The voice, fully loaded BEFORE the Entity says it is ready.
 
-    The neural voice needs a third of a gigabyte of model on disk. The first launch fetches it in
-    the background while the robot System.Speech voice serves; the swap lands mid-session the
-    moment the model is loaded, and every later launch starts neural after one warm-up sentence.
-    A machine that can't fetch or load it just stays on the robot voice and says so."""
-    voice = SwappableTTS(SystemTTS(rate=2))
-
-    def upgrade():
-        paths = ensure_voice(RUNTIME_DIR / "tts", announce=announce)
-        if paths is None:
-            announce("(couldn't fetch the neural voice - staying on the system one)")
-            return
-        name, speed = voice_choice(RUNTIME_DIR / "tts")
-        engine = KokoroEngine(*paths, voice=name, speed=speed)
-        try:
-            engine.say("Ready.")  # load the model here, off the startup path, and warm it
-        except Exception as exc:
-            announce(f"(the neural voice failed to load: {exc!r} - staying on the system one)")
-            return
-        voice.swap(Speaker(engine, play=play_samples))
-        announce(f"(the neural voice is in: {name} - change it in runtime/tts/voice.txt)")
-
-    threading.Thread(target=upgrade, daemon=True).start()
-    return voice
+    It first shipped the other way - the robot System.Speech voice served while the neural model
+    loaded in the background - and the first reply of every session came out robot-voiced. His
+    call: "Just don't be ready until it loads. Time to start up is not precious; it's only time
+    to respond while in session that matters." So startup blocks on the fetch (once ever) and the
+    load (~2s), and the robot voice remains only for a machine where the neural one genuinely
+    can't be had - said out loud, not discovered by ear."""
+    paths = ensure_voice(RUNTIME_DIR / "tts", announce=announce)
+    if paths is None:
+        announce("(couldn't fetch the neural voice - the system voice will serve)")
+        return SystemTTS(rate=2)
+    name, speed = voice_choice(RUNTIME_DIR / "tts")
+    announce(f"(loading the voice: {name} - change it in runtime/tts/voice.txt)")
+    engine = KokoroEngine(*paths, voice=name, speed=speed)
+    try:
+        engine.say("Ready.")  # the load and the warm-up, paid here rather than mid-conversation
+    except Exception as exc:
+        announce(f"(the neural voice failed to load: {exc!r} - the system voice will serve)")
+        return SystemTTS(rate=2)
+    return Speaker(engine, play=play_samples)
 
 
 def _build_ears(text_mode, stop, interrupt, announce=print):

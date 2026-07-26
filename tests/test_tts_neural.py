@@ -1,6 +1,4 @@
-import pytest
-
-from entity.tts_neural import DEFAULT_SPEED, DEFAULT_VOICE, KokoroEngine, SwappableTTS, ensure_voice, voice_choice
+from entity.tts_neural import DEFAULT_SPEED, DEFAULT_VOICE, KokoroEngine, ensure_voice, voice_choice
 
 
 def test_the_voice_choice_defaults_when_nothing_is_configured(tmp_path):
@@ -90,35 +88,3 @@ def test_the_engine_opens_the_model_once_however_much_it_says():
     assert opened == ["model.onnx"]
 
 
-class OneShotVoice:
-    def __init__(self, name):
-        self.name = name
-        self.spoke = []
-
-    def speak(self, text, *, interrupt=None):
-        self.spoke.append(text)
-
-
-def test_the_swappable_voice_delegates_to_whoever_holds_it_now():
-    # The neural voice takes minutes to download on first launch; the robot voice serves until it
-    # lands, then the swap upgrades mid-session - nothing downstream knows or cares which is in.
-    first, second = OneShotVoice("robot"), OneShotVoice("neural")
-    voice = SwappableTTS(first)
-
-    voice.speak("Before.")
-    voice.swap(second)
-    voice.speak("After.")
-
-    assert first.spoke == ["Before."]
-    assert second.spoke == ["After."]
-
-
-def test_the_swappable_voice_only_offers_streaming_when_its_holder_does():
-    # The conversation checks for stream() to decide between speaking sentences as they form and
-    # speaking the reply whole; a wrapper that claimed streaming for the robot voice would silence
-    # every reply until the download finished.
-    voice = SwappableTTS(OneShotVoice("robot"))
-
-    assert not hasattr(voice, "stream")
-    with pytest.raises(AttributeError):
-        voice.stream

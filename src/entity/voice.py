@@ -87,6 +87,10 @@ class Reply:
         self._spoken_form = spoken_form or (lambda sentence: sentence)
         self._queue = queue.SimpleQueue()
         self._spoken = []
+        # Whether this reply's sound is in the air RIGHT NOW - one span from the first play to
+        # drained, not flapping between sentences. The mic asks: while the brain merely thinks,
+        # what it hears is the user (keep it); while this is True, it is mostly the Entity itself.
+        self.sounding = False
         self._sentences = SentenceStream(self._queue.put)
         self._worker = threading.Thread(target=self._pump, daemon=True)
         self._worker.start()
@@ -102,17 +106,21 @@ class Reply:
         return " ".join(self._spoken)
 
     def _pump(self):
-        while True:
-            sentence = self._queue.get()
-            if sentence is _END:
-                return
-            if _fired(self._interrupt):
-                continue  # cut off: drain the rest unspoken, so done() comes straight back
-            samples, samplerate = self._engine.say(self._spoken_form(sentence))
-            if _fired(self._interrupt):
-                continue
-            self._play(samples, samplerate, interrupt=self._interrupt)
-            self._spoken.append(sentence)  # heard - at least its start, if the cut came mid-word
+        try:
+            while True:
+                sentence = self._queue.get()
+                if sentence is _END:
+                    return
+                if _fired(self._interrupt):
+                    continue  # cut off: drain the rest unspoken, so done() comes straight back
+                samples, samplerate = self._engine.say(self._spoken_form(sentence))
+                if _fired(self._interrupt):
+                    continue
+                self.sounding = True
+                self._play(samples, samplerate, interrupt=self._interrupt)
+                self._spoken.append(sentence)  # heard - at least its start, if the cut came mid-word
+        finally:
+            self.sounding = False  # however the reply ends, the air is clear once the pump is
 
 
 def _fired(interrupt):

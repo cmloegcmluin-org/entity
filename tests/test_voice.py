@@ -101,6 +101,33 @@ def test_sentences_are_synthesized_in_their_spoken_form_but_recorded_raw():
     assert spoken == "It's in C:/deep/path.md."
 
 
+def test_a_reply_reports_when_its_sound_is_actually_in_the_air():
+    # The mic needs to know the difference between the Entity THINKING (no sound - the user's
+    # words are theirs to keep) and its voice actually sounding (what the mic hears now is mostly
+    # the Entity itself). One flag spanning first sound to drained, not flapping per sentence.
+    playing = threading.Event()
+    hold = threading.Event()
+
+    class HoldingPlayer(FakePlayer):
+        def __call__(self, samples, samplerate, interrupt=None):
+            playing.set()
+            super().__call__(samples, samplerate, interrupt)
+
+    engine, player = FakeEngine(), HoldingPlayer(hold=hold)
+    speaker = Speaker(engine, play=player)
+
+    reply = speaker.stream()
+    assert reply.sounding is False  # the brain is still writing; nothing is in the air
+
+    reply.add("First thing. ")
+    assert playing.wait(2.0)
+    assert reply.sounding is True  # audio is out of the speaker right now
+
+    hold.set()
+    reply.done()
+    assert reply.sounding is False  # drained: the air is clear again
+
+
 def test_a_barge_in_cuts_the_reply_and_the_rest_stays_unspoken():
     # One stop silences all of it: the queued sentences drain unspoken, and done() reports only
     # what actually got out - the record must never claim words were heard that weren't.

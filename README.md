@@ -33,6 +33,12 @@ Replies are spoken **as they are written**, sentence by sentence — first words
 seconds, one stop silencing everything still queued — with no stock phrases around them: no
 acknowledgement line, no "I'll get back to you on that", no length gate.
 
+**The ear stays open** (window mode). While Entity is only *thinking*, nothing is coming out of
+the speakers, so whatever you say lands in your draft as usual. While its voice is *sounding*,
+what you say is judged against the words it is speaking: its own voice arriving back through the
+mic is dropped, your words are kept in the draft — talking over it doesn't mean being unheard —
+and a barked stop word cuts the audio, while a sentence from the TV never can.
+
 ## What you put in `runtime/`
 
 | File | What it is |

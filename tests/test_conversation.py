@@ -311,6 +311,58 @@ def test_a_spoken_stop_word_cuts_the_voice_off():
     assert interrupt.is_set()  # the spoken "stop" tripped the same interrupt the Enter key does
 
 
+def test_the_stop_watcher_is_handed_the_script_and_the_audio_state():
+    # Full duplex needs the mic to know two things the bare stop-watch never carried: WHAT is
+    # being spoken (to tell the Entity's own leak from someone talking over it) and WHETHER sound
+    # is in the air at all (while the brain merely thinks, the ear stays open). Both ride in on
+    # catch_stop for a mic whose catch_stop can take them.
+    seen = {}
+    done_speaking = threading.Event()
+
+    class DuplexSTT:
+        def listen(self):
+            return "make it so"
+
+        def catch_stop(self, active, script=None, audio=None):
+            seen["script"] = script
+            seen["audio"] = audio
+            while active():
+                time.sleep(0.005)
+            return False
+
+    class FakeReply:
+        def __init__(self):
+            self.sounding = False
+            self.text = []
+
+        def add(self, piece):
+            self.text.append(piece)
+
+        def done(self):
+            return "".join(self.text)
+
+    class StreamingTTS:
+        def __init__(self):
+            self.reply = FakeReply()
+
+        def stream(self, *, interrupt=None, spoken_form=None):
+            return self.reply
+
+    class StreamingBrain:
+        def respond(self, utterance, *, on_text=None):
+            for piece in ("All three are ", "green."):
+                on_text(piece)
+            return "All three are green."
+
+    tts = StreamingTTS()
+    convo = Conversation(DuplexSTT(), StreamingBrain(), tts, interrupt=threading.Event())
+
+    convo.turn()
+
+    assert seen["script"]() == "All three are green."  # the words being spoken, as they stand
+    assert seen["audio"]() is tts.reply.sounding is False  # and the live is-sound-out state
+
+
 def test_stop_listening_sleeps_the_entity_and_hey_entity_wakes_it():
     brain = FakeBrain()
     tts = FakeTTS()

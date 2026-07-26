@@ -626,3 +626,114 @@ def test_a_phantom_thank_you_over_a_weak_flicker_is_still_dropped():
     dictation.pump()
 
     assert ears.drafted == []
+
+
+def _watched(dictation, caught, **kwargs):
+    """The stop-watcher, run the way conversation runs it: on a thread beside the pump, released
+    by flipping caught["done"] once the pump has drained the scripted mic."""
+    def watcher():
+        caught["stopped"] = dictation.catch_stop(lambda: caught.get("done") is None, **kwargs)
+
+    thread = threading.Thread(target=watcher, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 2.0
+    while dictation._bark is None and time.monotonic() < deadline:
+        time.sleep(0.005)  # the pump must not outrun the watcher installing its bark event
+    return thread
+
+
+def test_the_ear_stays_open_while_the_entity_merely_thinks():
+    # Full duplex, first half. Between handing a turn over and the first sound there is nothing
+    # coming out of the speakers - no leak to fear - so words said then are the user's, kept as
+    # draft. They used to become bark-checks and vanish for the whole think.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("and one more thing"),
+                          FakeMic(_burst_then_pause() + [_sil()] * 8),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+    thread = _watched(dictation, caught, script=lambda: "", audio=lambda: False)
+
+    dictation.pump()
+    caught["done"] = True
+    thread.join(2.0)
+
+    assert caught.get("stopped") is False
+    assert ears.drafted == ["and one more thing"]  # heard, kept - the reply had made no sound yet
+
+
+def test_its_own_voice_while_sounding_is_dropped_not_drafted():
+    # The leak's measured mark: it transcribes near-verbatim. Words the script covers are its own
+    # voice arriving back through the mic - never draft text.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("the dropdown is reordered"),
+                          FakeMic([_sil()] * 2 + [_sp()] * 7 + [_sil()] * 8),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+    thread = _watched(dictation, caught,
+                      script=lambda: "The dropdown is reordered and live at localhost.",
+                      audio=lambda: True)
+
+    dictation.pump()
+    caught["done"] = True
+    thread.join(2.0)
+
+    assert caught.get("stopped") is False
+    assert ears.drafted == []
+
+
+def test_talking_over_the_reply_is_heard_and_kept_but_does_not_cut_it():
+    # Full duplex, second half: their own words over its voice land in the draft - talking over
+    # the reply must not mean being unheard. And no cut: only a stop bark silences the voice, so
+    # the TV (whose sentence once killed an utterance) can never kill a reply.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("actually put it under settings"),
+                          FakeMic([_sil()] * 2 + [_sp()] * 7 + [_sil()] * 8),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+    thread = _watched(dictation, caught,
+                      script=lambda: "The dropdown is reordered and live at localhost.",
+                      audio=lambda: True)
+
+    dictation.pump()
+    caught["done"] = True
+    thread.join(2.0)
+
+    assert caught.get("stopped") is False  # words alone never cut the voice
+    assert ears.drafted == ["actually put it under settings"]
+
+
+def test_a_flicker_of_sound_while_it_speaks_never_reaches_the_draft():
+    # Four loud frames is under the measured line of real speech (DELIBERATE_RUN=6): whatever the
+    # model reads into it is an invention, and inventions do not get to talk over the reply.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("thank you"),
+                          FakeMic(_burst_then_pause() + [_sil()] * 8),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+    thread = _watched(dictation, caught, script=lambda: "Something else entirely.",
+                      audio=lambda: True)
+
+    dictation.pump()
+    caught["done"] = True
+    thread.join(2.0)
+
+    assert caught.get("stopped") is False
+    assert ears.drafted == []
+
+
+def test_a_stop_bark_while_it_merely_thinks_still_cuts_the_turn():
+    # The open ear must not cost the voice-stop: a bark mid-think cancelled the brain before, and
+    # still must - it fires on its own now instead of riding on "the whole watch is speaking".
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("stop"),
+                          FakeMic(_burst_then_pause() + [_sil()] * 20),
+                          pause_frames=3, **ears.kwargs())
+    caught = {}
+    thread = _watched(dictation, caught, script=lambda: "", audio=lambda: False)
+
+    dictation.pump()
+    caught["done"] = True
+    thread.join(2.0)
+
+    assert caught.get("stopped") is True  # the bark cut the think
+    assert ears.drafted == []  # and never became draft text

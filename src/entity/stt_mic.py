@@ -25,6 +25,7 @@ import numpy as np
 FRAME = 480  # 30 ms at 16 kHz
 PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
 MIN_VOICED_RUN = 4  # 120 ms - shorter than any syllable, so a burst under it holds no word
+DELIBERATE_RUN = 6  # 180 ms - the measured floor of real speech; inventions sat at 1-4 frames
 SPEECH_RATIO = 2.5  # this many times the room's quiet level counts as speech
 FLOOR_MIN = 0.0008  # the floor never drops below this, so digital silence can't set an absurd bar
 FLOOR_ADAPT = 0.1  # how fast the floor tracks quiet frames (EMA step)
@@ -116,11 +117,25 @@ class Burst:
     def carries_speech(self):
         return carries_speech(self._voiced)
 
+    def sounds_deliberate(self):
+        """Voice that ran long enough to be someone actually talking, not a flicker the model will
+        invent words over. The measured line (two replayed sessions): everything actually spoken
+        ran 6+ voiced frames; every invented chunk sat at 1-4. A burst past that line is trusted
+        even when its words are on the stock-phrase list - his real "thank you" sounds like this."""
+        return carries_speech(self._voiced, min_run=DELIBERATE_RUN)
 
-def _is_invented(text, terminator):
+
+def _is_invented(text, terminator, *, deliberate=False):
     """True if the chunk is nothing the user said - filler the model hears in near-silence, or its
     stock answer to a stretch with no words in it. Never true of a chunk carrying the terminator, so
-    a real 'yeah, over' still ends the turn."""
+    a real 'yeah, over' still ends the turn.
+
+    `deliberate` is the burst's own testimony (see Burst.sounds_deliberate): sound that ran long
+    enough to be someone actually talking. A REAL "thank you" was being eaten by this filter -
+    "it's more important for when I'm trying to actually say it that it can hear me" - and what
+    separates his from the phantoms is the voice under it, which the text alone cannot show."""
+    if deliberate:
+        return False
     words = [re.sub(r"[^a-z]", "", w.lower()) for w in text.split()]
     words = [w for w in words if w]
     if not words or terminator in words:
@@ -256,7 +271,7 @@ class MicSTT:
         if not burst.carries_speech():
             return None
         text = self._transcriber.transcribe(burst.audio()).strip()
-        if text and not _is_invented(text, self._terminator):
+        if text and not _is_invented(text, self._terminator, deliberate=burst.sounds_deliberate()):
             segments.append(text)  # drop pure "mm-hmm/yeah" hallucinations on near-silence
         without_terminator = _strip_terminator(" ".join(segments), self._terminator)
         if without_terminator is not None:

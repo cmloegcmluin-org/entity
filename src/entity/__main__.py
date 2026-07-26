@@ -65,16 +65,18 @@ def _fresh_worktree_note():
 
 def _projects_note():
     """Persona line: where the user's projects live, so the brain never has to ask. It asked for
-    the path to a repo whose name alone identified it; the workspace listing already knew."""
+    the path to a repo whose name alone identified it; the directory listings already knew."""
     from entity.worktrees import projects
 
-    known = projects(WORKSPACE)
-    if not known:
+    homes = [(root, projects(root)) for root in _project_roots()]
+    homes = [(root, known) for root, known in homes if known]
+    if not homes:
         return ""
+    listed = "; ".join(f"{root}: {', '.join(known)}" for root, known in homes)
     return (
-        f" Their projects live under {WORKSPACE}, one directory per project: {', '.join(known)}. "
-        "When they name one, that is the repo - never ask where it is. A new agent for project "
-        f"<name> works in {WORKSPACE}\\<name>\\.claude\\worktrees\\<short-task-name>."
+        f" Their projects live one directory per project under these roots - {listed}. When they "
+        "name one, that is the repo - never ask where it is. A new agent for a project works in "
+        "<that project's directory>\\.claude\\worktrees\\<short-task-name>."
     )
 
 
@@ -88,17 +90,25 @@ def _mic_gain():
         return 1.0
 
 
-def _vocab_terms():
-    """The terms Parakeet is biased toward, so a coined name like "Notecraft" stops coming back as
-    "note craft". Two sources: project folder names (scanned off the workspace root, plus any roots
-    in vocab-roots.txt), and the hand-kept lexicon - coined names and domain vocabulary alike, the
-    same file the brain carries as standing context, so a term added in one place fixes both."""
-    from entity.vocabulary import scan_terms
-
+def _project_roots():
+    """Everywhere the user's projects live: the workspace, plus each root listed in
+    vocab-roots.txt - one file feeding both the transcription vocabulary and the brain's map,
+    so a root added there fixes "it can't hear the name" and "it asked where the repo is" at once."""
     roots = [WORKSPACE]
     if VOCAB_ROOTS.exists():
-        roots += [Path(line) for line in VOCAB_ROOTS.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return scan_terms(roots) | set(lexicon_terms(load_lexicon()))
+        roots += [Path(line.strip()) for line in VOCAB_ROOTS.read_text(encoding="utf-8").splitlines()
+                  if line.strip()]
+    return roots
+
+
+def _vocab_terms():
+    """The terms Parakeet is biased toward, so a coined name like "Notecraft" stops coming back as
+    "note craft". Two sources: project folder names (scanned off every project root), and the
+    hand-kept lexicon - coined names and domain vocabulary alike, the same file the brain carries
+    as standing context, so a term added in one place fixes both."""
+    from entity.vocabulary import scan_terms
+
+    return scan_terms(_project_roots()) | set(lexicon_terms(load_lexicon()))
 
 
 def _agent_inbox_note(inbox):

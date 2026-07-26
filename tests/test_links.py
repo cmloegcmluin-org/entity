@@ -97,3 +97,28 @@ def test_only_what_the_module_would_offer_can_be_opened():
     assert offers(real, exists=lambda p: p == real) is True  # the spaced path it just handed out
     assert offers("not a link at all") is False
     assert offers(real, exists=lambda p: False) is False  # a spaced path that exists nowhere
+
+
+def test_a_bare_localhost_address_is_a_link():
+    # "when it said localhost:5200 I couldn't click it" - the natural way a person writes a local
+    # app's address has no scheme, and the renderer must still know it opens.
+    assert link_in("localhost:5200") == "localhost:5200"
+    assert link_in("127.0.0.1:5201/inbox") == "127.0.0.1:5201/inbox"
+    assert link_in("localhost:5200.") == "localhost:5200"  # the sentence's own full stop
+
+
+def test_ordinary_words_with_colons_are_not_links():
+    assert link_in("note:") is None
+    assert link_in("10:30") is None  # a time is not a port
+
+
+def test_a_bare_localhost_address_opens_in_the_browser_with_its_scheme_restored():
+    opened = []
+    open_link("localhost:5200", browser=opened.append, shell=lambda where: None)
+
+    assert opened == ["http://localhost:5200"]
+
+
+def test_a_bare_localhost_address_is_spoken_as_written():
+    # He liked hearing "localhost 5200" - it IS the natural spoken form, unlike a full URL.
+    assert as_spoken("It's live at localhost:5200 now.") == "It's live at localhost:5200 now."

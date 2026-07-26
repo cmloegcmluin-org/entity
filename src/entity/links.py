@@ -18,10 +18,14 @@ import re
 import webbrowser
 from pathlib import Path, PureWindowsPath
 
-# A drive-letter path, a UNC share, or an http(s) address. Nothing looser: a bare `src/entity` is
-# indistinguishable from "and/or" or "they/she", and a wrong thing offered as openable is worse than
-# a right one left plain.
-_LINK = re.compile(r"https?://\S+|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+")
+# A drive-letter path, a UNC share, an http(s) address - or a LOCAL app's address the way a
+# person writes it: "localhost:5200", scheme and all dropped. That last one is scoped to the two
+# local hosts with an explicit port, because anything looser ("note:", "10:30") is ordinary prose.
+# Nothing else: a bare `src/entity` is indistinguishable from "and/or" or "they/she", and a wrong
+# thing offered as openable is worse than a right one left plain.
+_BARE_LOCAL = r"(?:localhost|127\.0\.0\.1):\d{2,5}(?:/\S*)?"
+_LINK = re.compile(rf"https?://\S+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+")
+_IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
 
 # Entity writes these inside sentences, so the full stop after a filename is the sentence's and
 # the bracket around an address is the sentence's too.
@@ -85,8 +89,8 @@ def _widest(words, index, exists):
     them. A wider run only wins when the disk confirms it, so a real word after a real path is
     never swallowed into it."""
     base = link_in(words[index])
-    if base.startswith(("http://", "https://")):
-        return 1, base
+    if base.startswith(("http://", "https://")) or _IS_BARE_LOCAL.fullmatch(base):
+        return 1, base  # a web address holds no space, so it is never widened across the disk
     widest_span, widest = 1, base
     for span in range(2, min(MAX_PATH_WORDS, len(words) - index) + 1):
         # `base` already proved this is a drive/UNC path; an extension across a space cannot match
@@ -127,6 +131,8 @@ def _stand_in(target):
     "it's in profile.md", never the eight folders above it."""
     if target.startswith(("http://", "https://")):
         return SPOKEN_ADDRESS
+    if _IS_BARE_LOCAL.fullmatch(target):
+        return target  # "localhost:5200" IS the natural spoken form; only the page needs more
     return PureWindowsPath(target).name or SPOKEN_ADDRESS
 
 
@@ -144,6 +150,9 @@ def open_link(target, *, browser=webbrowser.open, shell=_on_this_machine):
     If nothing in the path exists, nothing opens - there is no such place to show."""
     if target.startswith(("http://", "https://")):
         browser(target)
+        return
+    if _IS_BARE_LOCAL.fullmatch(target):
+        browser(f"http://{target}")  # written the human way; the browser still needs its scheme
         return
     where = Path(target)
     while not where.exists() and where.parent != where:

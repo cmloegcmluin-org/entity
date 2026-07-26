@@ -598,3 +598,31 @@ def test_the_sounds_he_makes_while_thinking_never_reach_the_draft():
     dictation.pump()
 
     assert ears.drafted == ["So the drive link is wrong"]
+
+
+def test_a_thank_you_he_really_said_lands_in_the_draft():
+    # "it apparently can't hear me when I say 'thank you'... it's more important for when I'm
+    # trying to actually say it that it can hear me." The stock-phrase filter exists for phantom
+    # thank-yous invented over near-silence - but his real one carries real voice: the measured
+    # line is that nothing actually spoken ran under 6 voiced frames and inventions sat at 1-4.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("Thank you."),
+                          FakeMic([_sil()] * 2 + [_sp()] * 8 + [_sil()] * 4),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["Thank you."]
+
+
+def test_a_phantom_thank_you_over_a_weak_flicker_is_still_dropped():
+    # The same words over a marginal flicker of sound - the shape every invented chunk had - stay
+    # filtered, so ambient recording doesn't fill the draft with courtesies nobody said.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("Thank you."),
+                          FakeMic([_sil()] * 2 + [_sp()] * 4 + [_sil()] * 4),
+                          pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == []

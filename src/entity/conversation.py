@@ -73,6 +73,22 @@ DEFAULT_CANCEL_WAIT = 10.0
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
 DEFAULT_READ_PAUSE = 0.0
 
+# With no word from the user for this long, they are off doing something else - and news breaking
+# in "out of nowhere" is a jolt. Dormant, the news is OFFERED instead of read: one line naming who
+# it is about, and the content waits until they engage, so they decide when to stop and listen.
+DEFAULT_DORMANT_AFTER = 180.0
+
+# How the offer is worded. App-authored (the ledger reads it back to the brain), because it must
+# be sayable even while the brain is mid-something-else.
+UPDATE_OFFER = "I've got an update on {what} when you're ready."
+
+# A bare go-ahead releases a held update. Exact matches only: "okay" mid-sentence is them talking,
+# not them asking for the news.
+_GO_AHEADS = frozenset((
+    "ok", "okay", "yes", "yeah", "yep", "sure", "ready", "go ahead", "go for it", "alright",
+    "hit me", "im ready", "i m ready", "lets hear it", "let s hear it", "go",
+))
+
 
 class _ThinkInterrupted(Exception):
     """Internal signal that a barge-in cancelled the brain call - the turn is abandoned and the
@@ -98,6 +114,24 @@ def _cause(exc, depth=3):
         links.append(detail)
         exc = exc.__cause__ or exc.__context__
     return ", caused by ".join(links)
+
+
+def _newest_per_agent(waiting):
+    """Undelivered news about an agent, superseded by newer news about the same agent.
+
+    Every turn-end while the user was away queued its own narration, and the roll call then read
+    the same name four times - a list with no choice in it. The newest sentence about an agent
+    already says where things stand; the ones they never heard are history. News with no agent
+    on it (about=None) is never collapsed - those are not updates on one thing."""
+    keep = []
+    for place, item in enumerate(waiting):
+        about = getattr(item, "about", None)
+        if about is not None and any(
+            getattr(newer, "about", None) == about for newer in waiting[place + 1:]
+        ):
+            continue
+        keep.append(item)
+    return keep
 
 
 def _accepts_streaming(brain):
@@ -147,8 +181,10 @@ class Conversation:
         interrupt_poll=DEFAULT_INTERRUPT_POLL,
         cancel_wait=DEFAULT_CANCEL_WAIT,
         read_pause=DEFAULT_READ_PAUSE,
+        dormant_after=DEFAULT_DORMANT_AFTER,
         console=None,
         sleep=time.sleep,
+        clock=time.monotonic,
         timings=False,
         outbox=None,
         interrupt=None,
@@ -168,6 +204,10 @@ class Conversation:
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._waiting = []  # news drained from the outbox and not delivered yet
         self._announced = 0  # how many were waiting when the roll call was last read out
+        self._clock = clock
+        self._dormant_after = dormant_after
+        self._last_engaged = clock()  # startup counts: they just launched it, so they are here
+        self._update_offered = False  # a dormant-lull offer stands; the news waits to be taken
         self._briefing = briefing  # callable: the live fleet state, put before the brain each turn
         self._brain_streams = _accepts_streaming(brain)
         self._interrupt_poll = interrupt_poll
@@ -284,11 +324,21 @@ class Conversation:
         # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
         self._waiting.extend(self._outbox.drain())
+        self._waiting = _newest_per_agent(self._waiting)
         if not self._waiting:
             self._announced = 0  # nothing outstanding, so the next single item is simply spoken
+            self._update_offered = False
             return
         if self._they_are_talking():
             return
+        if self._dormant():
+            # They are off doing something else; news breaking in "out of nowhere" is a jolt.
+            # One offer names who it is about, and the content waits for them to engage.
+            if not self._update_offered:
+                self._update_offered = True
+                self._say(UPDATE_OFFER.format(what=self._whose_news()))
+            return
+        self._update_offered = False
         if self._announced:
             # A list has been read out and not worked through. Say it again only if it has changed,
             # or every trip round the loop would recite the same names at them.
@@ -331,6 +381,29 @@ class Conversation:
         self._say(said, record=False,
                   known=getattr(news, "composed", False) and said == news)
         return Turn(heard=heard, said=said)
+
+    def _dormant(self):
+        return (self._dormant_after is not None
+                and self._clock() - self._last_engaged > self._dormant_after)
+
+    def _whose_news(self):
+        names = []
+        for item in self._waiting:
+            about = getattr(item, "about", None) or "your agents"
+            if about not in names:
+                names.append(about)
+        return " and ".join(names)
+
+    def _release_updates(self, heard):
+        """They said the word: the held update goes out now, as this turn."""
+        self._update_offered = False
+        if len(self._waiting) > 1:
+            self._announce()
+            return Turn(heard=heard, said=roll_call(self._waiting))
+        news = self._waiting.pop()
+        self._console.heads_up(news)
+        self._say(news, record=False, known=getattr(news, "composed", False))
+        return Turn(heard=heard, said=str(news))
 
     def _they_are_talking(self):
         """Are they part-way through saying something? While they are, the Entity says nothing of its
@@ -406,6 +479,7 @@ class Conversation:
             self._console.ignored()
             return None
         self._console.heard(heard)  # show what was transcribed before we act on it
+        self._last_engaged = self._clock()  # they spoke: present again, whatever the clock said
         if farewell:
             self._speak_reply(self.farewell_reply)
             return Turn(heard=heard, said=self.farewell_reply, farewell=True)
@@ -417,6 +491,8 @@ class Conversation:
             self._paused = True
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
+        if self._update_offered and self._waiting and _canonical(heard) in _GO_AHEADS:
+            return self._release_updates(heard)  # they said the word; the held update is the turn
         if self._waiting:  # they may be naming one of the agents the roll call just read out
             picked = self._take_pick(heard)
             if picked is not None:
@@ -474,8 +550,10 @@ class Conversation:
             return Turn(heard=heard, said="")
         speak_start = time.monotonic()
         if reply is not None:
-            reply.done()  # the text is complete; wait out the audio still going out
-            self._console.reply(said)  # the full reply on screen and the record, as spoken
+            # On screen the moment the text is complete - the audio is still going out, and
+            # reading along beats being read to and shown the words afterwards.
+            self._console.reply(said)
+            reply.done()  # then wait out the rest of the audio
             if self._interrupted():  # the audio was cut partway - the record must say so
                 self._console.spoke("(cut off mid-utterance)")
         else:

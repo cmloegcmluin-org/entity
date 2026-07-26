@@ -32,7 +32,8 @@ def roll_call(news):
         return f"Still waiting: {_label(news[0])}."
     listed = " ".join(f"{_spoken(place).capitalize()}, {_label(item)}."
                       for place, item in enumerate(news, start=1))
-    return f"{_spoken(len(news)).capitalize()} waiting. {listed} Which first?"
+    # "updates", because "Four waiting." landed as "four WHATS?" - the count needs its noun.
+    return f"{_spoken(len(news)).capitalize()} updates waiting. {listed} Which first?"
 
 
 def chosen(heard, news):

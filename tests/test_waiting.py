@@ -14,7 +14,7 @@ def test_several_ready_at_once_are_read_out_numbered():
     news = [News("fixer: the drive link is fixed", about="fixer"),
             News("docs-sidebar: needs your call on the width", about="docs-sidebar")]
 
-    assert roll_call(news) == "Two waiting. One, fixer. Two, docs-sidebar. Which first?"
+    assert roll_call(news) == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"
 
 
 def test_the_last_one_left_is_named_rather_than_numbered():

@@ -393,7 +393,7 @@ def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named
 
     convo.turn()
 
-    assert tts.spoken[0] == "Two waiting. One, fixer. Two, docs-sidebar. Which first?"
+    assert tts.spoken[0] == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"
     assert "the drive link is fixed" not in " ".join(tts.spoken)  # neither is read out unasked
 
 
@@ -427,7 +427,7 @@ def test_a_list_already_read_out_is_not_recited_every_turn():
 
     # Counted as announcements, not substrings: the fake brain echoes its whole prompt back, and
     # the system note in it legitimately quotes the roll call it was told about.
-    assert len([line for line in tts.spoken if line.startswith("Two waiting.")]) == 1
+    assert len([line for line in tts.spoken if line.startswith("Two updates waiting.")]) == 1
 
 
 def test_once_the_list_is_worked_through_the_next_single_notice_is_simply_spoken():
@@ -462,8 +462,132 @@ def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said()
     outbox.push("drive-export: green and pushed", about="drive-export")
     convo.turn()
 
-    assert ("Three waiting. One, fixer. Two, docs-sidebar. Three, drive-export. Which first?"
+    assert ("Three updates waiting. One, fixer. Two, docs-sidebar. Three, drive-export. Which first?"
             in tts.spoken)
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_news_after_a_long_lull_is_offered_not_dumped():
+    # "instead of just suddenly start talking at me it would say 'I have an update if you're
+    # ready'" - dormant, he is mid-something-else; the announcement lets him decide when to
+    # stop, get comfortable, and take it.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT([""]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600  # ten minutes with no word from him
+    outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix",
+                composed=True)
+
+    convo.turn()
+
+    assert tts.spoken == ["I've got an update on asana-submit-fix when you're ready."]
+
+
+def test_a_go_ahead_releases_the_held_update():
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "okay"]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix",
+                composed=True)
+
+    convo.turn()  # the offer goes out
+    turn = convo.turn()  # "okay"
+
+    assert tts.spoken[-1] == "The fix is ready to look at on localhost:5200."
+    assert turn.said == "The fix is ready to look at on localhost:5200."
+
+
+def test_the_offer_is_made_once_not_every_pass_round_the_loop():
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("news", about="fixer", composed=True)
+
+    convo.turn()
+    convo.turn()
+    convo.turn()
+
+    assert tts.spoken.count("I've got an update on fixer when you're ready.") == 1
+
+
+def test_engaging_with_anything_else_still_gets_the_news_delivered():
+    # He answered with a question of his own rather than a go-ahead: he is present again, so the
+    # held news flows on the next pass rather than waiting for magic words.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("news about the fix", about="fixer", composed=True)
+
+    convo.turn()  # the offer
+    convo.turn()  # his unrelated question - engagement
+    convo.turn()  # news flows at the top of the next pass
+
+    assert "news about the fix" in tts.spoken
+
+
+def test_news_while_he_is_active_is_not_gated_behind_an_offer():
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 60  # he spoke recently
+    outbox.push("straight news", about="fixer", composed=True)
+
+    convo.turn()
+
+    assert tts.spoken[0] == "straight news"
+
+
+def test_stacked_news_about_one_agent_collapses_to_the_newest():
+    # "Four waiting. One, asana-submit-fix. Two, asana-submit-fix..." - every turn-end while he
+    # was away queued its own narration about the SAME agent, and the roll call read the same name
+    # four times. Undelivered news about an agent is superseded by newer news about it: the newest
+    # sentence already describes where things stand.
+    outbox = Outbox()
+    for stale in ("asana-submit-fix is on it.", "asana-submit-fix hit a snag but recovered.",
+                  "asana-submit-fix is testing now."):
+        outbox.push(stale, about="asana-submit-fix", composed=True)
+    outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix",
+                composed=True)
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert tts.spoken[0] == "The fix is ready to look at on localhost:5200."  # one line, the truth
+    assert not any("Which first?" in line for line in tts.spoken)  # no roll call of one name
+
+
+def test_news_about_different_agents_still_all_arrives():
+    outbox = Outbox()
+    outbox.push("fixer: done", about="fixer")
+    outbox.push("fixer: really done", about="fixer")
+    outbox.push("docs-sidebar: needs your call", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert tts.spoken[0] == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"
 
 
 def test_without_an_outbox_the_loop_is_unchanged():
@@ -994,6 +1118,26 @@ def test_a_streamed_reply_speaks_paths_the_way_a_person_would():
     convo.turn()
 
     assert tts.spoken_forms == [as_spoken]
+
+
+def test_the_bubble_appears_while_the_voice_is_still_speaking():
+    # "the text bubble doesn't appear until after it's been read aloud, but it should definitely
+    # happen in the opposite order, so if I'm there I can read along with it speaking."
+    events = []
+
+    class WatchedTTS(StreamingTTS):
+        class Reply(StreamingTTS.Reply):
+            def done(self):
+                events.append("audio finished")
+                return super().done()
+
+    console = Console(echo=lambda line: events.append(f"print:{line}"))
+    convo = Conversation(FakeSTT(["status"]), StreamingBrain(), WatchedTTS(), console=console)
+
+    convo.turn()
+
+    printed = next(e for e in events if e.startswith("print:entity>"))
+    assert events.index(printed) < events.index("audio finished")  # read along, not read after
 
 
 def test_a_streamed_reply_reaches_the_screen_and_the_record_whole():

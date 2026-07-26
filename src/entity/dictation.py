@@ -276,10 +276,10 @@ class Dictation:
             self._hearing.rest()  # the finished sentence is about to land; the live line makes way
         if burst.carries_speech():
             self._absorb(burst.audio(), armed=self._armed or self._finish_burst,
-                         speaking=heard_while_speaking)
+                         speaking=heard_while_speaking, deliberate=burst.sounds_deliberate())
         self._finish_burst = False
 
-    def _absorb(self, audio, *, armed=None, speaking=None):
+    def _absorb(self, audio, *, armed=None, speaking=None, deliberate=False):
         armed = self._armed if armed is None else armed
         speaking = self._speaking if speaking is None else speaking
         # The "um"s and "uh"s go before anything reads the text, so no reader downstream has to
@@ -292,14 +292,14 @@ class Dictation:
                 self._bark.set()
             return
         if armed:
-            self._take_dictation(text)
+            self._take_dictation(text, deliberate=deliberate)
         else:
             self._maybe_wake(text)
 
-    def _take_dictation(self, text):
+    def _take_dictation(self, text, *, deliberate=False):
         spoken = canonical(text)
         if ends_with_command(spoken, self._mutes):
-            self._draft_before_mute(text, spoken)
+            self._draft_before_mute(text, spoken, deliberate=deliberate)
             self.set_recording(False)
             return
         if self._retract_what_he_took_back(spoken):
@@ -318,7 +318,7 @@ class Dictation:
             self._on_submit_request()  # "over" still submits - old muscle memory, same meaning
             self.set_recording(False)  # ...and it is the whole gesture: turn handed over, mic down
             return
-        if _is_invented(text, self._terminator):
+        if _is_invented(text, self._terminator, deliberate=deliberate):
             return  # Parakeet's hallucinated filler on near-silence, not them
         self._on_draft(text)
 
@@ -341,13 +341,13 @@ class Dictation:
             return True  # what they took back is in this chunk; none of it goes in the box
         return False
 
-    def _draft_before_mute(self, text, spoken):
+    def _draft_before_mute(self, text, spoken, *, deliberate=False):
         """They said something and THEN the mute phrase ("add eggs, stop listening") - keep the
         something; the phrase itself never belongs in the draft."""
         for phrase in self._mutes:
             if spoken != phrase and spoken.endswith(" " + phrase):
                 kept = text.strip()[: -len(phrase)].rstrip(" ,.;:!?-")
-                if kept and not _is_invented(kept, self._terminator):
+                if kept and not _is_invented(kept, self._terminator, deliberate=deliberate):
                     self._on_draft(kept)
                 return
 

@@ -112,6 +112,7 @@ class SdkSession:
             self._shutdown_loop()
             raise
         self.last_context_tokens = 0  # size of the context the most recent ask processed
+        self.last_session_id = None  # the CLI session's id, for resuming it after a restart
 
     def _submit(self, coro):
         """Run a coroutine on this session's loop and wait for it.
@@ -160,6 +161,10 @@ class SdkSession:
                 carry(delta)
             if isinstance(message, ResultMessage):
                 self.last_context_tokens = _context_tokens(message.usage)
+                # The id is the session's whole memory made durable: a restarted process resumes
+                # it instead of stranding the conversation - the old failure was agents dying
+                # whenever the app did.
+                self.last_session_id = message.session_id or self.last_session_id
                 break
         # A session streaming partial messages heard the whole reply go past as deltas: THAT is
         # the reply, all of it. Keeping only the final message's text left the record showing a

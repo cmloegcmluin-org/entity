@@ -24,7 +24,10 @@ PROMPTS = {
         "what to watch happen. 'Run the tests' is never their verification; if the agent stood "
         "nothing up for their eyes, say the review isn't ready and tell the agent to stand one "
         "up. Never relay the report's internals - no commit hashes, no test counts, no branch "
-        "names, no file lists.]"
+        "names, no file lists. And if the report is only the agent pausing mid-task - narrating "
+        "a step, asking leave to continue, nothing done and nothing the user must decide - do "
+        "not interrupt them at all: use tell_agent to tell it to continue, and answer with the "
+        "single word: handled]"
     ),
     "died": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} DIED mid-task: "
@@ -64,6 +67,8 @@ class Narrator:
             said = self._brain.respond(prompt, remember=True)
         except Exception:
             said = ""
+        if said.strip().rstrip(".!").lower() == "handled":
+            return  # the brain kicked the agent onward itself; there is no news to deliver
         if said.strip():
             self._outbox.push(said.strip(), about=agent, composed=True)
         else:

@@ -77,3 +77,33 @@ def test_work_hands_the_desk_every_message_the_session_streams():
     agent.work("continue your task", on_message=watching.append)
 
     assert watching == ["a message about continue your task"]
+
+
+def test_an_agent_can_be_reopened_on_its_old_session():
+    # A restart used to strand the fleet; the resume id reattaches an agent to everything it knew.
+    made = []
+
+    def factory(options):
+        made.append(options)
+        return FakeSession(options)
+
+    async def decide(*a):
+        return True
+
+    agent = SupervisedAgent("fixer", "C:/wt", decide, session_factory=factory,
+                            resume="sess-42")
+
+    assert made[0].resume == "sess-42"
+
+
+def test_the_agents_session_id_is_readable_for_the_record():
+    async def decide(*a):
+        return True
+
+    class RememberingSession(FakeSession):
+        last_session_id = "sess-fixer-7"
+
+    agent = SupervisedAgent("fixer", "C:/wt", decide,
+                            session_factory=lambda options: RememberingSession(options))
+
+    assert agent.session_id == "sess-fixer-7"

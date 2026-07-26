@@ -360,3 +360,15 @@ def test_closing_a_session_releases_its_loop_rather_than_only_stopping_it(monkey
     session.close()
 
     assert _settled(built[0]), "close() left the event loop open"
+
+
+def test_the_sessions_id_is_kept_for_resuming_it_later():
+    # An agent's whole memory lives in its CLI session; the id is what lets a restarted Entity
+    # reattach instead of stranding the fleet - the old failure was "agents die when Entity dies".
+    client = StreamingClient()
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
+
+    session.ask("do the thing")
+
+    assert session.last_session_id == "s"  # from the turn's closing result message
+    session.close()

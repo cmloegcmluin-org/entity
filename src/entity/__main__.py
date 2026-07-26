@@ -43,6 +43,7 @@ from entity.voice import Speaker, play_samples
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
+AGENT_STATE = RUNTIME_DIR / "agents.json"  # the fleet's survival record: what a restart revives from
 AGENT_LOGS = RUNTIME_DIR / "agent-logs"  # one timestamped exchange log per agent, written by the desk
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
@@ -265,7 +266,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
     # does can block on agent work, and nothing it says doubles as a control channel.
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor,
-                     events=agent_events)
+                     events=agent_events, state_path=AGENT_STATE)
     actions_server, _ = fleet_actions(desk)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
@@ -273,6 +274,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                      seed_turns=recent_turns(TRANSCRIPTS))
     brain.warmup()
     newsroom["narrator"] = Narrator(brain, outbox)  # from here on, news arrives in its own voice
+    # "I close it and reopen it constantly": bring back every agent the last process recorded,
+    # each resumed on its old session - one caught mid-task is told to pick back up. After the
+    # narrator, so an instantly-finishing revival is narrated, not read out as a label.
+    revived = desk.revive()
+    if revived:
+        announce(f"(reattached to last session's agents: {', '.join(revived)})")
     dictation = None
     hearing = None
     if gui:

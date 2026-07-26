@@ -11,7 +11,7 @@ from pathlib import Path
 
 # From a windowed run there's no console for git to inherit, so each call would flash its own
 # console window onto their monitors. Same git, no window.
-_run_hidden = functools.partial(subprocess.run, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+run_hidden = functools.partial(subprocess.run, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def is_worktree(path):
@@ -39,7 +39,7 @@ def projects(workspace):
     return sorted(child.name for child in path.iterdir() if child.is_dir() and is_worktree(child))
 
 
-def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin", run=_run_hidden):
+def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin", run=run_hidden):
     """Create a fresh worktree at `path` on a new `branch` cut from CURRENT `origin/main`.
 
     Fetch first, then branch from the just-fetched remote tip - so an agent never starts from stale
@@ -51,7 +51,7 @@ def prepare_worktree(repo, path, branch, *, base="origin/main", remote="origin",
     return str(path)
 
 
-def prepare_worktree_for(path, *, run=_run_hidden):
+def prepare_worktree_for(path, *, run=run_hidden):
     """Cut a fresh worktree for `path` from current origin/main, inferring which repo it belongs to.
 
     Starting brand-new worktrees is the norm, so this assumes nothing already exists: it finds the

@@ -117,12 +117,19 @@ a known weakness rather than a solution.
   test counts, not "I reran the suite myself". `relay.notice()` is the only door: agent name, first
   sentence, capped, and a pointer to its tab. Handed the raw stream, a person cannot tell whether
   they are talking to Entity or to the agent; the code, not the model, has to prevent it.
-- **Brevity is the product.** A reply is cut at a sentence past ~260 characters, and the next turn
-  tells the model it was cut. Long answers are not "delivered differently" — they are lost.
-- **Never speak while the user's mic is on.** Unprompted speech and finished background answers both
-  wait. It once broke in mid-sentence while someone was recording.
-- **One handoff line, verbatim:** "I'll get back to you on that." after 5 seconds. No variations, no
-  periodic progress updates — both were found worse than silence.
+- **Brevity is the product.** The persona holds replies to a couple of short sentences, and the
+  voice speaks them as they are written, so a barge-in is the user's own length limit. The old
+  260-character cut and its told-you-it-was-cut system note are gone WITH their reason: they
+  existed to manage a blocking brain and a robot voice that read whole replies at once. Do not
+  reintroduce a cut without reintroducing that world.
+- **Never speak while the user is mid-sentence.** Unprompted speech waits for the pause. It once
+  broke in while someone was recording. (The mic being ARMED is not the test — the window's mic
+  stays armed all conversation.)
+- **No stock phrases.** "Got it.", "I'll get back to you on that.", "I've got a longer answer —
+  ready for it?" and the still-processing check-ins are all deleted, by the user's request, after
+  a year's worth of frustration in one week. Their reason to exist was a brain that blocked for
+  30+ seconds; the streaming fast brain answers in the breath it was asked. Anything slower than
+  a breath is an agent's job, dispatched and then narrated by the model in its own words.
 - **Never self-certify.** Green tests are not verification; the user's eyes are. Put the real thing
   in front of them, or give them the exact steps, and let them judge. And never present work for
   verification while a setup step of theirs is still outstanding.
@@ -156,7 +163,14 @@ Test fixtures use invented facts. When you add a comment here, write the failure
 ## Shape of the code
 
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
-5-second handoff. `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
+delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
+turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
+becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
+one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
+one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
+model is in. `actions.py` is everything the brain can DO: five typed in-process tools wired to
+the desk — its speech carries no control phrases and its options carry no built-in tools.
+`dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, `scratch
 that` to take back what was just said, and it reports whether it is recording so nothing speaks
 over the user. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
@@ -173,7 +187,9 @@ what a streamed message becomes there — the agent's words as messages, and its
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and it says which one a reply just named.
-`brain_sdk.py` holds the persona and the session. `memory.py` is the profile, what Entity has learned, and the lexicon.
+`brain_sdk.py` holds the persona and the session: the FAST tier (Haiku), `tools=[]`, replies
+streamed delta by delta — a talker that pulls levers, never an investigator; the agents it starts
+are where Opus-tier work happens. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump

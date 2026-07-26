@@ -3,8 +3,9 @@
 The robot voice (tts_system) spawned a PowerShell process per utterance - a second of wind-up
 before any sound, and a voice nobody wants to listen to. Kokoro synthesizes on the CPU faster
 than it speaks and sounds like a person. Its model is a third of a gigabyte the repo doesn't
-carry: `ensure_voice` fetches it into runtime/ once, `SwappableTTS` lets the robot voice serve
-that first launch until the download lands, and every launch after starts neural.
+carry: `ensure_voice` fetches it into runtime/ once, and startup waits for it - the user's call:
+better a launch that takes as long as it takes than a first reply in the robot's voice. The
+robot voice remains only for a machine where the neural one genuinely can't be had.
 """
 
 import urllib.request
@@ -95,19 +96,3 @@ def _real_kokoro(model_path, voices_path):
     return Kokoro(model_path, voices_path)
 
 
-class SwappableTTS:
-    """One voice slot the app talks to, whoever currently fills it.
-
-    `__getattr__` delegation on purpose: the conversation checks `hasattr(tts, "stream")` to
-    decide between speaking sentences as they form and speaking a reply whole, and a wrapper
-    that ANSWERED for streaming while the robot voice held the slot would silence every reply
-    until the neural download finished."""
-
-    def __init__(self, tts):
-        self._tts = tts
-
-    def swap(self, tts):
-        self._tts = tts
-
-    def __getattr__(self, name):
-        return getattr(self._tts, name)

@@ -37,6 +37,18 @@ def extract_text(messages):
     return latest.strip()
 
 
+def _text_delta(message):
+    """The user-facing text a partial-message event carries, or "" when it carries none.
+
+    A stream interleaves text deltas with thinking and tool-input deltas; only the text is the
+    reply being written, so only the text is worth interrupting anyone with."""
+    event = getattr(message, "event", None)
+    if not isinstance(event, dict) or event.get("type") != "content_block_delta":
+        return ""
+    delta = event.get("delta") or {}
+    return delta.get("text", "") if delta.get("type") == "text_delta" else ""
+
+
 def _context_tokens(usage):
     """How many tokens the model just processed as input = fresh input + both cache tiers. This
     is what grows as a conversation runs on and what makes each turn slower, so it's the number
@@ -115,19 +127,23 @@ class SdkSession:
         turn out with a result message, so the blocked `ask` returns of its own accord."""
         self._submit(self._client.interrupt())
 
-    async def _ask(self, prompt, on_message):
+    async def _ask(self, prompt, on_message, on_text):
         await self._client.query(prompt)
         messages = []
         async for message in self._client.receive_response():
             messages.append(message)
             if on_message is not None:
                 on_message(message)
+            if on_text is not None:
+                delta = _text_delta(message)
+                if delta:
+                    on_text(delta)
             if isinstance(message, ResultMessage):
                 self.last_context_tokens = _context_tokens(message.usage)
                 break
         return extract_text(messages)
 
-    def ask(self, prompt, on_message=None):
+    def ask(self, prompt, on_message=None, on_text=None):
         """Ask, and hand each message to `on_message`, whole, as it arrives.
 
         A real task takes many minutes, and nothing at all used to be visible until the very end -
@@ -137,8 +153,13 @@ class SdkSession:
 
         Whole, and not boiled down to its text first: a message carries what the agent RAN as well
         as what it said, and reducing it here is what left the logs with the narration and none of
-        the work. What to keep is the caller's decision - see `entity.steps`."""
-        return self._submit(self._ask(prompt, on_message))
+        the work. What to keep is the caller's decision - see `entity.steps`.
+
+        `on_text` is the other tempo: each user-facing text delta the moment it is written, for a
+        session opened with `include_partial_messages=True` - what lets a voice start speaking a
+        reply while the rest of it is still being composed. Thinking and tool-input deltas are not
+        text and never reach it."""
+        return self._submit(self._ask(prompt, on_message, on_text))
 
     def close(self):
         """Disconnect and stop the loop. Idempotent: closing twice happens on every failure path,

@@ -98,8 +98,11 @@ def fleet_actions(desk, *, file_enhancement=append_enhancement, resolve=_resolve
         file_enhancement(str(args["item"]))
         return _say("Filed.")
 
-    @tool("close_agent_tab", "Close a finished agent's tab in the user's window. Only for agents "
-          "that are done - a working agent's tab stays open.", {"name": str})
+    @tool("close_agent_tab", "Wrap up a finished agent: its tab closes (the log is archived), "
+          "its session ends, and its worktree is removed. Call it unprompted once the user has "
+          "signed off on that agent's work and it has landed - they never want to see a "
+          "finished agent lingering. Only for agents that are done - a working agent's tab "
+          "stays open.", {"name": str})
     async def close_agent_tab(args):
         name = str(args["name"]).strip()
         if not desk.retire(name):

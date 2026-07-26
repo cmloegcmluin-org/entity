@@ -24,7 +24,7 @@ def _permission_handler(name, decide):
     return can_use_tool
 
 
-def _agent_options(cwd, model, effort, can_use_tool):
+def _agent_options(cwd, model, effort, can_use_tool, resume=None):
     return ClaudeAgentOptions(
         cwd=cwd,
         model=model,
@@ -37,15 +37,23 @@ def _agent_options(cwd, model, effort, can_use_tool):
         setting_sources=[],
         permission_mode="default",  # approvals ON: nothing runs without a decision
         can_use_tool=can_use_tool,
+        # Reattach to everything the agent already knew: a restart used to strand the fleet, and
+        # the session id is what makes an agent outlive the process that started it.
+        resume=resume,
     )
 
 
 class SupervisedAgent:
     def __init__(self, name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT,
-                 session_factory=SdkSession):
+                 session_factory=SdkSession, resume=None):
         self.name = name
         self._session = session_factory(
-            _agent_options(cwd, model, effort, _permission_handler(name, decide)))
+            _agent_options(cwd, model, effort, _permission_handler(name, decide), resume))
+
+    @property
+    def session_id(self):
+        """The CLI session this agent lives in - what a future process resumes it by."""
+        return getattr(self._session, "last_session_id", None)
 
     def work(self, message, on_message=None):
         """Do a piece of work, handing over everything it streams back as it happens - what it

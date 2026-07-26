@@ -18,6 +18,7 @@ watch a conversation happen, which used to be hand-authored by the brain in what
 invented that day, with no timestamps.
 """
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -53,14 +54,25 @@ def _one_line(text, limit=160):
     return line if len(line) <= limit else line[:limit].rstrip() + "…"
 
 
+# What a restarted Entity says to an agent it found recorded mid-task. The resumed session
+# remembers everything, so the message is a nudge, not a re-briefing.
+CONTINUE_AFTER_RESTART = (
+    "Entity restarted while you were mid-task. Your session was resumed, so everything you knew "
+    "still holds. Pick up exactly where you left off and finish; if you had in fact finished, "
+    "report where things stand."
+)
+
+
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
-    def __init__(self, agent, cwd, task, log):
+    def __init__(self, agent, cwd, task, log, *, model, effort):
         self.agent = agent
         self.cwd = cwd
         self.task = task
         self.log = log  # the timestamped exchange log the user can tail, or None
+        self.model = model  # what it was started on, so a revival can put it back on the same
+        self.effort = effort
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -68,7 +80,10 @@ class _Desked:
 
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
-                 monitor=None, clock=time.strftime, events=None):
+                 monitor=None, clock=time.strftime, events=None, run=None, state_path=None):
+        from entity.worktrees import run_hidden
+
+        self._run = run or run_hidden  # how retire removes a finished agent's worktree
         # What happened - finished, died - goes to the events sink as (kind, agent, report); the
         # narrator words it in the brain's own voice. Undirected, the desk speaks the old way:
         # a capped notice (or the death line) straight to the outbox.
@@ -76,6 +91,7 @@ class AgentDesk:
         self._outbox = outbox
         self._factory = agent_factory or _real_agent
         self._roster_path = Path(roster_path) if roster_path else None
+        self._state_path = Path(state_path) if state_path else None  # the fleet's survival record
         self._log_dir = Path(log_dir) if log_dir else None
         # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
         # know nothing about agents: a note Entity wrote itself became an "agent" that then went
@@ -100,8 +116,43 @@ class AgentDesk:
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
         agent = self._factory(name, cwd, self._decide, model=self._model, effort=self._effort)
         with self._lock:
-            self._desked[name] = _Desked(agent, cwd, task, self._open_log(name))
+            self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
+                                         model=self._model, effort=self._effort)
         self._dispatch(name, task + STANDING_RULE)
+
+    def revive(self):
+        """Reopen every agent the last process recorded, each resumed on its old session.
+
+        "Obviously the agent processes must be independent of Entity. I close it and reopen it
+        constantly" - and a restart used to strand the whole fleet. An agent recorded mid-task is
+        told to pick back up; one that was idle is reattached and left in peace. An entry with no
+        session id was never heard from, so there is nothing to resume - it is skipped. Returns
+        the names brought back."""
+        if self._state_path is None or not self._state_path.exists():
+            return []
+        try:
+            saved = json.loads(self._state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []  # an unreadable record must not stop the app from starting
+        revived = []
+        for entry in saved:
+            name, session = entry.get("name"), entry.get("session_id")
+            if not name or not session:
+                continue
+            model = entry.get("model") or self._model
+            effort = entry.get("effort") or self._effort
+            agent = self._factory(name, entry.get("cwd"), self._decide,
+                                  model=model, effort=effort, resume=session)
+            with self._lock:
+                desked = _Desked(agent, entry.get("cwd"), entry.get("task", ""),
+                                 self._open_log(name), model=model, effort=effort)
+                desked.state = "idle"
+                self._desked[name] = desked
+            revived.append(name)
+            if entry.get("state") in ("starting", "working"):
+                self._dispatch(name, CONTINUE_AFTER_RESTART)
+        self._persist()
+        return revived
 
     def choose(self, model=None, effort=None):
         """Put the NEXT agent on this model, at this effort, and say what it will be. Either half
@@ -145,12 +196,16 @@ class AgentDesk:
         return "\n".join(lines) or "No agents running."
 
     def retire(self, name):
-        """Close an agent's tab: move its log into closed/ and let a finished session go.
+        """Wrap a finished agent up in one gesture: close its tab (the log moves into closed/),
+        let the session go, and remove its worktree.
 
-        False when there is nothing to retire, or the agent is still WORKING - closing a live
-        agent's tab would drop the user's view into work still happening. An agent the desk never
-        had (yesterday's, before a restart) is just its leftover log, and the move alone closes it.
-        """
+        "It should probably archive the agent log... and always do stuff like archive the Claude
+        session and worktree" - three chores nobody should have to name separately. False when
+        there is nothing to retire, or the agent is still live - closing a live agent's tab would
+        drop the user's view into work still happening. An agent the desk never had (yesterday's,
+        before a restart) is just its leftover log, and the move alone closes it. A worktree that
+        refuses removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never
+        fails over it."""
         with self._lock:
             entry = self._desked.get(name)
             if entry is not None and entry.state not in ("idle", "failed"):
@@ -166,13 +221,20 @@ class AgentDesk:
             with self._lock:
                 self._desked.pop(name, None)
             try:
-                entry.agent.close()
+                entry.agent.close()  # the session first: nothing may hold the worktree open
             except Exception:
-                pass  # the session may already be gone; the tab is what was asked about
-            self._write_roster()
+                pass  # the session may already be gone; the wrap-up carries on
+            try:
+                self._run(["git", "-C", entry.cwd, "worktree", "remove", entry.cwd], check=True)
+            except Exception:
+                pass  # dirty or locked: the sweep's business later, not a failed retirement
+            self._persist()
         return True
 
     def close(self):
+        # The survival record is written BEFORE the fleet is let go: it is what the next process
+        # revives from, so shutdown must leave it showing the fleet as it stood, not empty.
+        self._write_state()
         with self._lock:
             desked = list(self._desked.values())
             self._desked.clear()
@@ -261,7 +323,26 @@ class AgentDesk:
             entry.state = state
             if last_word is not None:
                 entry.last_word = last_word
+        self._persist()
+
+    def _persist(self):
         self._write_roster()
+        self._write_state()
+
+    def _write_state(self):
+        """Everything a fresh process needs to reattach: who, where, on which session. JSON,
+        because this one is read back by code (`revive`), not by the brain."""
+        if self._state_path is None:
+            return
+        with self._lock:
+            record = [
+                {"name": name, "cwd": entry.cwd, "task": entry.task,
+                 "session_id": getattr(entry.agent, "session_id", None),
+                 "state": entry.state, "model": entry.model, "effort": entry.effort}
+                for name, entry in self._desked.items()
+            ]
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     def _write_roster(self):
         """The roster is a file because the brain's memory isn't reliable across a context reset,
@@ -280,8 +361,8 @@ class AgentDesk:
         self._roster_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _real_agent(name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT):
+def _real_agent(name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT, resume=None):
     # Imported here so the desk can be exercised without the SDK (and without a real agent).
     from entity.supervised_agent import SupervisedAgent
 
-    return SupervisedAgent(name, cwd, decide, model=model, effort=effort)
+    return SupervisedAgent(name, cwd, decide, model=model, effort=effort, resume=resume)

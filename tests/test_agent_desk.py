@@ -26,6 +26,7 @@ class FakeAgent:
         self.name = name
         self.cwd = cwd
         self.decide = decide
+        self.session_id = f"sess-{name}"
         self.messages = []
         self.closed = False
         self._hold = hold
@@ -42,7 +43,8 @@ class FakeAgent:
         self.closed = True
 
 
-def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None):
+def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None, run=None,
+          state=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
@@ -52,7 +54,7 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=
         return agent
 
     return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor,
-                      log_dir=log_dir),
+                      log_dir=log_dir, run=run, state_path=state),
             outbox, made)
 
 
@@ -489,3 +491,116 @@ def test_every_task_carries_the_standing_rule_that_review_means_their_eyes():
     assert "own eyes" in sent and "live instance" in sent
     assert "Never offer 'run the tests'" in sent
     desk.close()
+
+
+def test_retiring_a_finished_agent_also_removes_its_worktree(tmp_path):
+    # "it should probably archive the agent log... and always do stuff like archive the Claude
+    # session and worktree etc." - wrapping up is one gesture, not three chores.
+    ran = []
+    desk, outbox, _ = _desk(log_dir=tmp_path, run=lambda cmd, **kw: ran.append(cmd))
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert desk.retire("fixer") is True
+
+    assert ["git", "-C", "/wt/fixer", "worktree", "remove", "/wt/fixer"] in ran
+    desk.close()
+
+
+def test_a_worktree_that_will_not_remove_does_not_block_the_retirement(tmp_path):
+    # A dirty worktree is the sweep's business later; the tab and the session still wrap up now.
+    def refuses(cmd, **kw):
+        raise RuntimeError("worktree is dirty")
+
+    desk, outbox, _ = _desk(log_dir=tmp_path, run=refuses)
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert desk.retire("fixer") is True
+    assert not (tmp_path / "fixer.log").exists()  # the tab still closed
+
+
+def test_the_desks_state_survives_on_disk_for_the_next_process(tmp_path):
+    # "Obviously the agent processes must be independent of Entity. I close it and reopen it
+    # constantly." The state file is the fleet's survival record: who exists, where, on which
+    # CLI session - everything a fresh process needs to reattach.
+    import json
+
+    state = tmp_path / "agents.json"
+    desk, outbox, _ = _desk(state=state)
+
+    desk.start("fixer", "/wt/fixer", "fix the drive link")
+    assert _wait_for(lambda: bool(outbox))
+
+    [entry] = json.loads(state.read_text(encoding="utf-8"))
+    assert entry["name"] == "fixer"
+    assert entry["cwd"] == "/wt/fixer"
+    assert entry["session_id"] == "sess-fixer"
+    assert entry["state"] == "idle"
+    desk.close()
+
+
+def test_retiring_prunes_the_state_file(tmp_path):
+    import json
+
+    state = tmp_path / "agents.json"
+    desk, outbox, _ = _desk(state=state, log_dir=tmp_path)
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))
+
+    desk.retire("fixer")
+
+    assert json.loads(state.read_text(encoding="utf-8")) == []
+
+
+def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
+    # The whole point of Milestone 3: close Entity mid-task, reopen it, and the same agents are
+    # there - reattached to sessions that remember everything, with in-flight work re-kicked.
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "fixer", "cwd": "/wt/fixer", "task": "fix the link",
+         "session_id": "sess-1", "state": "idle",
+         "model": "claude-opus-4-8", "effort": "high"},
+        {"name": "builder", "cwd": "/wt/builder", "task": "build the thing",
+         "session_id": "sess-2", "state": "working",
+         "model": "claude-fable-5", "effort": "max"},
+    ]), encoding="utf-8")
+    revived = []
+
+    def factory(name, cwd, decide, *, model, effort, resume=None):
+        revived.append((name, model, effort, resume))
+        return FakeAgent(name, cwd, decide)
+
+    desk = AgentDesk(Outbox(), agent_factory=factory, state_path=state)
+
+    names = desk.revive()
+
+    assert sorted(names) == ["builder", "fixer"]
+    assert ("fixer", "claude-opus-4-8", "high", "sess-1") in revived
+    assert ("builder", "claude-fable-5", "max", "sess-2") in revived
+    assert "fixer" in desk.digest() and "builder" in desk.digest()
+    # The one that was mid-task is told to pick back up; the idle one is not disturbed.
+    assert _wait_for(lambda: any("restarted" in m for a in desk._desked.values()
+                                 for m in a.agent.messages))
+    fixer = desk._desked["fixer"].agent
+    assert fixer.messages == []
+    desk.close()
+
+
+def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
+    desk, _, _ = _desk(state=tmp_path / "missing.json")
+
+    assert desk.revive() == []
+
+
+def test_an_entry_with_no_session_id_cannot_be_revived_and_is_skipped(tmp_path):
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([{"name": "ghost", "cwd": "/wt/g", "task": "?",
+                                  "session_id": None, "state": "idle"}]), encoding="utf-8")
+    desk, _, _ = _desk(state=state)
+
+    assert desk.revive() == []

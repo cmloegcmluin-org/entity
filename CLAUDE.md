@@ -184,7 +184,10 @@ so all of it is tested without a display; `web.py` serves it, `templates/` and `
 pages, and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
 holding the view) rather than a browser tab. `links.py` decides what a message names that can be
 opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
-used to be lost to context resets) and streams the whole exchange into its log; `steps.py` decides
+used to be lost to context resets), streams the whole exchange into its log, records the fleet in
+`runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught
+mid-task told to pick back up — and `retire()` wraps a finished agent up whole: log archived to
+closed/, session closed, worktree removed; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and

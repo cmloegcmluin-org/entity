@@ -104,3 +104,39 @@ def test_a_finished_narration_is_told_that_tests_are_never_his_verification():
     [(asked, _)] = brain.asked
     assert "see-it-running" in asked
     assert "never their verification" in asked
+
+
+def test_a_finished_narration_may_kick_the_agent_itself_instead_of_interrupting():
+    # An agent pausing to narrate an unactionable step is not news. The prompt offers the brain a
+    # third way: nudge the agent onward with tell_agent and answer only "handled".
+    brain, outbox = FakeBrain(), Outbox()
+    Narrator(brain, outbox).tell("finished", "fixer", "I'll now run the tests, then continue.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "tell_agent" in asked
+    assert "handled" in asked
+
+
+def test_a_handled_reply_is_swallowed_and_the_user_hears_nothing():
+    # When the brain kicked the agent onward itself, there is no news: pushing "Handled." to the
+    # outbox would interrupt the user with a word about nothing.
+    responded = threading.Event()
+
+    class KickingBrain(FakeBrain):
+        def respond(self, utterance, *, remember=True, on_text=None):
+            try:
+                return super().respond(utterance, remember=remember, on_text=on_text)
+            finally:
+                responded.set()
+
+    outbox = Outbox()
+    Narrator(KickingBrain("Handled."), outbox).tell("finished", "fixer", "Continuing shortly.")
+
+    assert responded.wait(2.0)
+    settled = threading.Event()
+    for _ in range(20):  # give the push after respond() every chance to happen if it wrongly would
+        if outbox:
+            break
+        settled.wait(0.01)
+    assert not outbox

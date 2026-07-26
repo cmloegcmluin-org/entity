@@ -19,11 +19,18 @@ def _sil():
 
 
 class FakeMic:
+    """A scripted mic. A callable in the script is an event mid-stream - the Entity starting or
+    finishing a reply while the pump is running - executed in sequence, never yielded."""
+
     def __init__(self, frames):
         self._frames = list(frames)
 
     def frames(self):
-        yield from self._frames
+        for item in self._frames:
+            if callable(item):
+                item()
+            else:
+                yield item
 
 
 class FakeTranscriber:
@@ -366,6 +373,78 @@ def test_every_frame_reaches_the_recorder_even_while_muted():
     dictation.pump()
 
     assert len(written) == 3
+
+
+def _speaking_scripted(texts, script, **kwargs):
+    """A Dictation whose mic script can reference the dictation itself (begin/end_speaking events
+    mid-stream) - resolved through a late-bound holder, since the mic exists before it does."""
+    holder = {}
+    frames = [item if not isinstance(item, str) else
+              (lambda name=item: getattr(holder["dictation"], name)())
+              for item in script]
+    dictation = Dictation(FakeTranscriber(*texts), FakeMic(frames), pause_frames=3, **kwargs)
+    holder["dictation"] = dictation
+    return dictation
+
+
+def test_its_voice_is_not_drafted_even_when_the_burst_outlives_the_reply():
+    # THE LEAK he hit live: Entity's reply started a burst, the burst's closing pause came after
+    # end_speaking - and the whether-to-draft decision looked at the CURRENT state, so its own
+    # sentence became his draft: "you said: Here, ready to go. That doesn't really sound like...".
+    # A burst is judged by the state it was captured in, not the state at its closing pause.
+    ears = Ears()
+    dictation = _speaking_scripted(
+        ["Here, ready to go."],
+        [_sil()] * 2 + ["begin_speaking"] + [_sp()] * 6 + ["end_speaking"] + [_sil()] * 6,
+        **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == []  # its words never became his
+
+
+def test_the_tail_of_its_voice_just_after_it_finishes_is_not_drafted_either():
+    # Speaker to mic is ~90ms on this desk, and the audio stream drains a beat after end_speaking -
+    # so the last word of a reply lands in a mic that has just been handed back. A short grace
+    # window after end_speaking is still "it talking".
+    ears = Ears()
+    dictation = _speaking_scripted(
+        ["go."],
+        [_sil()] * 2 + ["begin_speaking", "end_speaking"] + [_sp()] * 5 + [_sil()] * 6,
+        **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == []
+
+
+def test_what_he_says_after_the_reply_still_lands():
+    # The cut must not eat HIM: once the grace window passes, the next burst is his again.
+    ears = Ears()
+    dictation = _speaking_scripted(
+        ["Here, ready to go.", "sounds good"],
+        [_sil()] * 2 + ["begin_speaking"] + [_sp()] * 4 + ["end_speaking"]
+        + [_sil()] * 14 + [_sp()] * 4 + [_sil()] * 6,
+        **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["sounds good"]
+
+
+def test_his_words_from_before_the_reply_are_kept_when_it_starts_talking():
+    # He was mid-sentence when the Entity opened its mouth (news at a lull): what he had said is
+    # his, finished as dictation - only what comes after is the Entity's sound.
+    ears = Ears()
+    dictation = _speaking_scripted(
+        ["as I was saying", "Heads up from the fixer agent."],
+        [_sil()] * 2 + [_sp()] * 4 + ["begin_speaking"] + [_sp()] * 4 + ["end_speaking"]
+        + [_sil()] * 6,
+        **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["as I was saying"]
 
 
 def test_nothing_is_drafted_while_the_entity_is_speaking():

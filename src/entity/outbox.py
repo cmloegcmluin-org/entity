@@ -16,13 +16,19 @@ class News(str):
     name has to survive the queue too: when several agents are ready at once they are read out
     numbered so one can be picked, and working the name back out of the message text would be
     reading the label to find the thing - two of the four kinds of news the Entity queues do not
-    carry it in any fixed place at all."""
+    carry it in any fixed place at all.
+
+    `composed` says the BRAIN wrote these words (the narrator asked it to): spoken as its own,
+    they need no unwritten-lines ledger entry - it remembers saying them the way it remembers any
+    reply. App-authored news stays composed=False and is read back to it next turn."""
 
     about = None  # the agent, when there is one
+    composed = False  # whether the brain itself wrote the words
 
-    def __new__(cls, message, about=None):
+    def __new__(cls, message, about=None, composed=False):
         news = super().__new__(cls, message)
         news.about = about
+        news.composed = composed
         return news
 
 
@@ -32,9 +38,9 @@ class Outbox:
         self._lock = threading.Lock()
         self.arrived = threading.Event()  # set while something is waiting to be spoken
 
-    def push(self, message, about=None):
+    def push(self, message, about=None, composed=False):
         with self._lock:
-            self._items.append(News(message, about))
+            self._items.append(News(message, about, composed))
         self.arrived.set()
 
     def drain(self):

@@ -881,6 +881,27 @@ def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
     assert "what did you just say to me" in heard[0]  # and their words are still in there
 
 
+def test_news_the_brain_composed_is_not_read_back_to_it_as_someone_elses():
+    # The narrator asks the brain to word each interjection, so the brain REMEMBERS saying it -
+    # feeding it back through the unwritten-lines ledger would tell it about its own sentence.
+    heard = []
+
+    class NotingBrain:
+        def respond(self, utterance):
+            heard.append(utterance)
+            return "a reply"
+
+    outbox = Outbox()
+    outbox.push("The drive work's done - it just needs your eyes.", about="fixer", composed=True)
+    convo = Conversation(FakeSTT(["", "what needs my eyes exactly"]), NotingBrain(), FakeTTS(),
+                         outbox=outbox)
+
+    convo.turn()  # the composed line goes out at the lull
+    convo.turn()
+
+    assert heard == ["what needs my eyes exactly"]  # no system note; it already knows it said it
+
+
 def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
     # Only lines it is NOT already aware of. Its own reply is in its context already.
     heard = []

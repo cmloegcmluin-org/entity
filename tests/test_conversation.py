@@ -492,21 +492,73 @@ def test_news_after_a_long_lull_is_offered_not_dumped():
     assert tts.spoken == ["I've got an update on asana-submit-fix when you're ready."]
 
 
-def test_a_go_ahead_releases_the_held_update():
+def test_answering_the_offer_hands_the_update_to_the_brain_to_deliver_once():
+    # "Yeah, let me know." was answered twice: it missed the exact go-ahead list, so the brain
+    # improvised the news from memory as an ordinary turn - and the stored line then played at the
+    # next lull anyway. The answer to the offer IS the delivery: with one update held, whatever
+    # they say next carries it into the brain's prompt, the brain says it once, and nothing is
+    # left behind to repeat.
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["", "okay"]), FakeBrain(), tts, outbox=outbox,
+    brain = FakeBrain()
+    convo = Conversation(FakeSTT(["", "yeah, let me know", ""]), brain, tts, outbox=outbox,
                          dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix",
                 composed=True)
 
     convo.turn()  # the offer goes out
-    turn = convo.turn()  # "okay"
+    turn = convo.turn()  # their answer, magic words or not - the reply carries the news
+    convo.turn()  # a later pass finds nothing left to deliver
 
-    assert tts.spoken[-1] == "The fix is ready to look at on localhost:5200."
-    assert turn.said == "The fix is ready to look at on localhost:5200."
+    assert "The fix is ready to look at on localhost:5200." in brain.heard[-1]
+    assert _words(brain.heard[-1]) == "yeah, let me know"
+    assert turn.said.startswith("reply to")
+    # Never spoken as its own stored line - once through the brain's reply is the whole delivery.
+    assert "The fix is ready to look at on localhost:5200." not in tts.spoken
+    assert len([said for said in tts.spoken if "ready to look at" in said]) == 1
+
+
+def test_a_go_ahead_with_several_held_still_reads_out_the_choice():
+    # More than one waiting keeps the numbered roll call: several folded into one breath is the
+    # wall of words the numbering exists to prevent.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "okay"]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("fixer is ready", about="fixer", composed=True)
+    outbox.push("docs-sidebar needs a call", about="docs-sidebar", composed=True)
+
+    convo.turn()  # one offer, naming both
+    turn = convo.turn()  # the go-ahead
+
+    assert turn.said.startswith("Two updates waiting.")
+
+
+def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
+    # The update was popped into the turn that died; it must come back, or the one line he was
+    # promised evaporates with the error.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+
+    class BrokenBrain:
+        def respond(self, utterance):
+            raise RuntimeError("session wedged")
+
+    convo = Conversation(FakeSTT(["", "okay", "goodbye entity"]), BrokenBrain(), tts,
+                         outbox=outbox, dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("The fix is ready to look at.", about="asana-submit-fix", composed=True)
+
+    convo.turn()  # the offer
+    convo.turn()  # the brain dies on the delivery turn
+    convo.turn()  # active again: the surviving update goes out ahead of the goodbye
+
+    assert "The fix is ready to look at." in tts.spoken
 
 
 def test_the_offer_is_made_once_not_every_pass_round_the_loop():
@@ -525,22 +577,26 @@ def test_the_offer_is_made_once_not_every_pass_round_the_loop():
     assert tts.spoken.count("I've got an update on fixer when you're ready.") == 1
 
 
-def test_engaging_with_anything_else_still_gets_the_news_delivered():
-    # He answered with a question of his own rather than a go-ahead: he is present again, so the
-    # held news flows on the next pass rather than waiting for magic words.
+def test_engaging_with_something_else_delivers_the_news_in_that_same_reply():
+    # He answered the offer with a question of his own. He is present, and the one reply folds
+    # the update in around his question - a separate stored line arriving afterwards is how he
+    # heard everything twice.
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["", "what time is it", "goodbye entity"]), FakeBrain(), tts,
+    brain = FakeBrain()
+    convo = Conversation(FakeSTT(["", "what time is it", "goodbye entity"]), brain, tts,
                          outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("news about the fix", about="fixer", composed=True)
 
     convo.turn()  # the offer
-    convo.turn()  # his unrelated question - engagement
-    convo.turn()  # news flows at the top of the next pass
+    convo.turn()  # his question - the reply carries the update with it
+    convo.turn()  # the goodbye; nothing further arrives
 
-    assert "news about the fix" in tts.spoken
+    assert "news about the fix" in brain.heard[-1]
+    assert _words(brain.heard[-1]) == "what time is it"
+    assert "news about the fix" not in tts.spoken  # only inside the brain's one reply
 
 
 def test_news_while_he_is_active_is_not_gated_behind_an_offer():

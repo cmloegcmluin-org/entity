@@ -125,9 +125,9 @@ def test_every_message_reaches_the_caller_whole_as_it_streams():
     session.close()
 
 
-def _delta(text):
+def _delta(text, index=0):
     return StreamEvent(uuid="u", session_id="s",
-                       event={"type": "content_block_delta",
+                       event={"type": "content_block_delta", "index": index,
                               "delta": {"type": "text_delta", "text": text}})
 
 
@@ -163,6 +163,62 @@ def test_text_deltas_reach_the_caller_as_the_reply_is_being_written():
 
     assert heard == ["Star", "ting now."]
     assert reply == "Starting now."  # the settled reply is unchanged by having streamed
+    session.close()
+
+
+def _block_start():
+    return StreamEvent(uuid="u", session_id="s",
+                       event={"type": "content_block_start", "index": 0,
+                              "content_block": {"type": "text", "text": ""}})
+
+
+class TalksAroundAToolClient(FakeClient):
+    """A tool-using turn: text, then a tool call, then more text - all of it spoken as it streams."""
+
+    STREAM = (
+        _block_start(),
+        _delta("Right - that isn't real verification.", index=0),
+        FakeMsg([FakeBlock("Right - that isn't real verification.")]),
+        _block_start(),
+        _delta("I'm having the agent stand up a test instance.", index=0),
+        FakeMsg([FakeBlock("I'm having the agent stand up a test instance.")]),
+        _finished(),
+    )
+
+    async def query(self, prompt):
+        self.asked = prompt
+
+    async def receive_response(self):
+        for message in self.STREAM:
+            yield message
+
+
+def test_the_reply_is_everything_that_was_spoken_not_just_the_last_message():
+    # "what it said aloud didn't always match what was printed... before that it spoke aloud
+    # something that included 'you're absolutely right'". The voice speaks every text delta; the
+    # record kept only the LAST message's text, so the bubble showed a fraction of what was heard.
+    # The reply is now the same words the deltas carried - all of them.
+    client = TalksAroundAToolClient()
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
+    heard = []
+
+    reply = session.ask("go", on_text=heard.append)
+
+    assert reply == ("Right - that isn't real verification.\n"
+                     "I'm having the agent stand up a test instance.")
+    assert "".join(heard) == reply  # the ear and the record got byte-identical words
+    session.close()
+
+
+def test_a_block_that_starts_flush_against_the_last_gets_a_seam():
+    # Two text blocks can butt together with no whitespace between them; jammed, the sentence
+    # splitter reads "...verification.I'm" as one word and the screen shows a run-on.
+    client = TalksAroundAToolClient()
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
+
+    reply = session.ask("go")
+
+    assert "verification.\nI'm having" in reply
     session.close()
 
 

@@ -30,13 +30,20 @@ from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 # Attached to every task the desk hands out, because asking for it each time did not hold: the
 # brain wrote it into some dispatches and not others, and the round it forgot cost a whole review -
-# work shown off a stale branch reads as though features that had already merged were missing.
+# work shown off a stale branch reads as though features that had already merged were missing. The
+# second rule earned its place the same way: "verification" came back as "run pytest", and the
+# user had to say - again - that green tests are not their eyes.
 STANDING_RULE = (
-    "\n\nStanding rule, from the person this work is for, and it holds however the task above is "
-    "worded: before you present ANY branch, build or running instance for them to look at, first "
-    "`git fetch origin` and rebase your branch onto the latest `origin/main`, then re-run the "
-    "tests on the rebased commit. Shown off a stale branch, work that other people have already "
-    "merged looks to them like it has gone missing, and they have lost a review round to that."
+    "\n\nStanding rules, from the person this work is for, and they hold however the task above "
+    "is worded. One: before you present ANY branch, build or running instance for them to look "
+    "at, first `git fetch origin` and rebase your branch onto the latest `origin/main`, then "
+    "re-run the tests on the rebased commit - shown off a stale branch, work that other people "
+    "have already merged looks to them like it has gone missing. Two: when your work is done, "
+    "'ready for review' means THEY can SEE it working with their own eyes and mouse - stand up a "
+    "live instance of the app on its own port with its own scratch data, apart from their real "
+    "one, and report the exact click-by-click steps to watch the new behavior happen. Never "
+    "offer 'run the tests' as their verification: green tests are your evidence, not theirs, "
+    "and they will send it back."
 )
 
 

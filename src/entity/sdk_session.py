@@ -49,6 +49,15 @@ def _text_delta(message):
     return delta.get("text", "") if delta.get("type") == "text_delta" else ""
 
 
+def _opens_text_block(message):
+    """Whether this event begins a fresh text block - the seam between what the model said before
+    a tool call and what it says after."""
+    event = getattr(message, "event", None)
+    if not isinstance(event, dict) or event.get("type") != "content_block_start":
+        return False
+    return (event.get("content_block") or {}).get("type") == "text"
+
+
 def _context_tokens(usage):
     """How many tokens the model just processed as input = fresh input + both cache tiers. This
     is what grows as a conversation runs on and what makes each turn slower, so it's the number
@@ -130,18 +139,34 @@ class SdkSession:
     async def _ask(self, prompt, on_message, on_text):
         await self._client.query(prompt)
         messages = []
+        spoken = []  # every text delta, in order - exactly what a listening voice was handed
+
+        def carry(piece):
+            spoken.append(piece)
+            if on_text is not None:
+                on_text(piece)
+
         async for message in self._client.receive_response():
             messages.append(message)
             if on_message is not None:
                 on_message(message)
-            if on_text is not None:
-                delta = _text_delta(message)
-                if delta:
-                    on_text(delta)
+            if _opens_text_block(message) and spoken and not spoken[-1][-1:].isspace():
+                # Text blocks on either side of a tool call can butt together with no whitespace;
+                # jammed, "...verification.I'm" defeats the sentence splitter and the screen shows
+                # a run-on. The seam goes to the voice AND the record, so they stay identical.
+                carry("\n")
+            delta = _text_delta(message)
+            if delta:
+                carry(delta)
             if isinstance(message, ResultMessage):
                 self.last_context_tokens = _context_tokens(message.usage)
                 break
-        return extract_text(messages)
+        # A session streaming partial messages heard the whole reply go past as deltas: THAT is
+        # the reply, all of it. Keeping only the final message's text left the record showing a
+        # fraction of what a voice had already spoken - "what it said aloud didn't always match
+        # what was printed". A session without partials (an agent's) keeps the final-text rule:
+        # its narration between tool calls is machinery, not the report.
+        return "".join(spoken).strip() if spoken else extract_text(messages)
 
     def ask(self, prompt, on_message=None, on_text=None):
         """Ask, and hand each message to `on_message`, whole, as it arrives.

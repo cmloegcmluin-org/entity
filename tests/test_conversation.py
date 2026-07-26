@@ -925,8 +925,10 @@ class StreamingTTS(FakeTTS):
     def __init__(self):
         super().__init__()
         self.replies = []
+        self.spoken_forms = []
 
-    def stream(self, *, interrupt=None):
+    def stream(self, *, interrupt=None, spoken_form=None):
+        self.spoken_forms.append(spoken_form)
         reply = self.Reply(self, interrupt)
         self.replies.append(reply)
         return reply
@@ -979,6 +981,19 @@ def test_a_streaming_voice_speaks_the_reply_as_the_brain_writes_it():
     assert "".join(reply.deltas) == "Both are green. The drive one wants a decision."
     assert reply.finished  # the loop waited out the audio before listening again
     assert turn.said == "Both are green. The drive one wants a decision."
+
+
+def test_a_streamed_reply_speaks_paths_the_way_a_person_would():
+    # The one sanctioned difference between ear and screen, carried over from the one-shot path:
+    # the screen shows the real path (it is what gets clicked); the voice says its filename.
+    from entity.links import as_spoken
+
+    tts = StreamingTTS()
+    convo = Conversation(FakeSTT(["where"]), StreamingBrain(), tts)
+
+    convo.turn()
+
+    assert tts.spoken_forms == [as_spoken]
 
 
 def test_a_streamed_reply_reaches_the_screen_and_the_record_whole():

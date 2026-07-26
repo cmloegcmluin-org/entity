@@ -448,7 +448,9 @@ class Conversation:
         open_stream = getattr(self._tts, "stream", None)
         reply = None
         if open_stream is not None and self._brain_streams:
-            reply = open_stream(interrupt=self._interrupt)
+            # Sentences are synthesized in their spoken form (a path becomes its filename) while
+            # the record keeps the real text - the screen shows what gets clicked.
+            reply = open_stream(interrupt=self._interrupt, spoken_form=as_spoken)
         think_start = time.monotonic()
         try:
             said = self._think(self._with_system_notes(heard),

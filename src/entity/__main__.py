@@ -63,6 +63,21 @@ def _fresh_worktree_note():
     )
 
 
+def _projects_note():
+    """Persona line: where the user's projects live, so the brain never has to ask. It asked for
+    the path to a repo whose name alone identified it; the workspace listing already knew."""
+    from entity.worktrees import projects
+
+    known = projects(WORKSPACE)
+    if not known:
+        return ""
+    return (
+        f" Their projects live under {WORKSPACE}, one directory per project: {', '.join(known)}. "
+        "When they name one, that is the repo - never ask where it is. A new agent for project "
+        f"<name> works in {WORKSPACE}\\<name>\\.claude\\worktrees\\<short-task-name>."
+    )
+
+
 def _mic_gain():
     """How much to amplify the mic. A quiet input - an onboard mic can peak around 0.009, under
     the 0.01 speech threshold - needs a boost or nothing registers as speech; loud mics leave
@@ -161,6 +176,7 @@ def _persona():
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
         + _fresh_worktree_note()
+        + _projects_note()
         + _window_note(AGENT_LOGS)
     )
 

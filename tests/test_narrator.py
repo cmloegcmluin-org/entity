@@ -92,3 +92,15 @@ def test_tell_returns_at_once_and_narrates_off_thread():
     assert not outbox  # ...but tell() already returned without blocking on it
     finished.set()
     assert _wait_for(outbox)
+
+
+def test_a_finished_narration_is_told_that_tests_are_never_his_verification():
+    # The narrated heads-up once told him to "run pytest in the worktree to verify" - the exact
+    # thing his standing profile forbids. The prompt now carries the law where the wording is made.
+    brain, outbox = FakeBrain(), Outbox()
+    Narrator(brain, outbox).tell("finished", "fixer", "Done, PR open, 621 tests passing.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "see-it-running" in asked
+    assert "never their verification" in asked

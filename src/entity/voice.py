@@ -63,9 +63,13 @@ class Speaker:
         samples, samplerate = self._engine.say(said)
         self._play(samples, samplerate, interrupt=interrupt)
 
-    def stream(self, *, interrupt=None):
-        """A reply about to arrive as text deltas: speak it sentence by sentence as it forms."""
-        return Reply(self._engine, self._play, interrupt)
+    def stream(self, *, interrupt=None, spoken_form=None):
+        """A reply about to arrive as text deltas: speak it sentence by sentence as it forms.
+
+        `spoken_form` maps a sentence to what the voice should SAY for it (a path to its
+        filename, a URL to "the link") while the record keeps the real text - the screen shows
+        what gets clicked; the speaker says what a person would."""
+        return Reply(self._engine, self._play, interrupt, spoken_form)
 
 
 class Reply:
@@ -76,10 +80,11 @@ class Reply:
     waits for the audio to run out and returns what was actually spoken - which, after a barge-in,
     is the head of the reply that got out before the cut."""
 
-    def __init__(self, engine, play, interrupt):
+    def __init__(self, engine, play, interrupt, spoken_form=None):
         self._engine = engine
         self._play = play
         self._interrupt = interrupt
+        self._spoken_form = spoken_form or (lambda sentence: sentence)
         self._queue = queue.SimpleQueue()
         self._spoken = []
         self._sentences = SentenceStream(self._queue.put)
@@ -103,7 +108,7 @@ class Reply:
                 return
             if _fired(self._interrupt):
                 continue  # cut off: drain the rest unspoken, so done() comes straight back
-            samples, samplerate = self._engine.say(sentence)
+            samples, samplerate = self._engine.say(self._spoken_form(sentence))
             if _fired(self._interrupt):
                 continue
             self._play(samples, samplerate, interrupt=self._interrupt)

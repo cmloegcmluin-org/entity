@@ -61,7 +61,11 @@ class _Desked:
 
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
-                 monitor=None, clock=time.strftime):
+                 monitor=None, clock=time.strftime, events=None):
+        # What happened - finished, died - goes to the events sink as (kind, agent, report); the
+        # narrator words it in the brain's own voice. Undirected, the desk speaks the old way:
+        # a capped notice (or the death line) straight to the outbox.
+        self._events = events or self._plain_notices
         self._outbox = outbox
         self._factory = agent_factory or _real_agent
         self._roster_path = Path(roster_path) if roster_path else None
@@ -203,13 +207,20 @@ class AgentDesk:
             self._log(entry, f"(died: {exc})", prefix=AGENT_SAID)
             self._set_state(name, "failed")
             self._finished(name)  # already announced as dead; don't also announce it as quiet later
-            self._outbox.push(f"The {name} agent died: {exc}", about=name)
+            self._events("died", name, str(exc))
             return
         self._set_state(name, "idle", last_word=reply)
         self._finished(name)
-        # A notice, never the agent's own words - the full reply is in the log its tab reads. Named,
-        # so that several landing together can be read out by name for one of them to be picked.
-        self._outbox.push(notice(name, reply), about=name)
+        self._events("finished", name, reply)
+
+    def _plain_notices(self, kind, agent, report):
+        """The undirected default: what the desk always said, straight to the outbox. A notice,
+        never the agent's own words - the full reply is in the log its tab reads. Named, so that
+        several landing together can be read out by name for one of them to be picked."""
+        if kind == "died":
+            self._outbox.push(f"The {agent} agent died: {report}", about=agent)
+        else:
+            self._outbox.push(notice(agent, report), about=agent)
 
     def _heard(self, name, message):
         """One message back from an agent - what it said AND what it did - logged as it arrives."""

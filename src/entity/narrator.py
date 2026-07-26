@@ -29,6 +29,17 @@ PROMPTS = {
         "not interrupt them at all: use tell_agent to tell it to continue, and answer with the "
         "single word: handled]"
     ),
+    # A finished turn from an agent that was landing already-approved work: the loop's last leg.
+    # Everything after the user's sign-off is mechanical, so the wrap-up is commanded here, not
+    # handed back to the user as a chore.
+    "landing": (
+        "[Agent event, from the app - not the user speaking. Your agent {agent} was landing work "
+        "the user had already approved, and reported:\n{report}\n\nIf the report says the work "
+        "merged, call close_agent_tab for {agent} right now - the wrap-up is yours to do, not "
+        "theirs - then tell the user in one short sentence that it is in and wrapped up. If it "
+        "did not land, tell them in one sentence what is stuck. Never relay the report's "
+        "internals - no commit hashes, no test counts, no branch names, no file lists.]"
+    ),
     "died": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} DIED mid-task: "
         "{report}\n\nTell the user plainly in one short sentence that it died and what you "
@@ -50,9 +61,12 @@ PROMPTS = {
 class Narrator:
     """Turns one agent event into one brain-composed interjection, off-thread, never lost."""
 
-    def __init__(self, brain, outbox):
+    def __init__(self, brain, outbox, stage_of=None):
         self._brain = brain
         self._outbox = outbox
+        # Where the agent's work stands in the delivery loop (the desk's delivery_stage) - the
+        # same finished turn is presentation news while building, wrap-up news while landing.
+        self._stage_of = stage_of or (lambda agent: None)
 
     def tell(self, kind, agent, report):
         """Narrate one event. Returns at once; the composed line lands in the outbox when ready.
@@ -62,6 +76,8 @@ class Narrator:
         threading.Thread(target=self._narrate, args=(kind, agent, report), daemon=True).start()
 
     def _narrate(self, kind, agent, report):
+        if kind == "finished" and self._stage_of(agent) == "landing":
+            kind = "landing"
         prompt = PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
         try:
             said = self._brain.respond(prompt, remember=True)

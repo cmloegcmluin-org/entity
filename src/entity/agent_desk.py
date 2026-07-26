@@ -23,6 +23,7 @@ import threading
 import time
 from pathlib import Path
 
+from entity.delivery import Delivery, DeliveryError
 from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from entity.relay import notice
 from entity.steps import SAID, render
@@ -62,17 +63,30 @@ CONTINUE_AFTER_RESTART = (
     "report where things stand."
 )
 
+# Sent by the desk itself the moment a verdict is recorded - after the user has spoken, what
+# remains is mechanical, and mechanical steps are not left to anyone's memory.
+APPROVED_LAND_IT = (
+    "The user looked at what you presented and signed off. Land it now: push your branch, open "
+    "the PR, enqueue it on the merge queue, and see it through - then report that it merged, or "
+    "exactly what stopped it."
+)
+REJECTED_TRY_AGAIN = (
+    "The user looked at what you presented and rejected it: {feedback}\n"
+    "Address their feedback and present again when it is ready for their eyes."
+)
+
 
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
-    def __init__(self, agent, cwd, task, log, *, model, effort):
+    def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None):
         self.agent = agent
         self.cwd = cwd
         self.task = task
         self.log = log  # the timestamped exchange log the user can tail, or None
         self.model = model  # what it was started on, so a revival can put it back on the same
         self.effort = effort
+        self.delivery = delivery or Delivery()  # where this work stands in the review loop
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -145,7 +159,9 @@ class AgentDesk:
                                   model=model, effort=effort, resume=session)
             with self._lock:
                 desked = _Desked(agent, entry.get("cwd"), entry.get("task", ""),
-                                 self._open_log(name), model=model, effort=effort)
+                                 self._open_log(name), model=model, effort=effort,
+                                 delivery=Delivery(entry.get("delivery") or "building",
+                                                   entry.get("steps")))
                 desked.state = "idle"
                 self._desked[name] = desked
             revived.append(name)
@@ -179,6 +195,42 @@ class AgentDesk:
         with self._lock:
             return [(name, desked.state, desked.task) for name, desked in self._desked.items()]
 
+    def present(self, name, steps):
+        """Record that `name`'s work is standing up for the user's eyes, with the steps to see it.
+
+        Refused for an agent mid-turn: the steps come from its report, so marking before it has
+        reported would present a thing that does not exist yet. Raises DeliveryError with the
+        reason - the caller owes the brain that sentence, not a silent no."""
+        with self._lock:
+            entry = self._desked.get(name)
+            if entry is None:
+                raise DeliveryError(f"no agent called {name} is at the desk")
+            if entry.state in ("starting", "working"):
+                raise DeliveryError(f"{name} hasn't finished its turn yet - wait for its report")
+            entry.delivery.present(steps)
+        self._persist()
+
+    def verdict(self, name, approved, feedback=""):
+        """Record the user's verdict on presented work, and set the mechanical consequence going:
+        approval sends the agent to land it, rejection carries the feedback back. The Delivery
+        refuses a verdict on work never presented - the loop's whole point."""
+        with self._lock:
+            entry = self._desked.get(name)
+            if entry is None:
+                raise DeliveryError(f"no agent called {name} is at the desk")
+            entry.delivery.verdict(approved)
+        self._persist()
+        if approved:
+            self._dispatch(name, APPROVED_LAND_IT)
+        else:
+            self._dispatch(name, REJECTED_TRY_AGAIN.format(feedback=feedback))
+
+    def delivery_stage(self, name):
+        """Where `name`'s work stands - what the narrator asks before wording a finished turn."""
+        with self._lock:
+            entry = self._desked.get(name)
+            return entry.delivery.stage if entry is not None else None
+
     def digest(self):
         """The fleet as a few plain lines, for handing to a brain at the top of a turn.
 
@@ -190,6 +242,7 @@ class AgentDesk:
                 f"{name}: {entry.state}"
                 + (f", last heard {entry.last_heard}" if entry.last_heard else "")
                 + f" - task: {_one_line(entry.task)}"
+                + (f" - {entry.delivery.describe()}" if entry.delivery.describe() else "")
                 + (f" - last said: {_one_line(entry.last_word)}" if entry.last_word else "")
                 for name, entry in self._desked.items()
             ]
@@ -338,7 +391,8 @@ class AgentDesk:
             record = [
                 {"name": name, "cwd": entry.cwd, "task": entry.task,
                  "session_id": getattr(entry.agent, "session_id", None),
-                 "state": entry.state, "model": entry.model, "effort": entry.effort}
+                 "state": entry.state, "model": entry.model, "effort": entry.effort,
+                 "delivery": entry.delivery.stage, "steps": entry.delivery.steps}
                 for name, entry in self._desked.items()
             ]
         self._state_path.parent.mkdir(parents=True, exist_ok=True)

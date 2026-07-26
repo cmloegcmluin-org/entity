@@ -140,3 +140,30 @@ def test_a_handled_reply_is_swallowed_and_the_user_hears_nothing():
             break
         settled.wait(0.01)
     assert not outbox
+
+
+def test_a_finished_agent_that_was_landing_approved_work_gets_the_wrap_up_prompt():
+    # After the user approves, the rest is mechanical: the agent lands it, and the brain is told
+    # to wrap the agent up itself the moment the report says it merged - not to hand the user
+    # another chore.
+    brain, outbox = FakeBrain(), Outbox()
+    narrator = Narrator(brain, outbox, stage_of=lambda name: "landing")
+
+    narrator.tell("finished", "fixer", "Merged - the queue took it, main has the work.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "close_agent_tab" in asked
+    assert "approved" in asked
+
+
+def test_a_finished_agent_still_building_keeps_the_presentation_prompt():
+    brain, outbox = FakeBrain(), Outbox()
+    narrator = Narrator(brain, outbox, stage_of=lambda name: "building")
+
+    narrator.tell("finished", "fixer", "Done with the first pass.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "see-it-running" in asked
+    assert "close_agent_tab" not in asked

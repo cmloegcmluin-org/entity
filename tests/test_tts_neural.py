@@ -1,0 +1,107 @@
+import pytest
+
+from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice
+
+
+def test_ensure_voice_leaves_files_already_on_disk_alone(tmp_path):
+    (tmp_path / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (tmp_path / "voices-v1.0.bin").write_bytes(b"voices")
+    fetched = []
+
+    paths = ensure_voice(tmp_path, fetch=lambda url, into: fetched.append(url))
+
+    assert fetched == []
+    assert paths == (tmp_path / "kokoro-v1.0.onnx", tmp_path / "voices-v1.0.bin")
+
+
+def test_ensure_voice_fetches_what_is_missing_and_says_so(tmp_path):
+    # The voice is a third of a gigabyte the repo doesn't carry: fetched once, into runtime/,
+    # announced so the window says why the first launch is busy - never fetched again.
+    said = []
+
+    def fetch(url, into):
+        into.write_bytes(b"got " + url.encode()[-9:])
+
+    paths = ensure_voice(tmp_path, fetch=fetch, announce=said.append)
+
+    assert paths is not None
+    assert all(path.exists() for path in paths)
+    assert any("voice" in line.lower() for line in said)
+
+
+def test_a_failed_fetch_reports_none_and_leaves_no_half_written_model(tmp_path):
+    # A half-downloaded model that LOOKS present would fail every later launch; better nothing
+    # and the robot voice than a file that exists and cannot load.
+    def fetch(url, into):
+        into.write_bytes(b"partial")
+        raise OSError("connection dropped")
+
+    assert ensure_voice(tmp_path, fetch=fetch) is None
+    assert list(tmp_path.glob("*.onnx")) == []
+
+
+class FakeKokoro:
+    def __init__(self, model_path, voices_path):
+        self.opened = (model_path, voices_path)
+
+    def create(self, text, voice, speed, lang):
+        return f"[{voice}@{speed}] {text}", 24000
+
+
+def test_the_engine_synthesizes_with_its_configured_voice():
+    engine = KokoroEngine("model.onnx", "voices.bin", voice="af_heart", speed=1.1,
+                          kokoro_factory=FakeKokoro)
+
+    samples, samplerate = engine.say("Hey.")
+
+    assert samples == "[af_heart@1.1] Hey."
+    assert samplerate == 24000
+
+
+def test_the_engine_opens_the_model_once_however_much_it_says():
+    opened = []
+
+    class Counting(FakeKokoro):
+        def __init__(self, model_path, voices_path):
+            super().__init__(model_path, voices_path)
+            opened.append(model_path)
+
+    engine = KokoroEngine("model.onnx", "voices.bin", kokoro_factory=Counting)
+    engine.say("One.")
+    engine.say("Two.")
+
+    assert opened == ["model.onnx"]
+
+
+class OneShotVoice:
+    def __init__(self, name):
+        self.name = name
+        self.spoke = []
+
+    def speak(self, text, *, interrupt=None):
+        self.spoke.append(text)
+
+
+def test_the_swappable_voice_delegates_to_whoever_holds_it_now():
+    # The neural voice takes minutes to download on first launch; the robot voice serves until it
+    # lands, then the swap upgrades mid-session - nothing downstream knows or cares which is in.
+    first, second = OneShotVoice("robot"), OneShotVoice("neural")
+    voice = SwappableTTS(first)
+
+    voice.speak("Before.")
+    voice.swap(second)
+    voice.speak("After.")
+
+    assert first.spoke == ["Before."]
+    assert second.spoke == ["After."]
+
+
+def test_the_swappable_voice_only_offers_streaming_when_its_holder_does():
+    # The conversation checks for stream() to decide between speaking sentences as they form and
+    # speaking the reply whole; a wrapper that claimed streaming for the robot voice would silence
+    # every reply until the download finished.
+    voice = SwappableTTS(OneShotVoice("robot"))
+
+    assert not hasattr(voice, "stream")
+    with pytest.raises(AttributeError):
+        voice.stream

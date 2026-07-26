@@ -45,7 +45,12 @@ STANDING_RULE = (
     "live instance of the app on its own port with its own scratch data, apart from their real "
     "one, and report the exact click-by-click steps to watch the new behavior happen. Never "
     "offer 'run the tests' as their verification: green tests are your evidence, not theirs, "
-    "and they will send it back."
+    "and they will send it back. Three: engineering discipline is not optional - read the "
+    "repo's CLAUDE.md before you start and follow it; test-drive every change (one failing "
+    "test, the minimum code to pass it, refactor, again); run the project's full test suite "
+    "green before anything lands; land through the repo's own process - a repo with a PR merge "
+    "queue means push a branch, open a PR, enqueue it, and watch it to actually merged, never a "
+    "direct push to a shared main - and leave everything you touched cleaner than you found it."
 )
 
 

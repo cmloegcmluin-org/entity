@@ -18,16 +18,18 @@ class FakeSession:
         self.closed = True
 
 
-def test_agent_runs_approval_gated_and_isolated_from_the_global_config():
+def test_agent_reads_the_repos_own_rules_but_never_the_users_global_config():
     opts = _agent_options("C:/work/tree", "claude-opus-4-8", "high", can_use_tool=lambda *a: None)
 
     assert opts.cwd == "C:/work/tree"
     # nothing runs without a decision: approvals stay ON and every request routes to can_use_tool
     assert opts.permission_mode == "default"
     assert opts.can_use_tool is not None
-    # load NO settings — the worktrees sit under their home, so any discovery would drag in their
-    # global companion-format CLAUDE.md + Stop hook and contaminate the agent.
-    assert list(opts.setting_sources) == []
+    # The split he asked for: the PROJECT's checked-in CLAUDE.md (TDD, merge process, repo law)
+    # reaches every agent, while the USER scope - his reply-format rules and Stop hooks, written
+    # for agents he talks to directly - never does: loaded once by accident, agents answered in
+    # his quoting format and their latency fell apart.
+    assert list(opts.setting_sources) == ["project"]
 
 
 def test_permission_handler_allows_when_the_user_approves():

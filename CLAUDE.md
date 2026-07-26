@@ -170,8 +170,13 @@ turn and streams the reply into the voice as it is written. `voice.py` is how a 
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: seven typed in-process tools wired to
+model is in. `actions.py` is everything the brain can DO: eight typed in-process tools wired to
 the desk — its speech carries no control phrases and its options carry no built-in tools.
+`foreman.py` is the senior layer between the talker and the workers: engaged only through the
+brain's ask_foreman tool, one persistent Opus-high session that reads a stuck agent's task,
+situation and log tail, settles technical snags itself through its one tell_agent tool (answering
+"handled", which is swallowed), and escalates to the user only what is genuinely theirs — its
+escalations go out app-authored so the unwritten-lines ledger keeps the fast brain aware of them.
 `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, `scratch
 that` to take back what was just said, and it reports whether it is recording so nothing speaks

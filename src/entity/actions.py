@@ -30,7 +30,7 @@ SERVER = "entity"
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
                                 "file_improvement", "close_agent_tab", "mark_ready",
-                                "record_verdict"))
+                                "record_verdict", "ask_foreman"))
 
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
@@ -54,9 +54,10 @@ def _resolve(target):
     return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
-def fleet_actions(desk, *, file_enhancement=append_enhancement, resolve=_resolve,
+def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement, resolve=_resolve,
                   prepare=prepare_worktree_for, default_task=DEFAULT_TASK):
-    """The action tools, wired to this desk: (server config for the options, the tools themselves).
+    """The action tools, wired to this desk and foreman: (server config for the options, the
+    tools themselves).
 
     The tools come back too so tests can drive the handlers directly - the server config is an
     opaque box once built."""
@@ -141,8 +142,18 @@ def fleet_actions(desk, *, file_enhancement=append_enhancement, resolve=_resolve
             return _say(f"Recorded. {name} is off to land it and will report when it's in.")
         return _say(f"Recorded. {name} has their feedback and will present again.")
 
+    @tool("ask_foreman", "Hand a stuck working agent to the foreman - a smarter model that reads "
+          "the agent's log and settles technical snags itself: use it when an agent needs "
+          "feedback or a technical decision you can't confidently give, or isn't finishing on "
+          "its own. Decisions that belong to the user - preference, scope, sign-off - still go "
+          "to the user, never the foreman. `question` is what the agent needs, in a sentence.",
+          {"name": str, "question": str})
+    async def ask_foreman(args):
+        foreman.consider(str(args["name"]).strip(), str(args["question"]))
+        return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
+
     tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, close_agent_tab,
-             mark_ready, record_verdict]
+             mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
 

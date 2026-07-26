@@ -725,3 +725,25 @@ def test_the_narrator_can_ask_which_stage_an_agent_is_at():
 
     assert desk.delivery_stage("fixer") == "landing"
     desk.close()
+
+
+def test_the_desk_can_say_what_an_agent_is_working_on():
+    desk, outbox, _ = _desk()
+    _finished(desk, outbox, task="fix the drive link")
+
+    assert desk.task_of("fixer") == "fix the drive link"
+    assert desk.task_of("nobody") is None
+    desk.close()
+
+
+def test_the_desk_hands_over_an_agents_recent_log_for_a_senior_read(tmp_path):
+    # The foreman judges from what actually happened, and the log is where that lives. The tail,
+    # not the whole file: a day-long exchange would drown the situation it ends on.
+    desk, outbox, _ = _desk(log_dir=tmp_path)
+    _finished(desk, outbox)
+
+    tail = desk.recent_log("fixer")
+
+    assert "did: a task" in tail  # the exchange the fake agent streamed is in the tail
+    assert desk.recent_log("nobody") == ""
+    desk.close()

@@ -27,7 +27,9 @@ PROMPTS = {
         "names, no file lists. And if the report is only the agent pausing mid-task - narrating "
         "a step, asking leave to continue, nothing done and nothing the user must decide - do "
         "not interrupt them at all: use tell_agent to tell it to continue, and answer with the "
-        "single word: handled]"
+        "single word: handled. If it is stuck on something TECHNICAL - it needs feedback or a "
+        "decision you can't confidently give - use ask_foreman instead of guessing or bothering "
+        "the user; only their own calls (preference, scope, sign-off) go to them.]"
     ),
     # A finished turn from an agent that was landing already-approved work: the loop's last leg.
     # Everything after the user's sign-off is mechanical, so the wrap-up is commanded here, not
@@ -52,8 +54,9 @@ PROMPTS = {
     ),
     "quiet": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} has {report} - "
-        "it may be hung. Tell the user in one short sentence, so they can decide whether to "
-        "wait or have you look into it.]"
+        "it may be hung. Use ask_foreman to have the senior model read its log and prod it, and "
+        "tell the user in one short sentence what you've set in motion - or, if you already "
+        "know it needs THEM, say that instead.]"
     ),
 }
 

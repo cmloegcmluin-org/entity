@@ -17,6 +17,7 @@ from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import Conversation
+from entity.foreman import Foreman
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.mirror import TranscriptFeed
 from entity.narrator import Narrator
@@ -267,7 +268,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # does can block on agent work, and nothing it says doubles as a control channel.
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor,
                      events=agent_events, state_path=AGENT_STATE)
-    actions_server, _ = fleet_actions(desk)
+    # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
+    # bigger model is paid for per snag, never per turn.
+    foreman = Foreman(desk, outbox)
+    actions_server, _ = fleet_actions(desk, foreman)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
@@ -398,6 +402,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                     pass
             for closer in (
                 brain.close,
+                foreman.close,
                 mic.close if mic is not None else None,
                 recorder.close if recorder is not None else None,
                 hearing.close if hearing is not None else None,

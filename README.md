@@ -102,6 +102,10 @@ hear is its own sentence about what it set in motion — never a control phrase:
   code: presented work is recorded with its see-it-running steps, and a verdict can only be
   recorded on work that was presented. Approval sends the agent to land it and — once it reports
   the merge — wraps it up; rejection carries your feedback straight back.
+- `ask_foreman(name, question)` — a stuck agent goes to the foreman: a smarter model (one
+  persistent Opus session, paid for per snag, not per turn) that reads the agent's task and log
+  tail, answers its technical questions or pushes it to finish, and bothers you only with what is
+  genuinely yours — preference, scope, sign-off.
 - `set_next_agent_model(choice)` / `close_agent_tab(name)` — the other levers, same shape.
 
 Each agent is a live session the desk can always reach, its roster is a file that survives a

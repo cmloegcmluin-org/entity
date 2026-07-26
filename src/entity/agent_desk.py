@@ -40,6 +40,12 @@ STANDING_RULE = (
 )
 
 
+def _one_line(text, limit=160):
+    """A task or a last word as one digest-sized line: its first line, capped."""
+    line = str(text).strip().splitlines()[0] if str(text).strip() else ""
+    return line if len(line) <= limit else line[:limit].rstrip() + "…"
+
+
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
@@ -110,6 +116,22 @@ class AgentDesk:
         """(name, state, task) for each agent, newest state - what the roster file is written from."""
         with self._lock:
             return [(name, desked.state, desked.task) for name, desked in self._desked.items()]
+
+    def digest(self):
+        """The fleet as a few plain lines, for handing to a brain at the top of a turn.
+
+        "How's it going?" used to send the brain off to read the roster file with its own tools -
+        half a minute of dead air for state this process already held in memory. The digest is
+        that state as text, so a status question is answerable in the breath it was asked."""
+        with self._lock:
+            lines = [
+                f"{name}: {entry.state}"
+                + (f", last heard {entry.last_heard}" if entry.last_heard else "")
+                + f" - task: {_one_line(entry.task)}"
+                + (f" - last said: {_one_line(entry.last_word)}" if entry.last_word else "")
+                for name, entry in self._desked.items()
+            ]
+        return "\n".join(lines) or "No agents running."
 
     def close(self):
         with self._lock:

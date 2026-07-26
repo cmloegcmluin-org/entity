@@ -355,6 +355,29 @@ def test_what_an_agent_ran_and_what_came_back_reach_its_log(tmp_path):
     desk.close()
 
 
+def test_the_digest_briefs_a_brain_on_the_fleet_without_a_file_read():
+    # "How's it going?" used to send the brain off to read the roster file with its tools - thirty
+    # seconds to fifteen minutes of silence for a question about state the process already held.
+    # The digest is that state as a handful of lines, handed to the brain every turn by code.
+    hold = threading.Event()
+    desk, outbox, _ = _desk(hold=hold)
+    desk.start("fixer", "/tmp/wt", "fix the drive link so it opens the memo's own subfolder")
+
+    briefing = desk.digest()
+
+    assert "fixer" in briefing
+    assert "working" in briefing
+    assert "fix the drive link" in briefing
+    hold.set()
+    desk.close()
+
+
+def test_the_digest_with_nothing_running_says_so():
+    desk, _, _ = _desk()
+
+    assert desk.digest() == "No agents running."
+
+
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
     outbox = Outbox()
     roster = tmp_path / "active-agents.txt"

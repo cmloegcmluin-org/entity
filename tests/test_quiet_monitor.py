@@ -119,3 +119,20 @@ def test_elapsed_time_is_reported_not_just_the_threshold():
     monitor.tick()
 
     assert outbox.drain() == ["The slow agent hasn't checked in for 31 minutes."]
+
+
+def test_with_an_events_sink_silence_reports_there_instead():
+    from entity.outbox import Outbox
+
+    events = []
+    outbox = Outbox()
+    clock = FakeClock()
+    monitor = QuietMonitor(outbox, quiet_after=60, clock=clock,
+                           events=lambda *e: events.append(e))
+    monitor.checked_in("fixer")
+    clock.now += 61
+
+    monitor.tick()
+
+    assert events == [("quiet", "fixer", "been silent for 1 minute")]
+    assert not outbox

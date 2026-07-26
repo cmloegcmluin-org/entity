@@ -379,6 +379,37 @@ def test_the_digest_with_nothing_running_says_so():
     assert desk.digest() == "No agents running."
 
 
+def test_with_an_events_sink_the_desk_reports_there_instead_of_the_outbox():
+    # The narrator words the news in the brain's own voice; the desk's job shrinks to saying WHAT
+    # happened - kind, agent, report - and staying out of the wording business entirely.
+    events = []
+    outbox = Outbox()
+    desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice:
+                     FakeAgent(name, cwd, decide), events=lambda *e: events.append(e))
+
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+
+    assert _wait_for(lambda: bool(events))
+    kind, agent, report = events[0]
+    assert (kind, agent) == ("finished", "fixer")
+    assert "fix the drive link" in report
+    assert not outbox  # the sink owns delivery now; nothing is pushed twice
+    desk.close()
+
+
+def test_a_death_reaches_the_events_sink_as_what_it_is():
+    events = []
+    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+                     events=lambda *e: events.append(e))
+
+    desk.start("doomed", "/tmp/wt", "try")
+
+    assert _wait_for(lambda: bool(events))
+    kind, agent, report = events[0]
+    assert (kind, agent) == ("died", "doomed")
+    assert "session lost" in report
+
+
 def test_retiring_a_finished_agent_closes_its_tab_by_moving_its_log(tmp_path):
     # A tab closes when its log leaves the folder the window watches. The brain used to do the
     # move with its own shell; it has no shell now, so the desk does it on the tool's behalf.

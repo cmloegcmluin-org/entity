@@ -19,6 +19,7 @@ from entity.console import Console
 from entity.conversation import Conversation
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.mirror import TranscriptFeed
+from entity.narrator import Narrator
 from entity.memory import (
     append_learned,
     compose_persona,
@@ -31,6 +32,7 @@ from entity.memory import (
     user_name,
 )
 from entity.outbox import Outbox
+from entity.relay import notice
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.transcript import Transcript, recent_turns
@@ -211,10 +213,24 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # Entity speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
     outbox = Outbox()
+
+    # Every agent event - finished, died, wrote to its inbox, gone quiet - takes one trip through
+    # the brain so what the user hears is the brain's own sentence, not a label read aloud. The
+    # narrator needs the brain, which doesn't exist yet; until it does (a few seconds of startup),
+    # the capped plain notice still carries any news, because news must never wait on wiring.
+    newsroom = {}
+
+    def agent_events(kind, agent, report):
+        narrator = newsroom.get("narrator")
+        if narrator is not None:
+            narrator.tell(kind, agent, report)
+        else:
+            outbox.push(notice(agent, report), about=agent)
+
     # Don't just wait to be told - watch the agents. If one goes silent past the threshold, the
     # monitor surfaces a heads-up so the user isn't left in the dark by a hung or stalled agent.
-    quiet_monitor = QuietMonitor(outbox, quiet_after=AGENT_QUIET_AFTER)
-    inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor)
+    quiet_monitor = QuietMonitor(outbox, quiet_after=AGENT_QUIET_AFTER, events=agent_events)
+    inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor, events=agent_events)
     inbox_watcher.start()
 
     announce("Entity is waking up...")
@@ -222,13 +238,15 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
     # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
     # does can block on agent work, and nothing it says doubles as a control channel.
-    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor)
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor,
+                     events=agent_events)
     actions_server, _ = fleet_actions(desk)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
                      seed_turns=recent_turns(TRANSCRIPTS))
     brain.warmup()
+    newsroom["narrator"] = Narrator(brain, outbox)  # from here on, news arrives in its own voice
     dictation = None
     hearing = None
     if gui:

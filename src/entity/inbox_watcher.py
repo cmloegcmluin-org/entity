@@ -15,6 +15,11 @@ import time
 from pathlib import Path
 
 
+def _span(elapsed):
+    minutes = round(elapsed / 60)
+    return f"{minutes} {'minute' if minutes == 1 else 'minutes'}"
+
+
 class QuietMonitor:
     """Watch the agents for silence instead of only waiting to be told.
 
@@ -26,8 +31,12 @@ class QuietMonitor:
     this is testable without real waiting.
     """
 
-    def __init__(self, outbox, *, quiet_after, clock=time.monotonic):
-        self._outbox = outbox
+    def __init__(self, outbox, *, quiet_after, clock=time.monotonic, events=None):
+        # Silence is reported as an event - (kind, agent, report) - for the narrator to word in
+        # the brain's own voice; undirected, the old spoken line goes straight to the outbox.
+        self._events = events or (lambda kind, agent, report: outbox.push(
+            f"The {agent} agent hasn't checked in for {report.removeprefix('been silent for ')}.",
+            about=agent))
         self._quiet_after = quiet_after
         self._clock = clock
         self._last_seen = {}  # agent -> clock() when we last heard from it
@@ -53,19 +62,17 @@ class QuietMonitor:
             elapsed = now - last_seen
             if elapsed >= self._quiet_after:
                 self._warned.add(agent)
-                self._outbox.push(self._message(agent, elapsed), about=agent)
-
-    @staticmethod
-    def _message(agent, elapsed):
-        minutes = round(elapsed / 60)
-        unit = "minute" if minutes == 1 else "minutes"
-        return f"The {agent} agent hasn't checked in for {minutes} {unit}."
+                self._events("quiet", agent, f"been silent for {_span(elapsed)}")
 
 
 class InboxWatcher:
-    def __init__(self, directory, outbox, *, poll_interval=1.0, sleep=time.sleep, monitor=None):
+    def __init__(self, directory, outbox, *, poll_interval=1.0, sleep=time.sleep, monitor=None,
+                 events=None):
+        # What an agent wrote goes to the events sink as ("wrote", agent, report) for the narrator
+        # to word; undirected, the capped plain notice goes straight to the outbox as it always has.
+        self._events = events or (lambda kind, agent, report:
+                                  outbox.push(notice(agent, report), about=agent))
         self._dir = Path(directory)
-        self._outbox = outbox
         self._poll_interval = poll_interval
         self._sleep = sleep
         self._monitor = monitor  # optional QuietMonitor: flags agents that go silent
@@ -123,10 +130,10 @@ class InboxWatcher:
         report = "\n".join(lines).strip()
         if not report:
             return False
-        # A notice, never the file's contents: an agent overwrote this with thirty lines of its
-        # own internals and every word of it was read out at them. Named, so that several landing
-        # together can be read out by name for one of them to be picked.
-        self._outbox.push(notice(path.stem, report), about=path.stem)
+        # Never the file's contents raw: an agent overwrote this with thirty lines of its own
+        # internals and every word of it was read out at them. The sink decides the wording -
+        # the narrator's brain-composed sentence, or the capped notice by default.
+        self._events("wrote", path.stem, report)
         return True
 
     def run(self):

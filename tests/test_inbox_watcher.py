@@ -126,3 +126,20 @@ def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):
     said = outbox.drain()
     assert said == ["fixer: IN PROGRESS - backfill. (the rest is in fixer's tab)"]
     assert "91459e5" not in said[0]  # its internals never reach them
+
+
+def test_with_an_events_sink_a_written_line_reports_there_instead(tmp_path):
+    # The narrator words agent news in the brain's own voice; the watcher's job shrinks to saying
+    # what was written and by whom.
+    from entity.outbox import Outbox
+
+    events = []
+    outbox = Outbox()
+    watcher = InboxWatcher(tmp_path, outbox, events=lambda *e: events.append(e))
+    (tmp_path / "fixer.txt").write_text("Need your OAuth step before I can continue.\n",
+                                        encoding="utf-8")
+
+    watcher.poll_once()
+
+    assert events == [("wrote", "fixer", "Need your OAuth step before I can continue.")]
+    assert not outbox

@@ -12,6 +12,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from entity.actions import fleet_actions
 from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
@@ -32,7 +33,6 @@ from entity.memory import (
 from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
-from entity.supervising_brain import SupervisingBrain
 from entity.transcript import Transcript, recent_turns
 from entity.tts_system import NullTTS, SystemTTS
 
@@ -49,13 +49,13 @@ AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entit
 
 
 def _fresh_worktree_note():
-    """Persona line: new work means a new worktree cut from freshly-fetched origin/main, not a stale
-    local resume, because almost every request that arrives here is new work."""
+    """Persona line: new work means a new worktree, and naming a new path to start_agent is all it
+    takes - the tool cuts it from freshly-fetched origin/main itself, so the brain never runs git."""
     return (
-        " Almost every agent you start is NEW work, which means a NEW worktree - don't resume an old "
-        "one unless you are explicitly told to. When you set one up, base it on current "
-        "origin/main: git fetch origin main first, then cut the worktree's branch from origin/main, "
-        "so the agent never starts on stale local code that's fallen behind what's already merged."
+        " Almost every agent you start is NEW work, which means a NEW worktree - don't resume an "
+        "old one unless you are explicitly told to. Name a fresh worktree path to start_agent (a "
+        "short kebab-case name for the work, under the project's .claude/worktrees/) and the tool "
+        "cuts it from current origin/main itself."
     )
 
 
@@ -93,66 +93,18 @@ def _agent_inbox_note(inbox):
     )
 
 
-def _agent_protocol_note(roster, logs):
-    """Persona lines for the ONE way it should start and talk to coding agents.
-
-    Without this the brain never emitted the directive at all: it fell back to spawning detached
-    background agents with its own Agent tool, which hand back an id and nothing else - four in a
-    row went unreachable, and its own context resets stranded the rest. The desk keeps each agent
-    as a live session it can always reach, and the roster is a file, so a reset can't lose them.
-    """
+def _window_note(logs):
+    """Persona lines about the window the user is looking at - the part of the world the brain
+    can't see but keeps getting asked about."""
     return (
-        " YOU ARE NOT THE ONLY THING THAT SPEAKS AS YOU. The app says a few lines in your name that "
-        "you did not write, and they hear all of them as you: every turn of theirs is answered with "
-        "'Got it.' before you have said anything at all. Others - a handoff line, an "
-        "agent's notice, a confirmation - are reported to you afterwards in a system note. Own every "
-        "one of them. Never tell them you have no record of saying something they heard you say; "
-        "from where they sit that is you denying your own words, and it is the single thing that "
-        "most makes you feel like several disconnected things wearing one name rather than someone "
-        "they are talking to. "
-        " ALWAYS ANSWER THEM AS WELL AS ACTING. Every directive below may be preceded by one short "
-        "sentence in your own voice, and that sentence is what they hear - the marker never reaches "
-        "them. Write it whenever they said anything that deserves a reply: they asked to be shown "
-        "the work running and heard, in full, 'Passed that to <agent>.' Their question was answered "
-        "and the answer thrown away. Say the sentence FIRST, then the marker on its own line. With "
-        "no sentence they hear nothing beyond the 'Got it.' that already told them they were heard "
-        "- which is exactly right when acting IS the whole reply, so add a sentence only when it "
-        "carries something the ack does not. "
-        " HOW TO PUT AN AGENT ON WORK - use this and nothing else. To start one, end your reply with "
-        "the marker line `[SUPERVISE] <absolute path to the worktree>` followed, on the lines "
-        "after it, by the task for the agent: the user's requirements passed on faithfully and "
-        "completely (every constraint they stated - what to build, what counts as done, what NOT to "
-        "do yet), plus the standing rules (agents report by inbox; don't merge without a sign-off). "
-        "Emit the directive IMMEDIATELY - relaying a request needs NO investigation, no reading "
-        "code, no tools first: the AGENT does the investigating, and every second you spend digging "
-        "before dispatching is a second they wait for nothing. They hear your sentence, never the "
-        "marker. To say something more to an agent that's already running - a correction, an "
-        "answer, a follow-up question - end your reply with `[TELL] <agent name>: <your message>`. "
-        f"The agents you have running are listed in {roster}; READ that file whenever you're unsure "
-        "who's live, especially after any gap in your memory - it is the truth, and it survives you. "
-        "Do NOT start coding agents with your own Agent/Task tool: those hand back an id you can "
-        "never talk to again, and agents have been lost four at a time that way. Never wait on an "
-        "agent either - starting one comes straight back, and whatever it says arrives on its own. "
-        f"Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log - "
-        "the window shows each of those as a live tab on its own, so you never need to open "
-        "anything for a conversation to be watched. Never hand-write your own log of the exchange; "
-        "the desk already keeps the real one. You CAN close an agent's tab when asked: move that "
-        f"log into the 'closed' folder inside {logs} and the tab goes with it. Never say "
-        "you're unable to. "
-        "WHICH MODEL THE AGENTS RUN ON is their to choose and yours to report. They run on Opus 4.8 "
-        "at high effort unless they say otherwise. When they name a model or an effort - 'use Fable "
-        "on max', 'put them back on Opus', 'crank the effort up' - end your reply with `[MODEL] "
-        "<what they said, verbatim>` and it takes effect for the NEXT agent you start; one already "
-        "working keeps the model it opened with, so never tell them a running agent has changed. If "
-        "they simply ASKS what they are on, that is a question, not a change: answer it. Never say "
-        "you don't get to pick or that it's whatever the harness defaults to - you do get to pick, "
-        "and being told that instead of an answer is what made them ask a second time. "
-        "And when you are told to FILE a self-improvement, an enhancement, or an idea for "
-        "your own roadmap, put `[IMPROVE] <the item, one line>` on a line of its own - it lands in "
-        "the profile's Enhancements section and appears in the window immediately. File it the "
-        "moment you are asked; never just promise to remember it. One line per item, and one "
-        "`[IMPROVE]` line PER ITEM: asked for two tickets, two lines - filing one and leaving the "
-        "other made them ask again for something they had already asked for."
+        f" Every exchange with an agent is auto-written, timestamped, to {logs}\\<agent-name>.log "
+        "- the window shows each of those as a live tab of its own, so a conversation is already "
+        "watchable and you never open anything for them. Never hand-write your own log of an "
+        "exchange; the desk keeps the real one. Their agents run on Opus 4.8 at high effort "
+        "unless they choose otherwise - the fleet briefing says what a fresh agent starts on, so "
+        "when they ask, answer from it; never say the choice isn't yours to make. When they ask "
+        "you to file an enhancement, file EVERY item they named - one file_improvement call per "
+        "item; filing one of two made them ask again for something they had already asked for."
     )
 
 
@@ -205,7 +157,7 @@ def _persona():
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
         + _agent_inbox_note(AGENT_INBOX)
         + _fresh_worktree_note()
-        + _agent_protocol_note(ACTIVE_AGENTS, AGENT_LOGS)
+        + _window_note(AGENT_LOGS)
     )
 
 
@@ -240,17 +192,17 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
+    # The desk holds each agent as a live session on its own thread; the brain drives it through
+    # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
+    # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
+    # does can block on agent work, and nothing it says doubles as a control channel.
+    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor)
+    actions_server, _ = fleet_actions(desk)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
-    sdk_brain = SdkBrain(persona=_persona(), user=user_name(load_profile()),
-                         seed_turns=recent_turns(TRANSCRIPTS))
-    sdk_brain.warmup()
-    # Driving agents is just something you ask the Entity to do in conversation: this wrapper catches
-    # a "[SUPERVISE] ..." / "[TELL] ..." directive from the brain and hands it to the desk, which holds
-    # each agent as a live session on its own thread. Starting or messaging an agent returns AT ONCE
-    # and whatever it says comes back through the outbox, so agent work never blocks the conversation.
-    desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor)
-    brain = SupervisingBrain(sdk_brain, desk)
+    brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
+                     seed_turns=recent_turns(TRANSCRIPTS))
+    brain.warmup()
     dictation = None
     hearing = None
     if gui:

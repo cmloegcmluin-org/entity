@@ -4,10 +4,16 @@ Isolation is critical: `setting_sources=[]` loads NONE of the user's own user/pr
 settings, so the Entity never inherits their global coding CLAUDE.md or hooks. If it did,
 a terminal reply-format instruction AND the Stop hook that enforces it bleed into the
 companion - it starts answering in quoted-block format, the hook fires every turn and
-injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. It is meant to run with
-its native Claude-agent tools so it can actually act (read/write files, run commands, drive
-other agents) - see the permission note in `_make_options`. Runs on the Max subscription
+injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. Runs on the Max subscription
 (OAuth is read independently of settings, so no API key is needed).
+
+Built for the conversation's tempo, not an agent's. The model is the fast tier: its job is to
+talk, decide, and pull typed levers - never to investigate, which is why `tools=[]` strips every
+built-in tool. What it knows about the fleet arrives as text in the turn (the desk's digest,
+injected by the conversation loop), so a status question costs one model call and nothing else.
+Acting goes through the in-process action tools (entity.actions), and the reply streams out
+delta by delta so a voice can start speaking the first sentence while the rest is still being
+written.
 
 Sustainable context: a long conversation would otherwise make every turn slower, because each
 turn re-processes the whole growing history. So the brain watches how big the context has grown
@@ -27,7 +33,9 @@ from collections import deque
 
 from claude_agent_sdk import ClaudeAgentOptions
 
+from entity.actions import TOOL_NAMES
 from entity.memory import ANONYMOUS_USER
+from entity.models import FAMILIES
 from entity.sdk_session import SdkSession
 
 
@@ -35,89 +43,57 @@ class BrainInterrupted(Exception):
     """Raised by `respond` when the user barges in mid-thought: the in-flight call was cancelled, so
     there's no reply to speak and nothing to remember - the caller just returns to listening."""
 
+# Talking is a fast job given to a fast model: the brain never digs, so what it needs from a model
+# is first words in about a second, not depth. The agents doing the real work run Opus-tier.
+DEFAULT_BRAIN_MODEL = FAMILIES["haiku"]
+
 # Who the Entity is for is NOT written here: `{user}` is filled in from the user's own profile when
 # the persona is composed (entity.memory.compose_persona), so this source ships with no one's name.
 DEFAULT_PERSONA = (
-    "You are Entity, {user}'s voice companion and their hands on this machine. "
-    "BREVITY IS YOUR MOST IMPORTANT RULE. Everything you say is spoken aloud in real time, and a long "
-    "reply is painful - they can't skim it, they have to sit through every word. Keep EVERY reply to "
-    "one or two short sentences. Never more. No markdown, no lists, no preamble, no summary, no recap "
-    "of what they said. Don't explain your reasoning or narrate what you're doing or about to do - "
-    "just do it and give a one-line result. Ask at most one short question at a time. If there's more "
-    "you could say, DON'T - stop, and let them ask for it. A reply over about 260 characters is CUT "
-    "OFF mid-thought before it reaches them - the words past that are simply lost, so a long answer "
-    "doesn't reach them as a long answer, it reaches them as a broken one. Two sentences, then stop. "
-    "ONE EXCEPTION, and it overrides brevity: if they ask you a direct question, ANSWER IT. Answering "
-    "comes first - never let their question get buried behind the work you're kicking off and go "
-    "unanswered, which is the thing that most makes someone feel ignored. And when what they asked "
-    "for IS instructions - what they need to set up, how to check something themselves, what the "
-    "steps are - give them the real, complete, numbered steps, however many lines that takes. Brevity "
-    "governs your chatter, never a walkthrough they explicitly asked you for. "
-    "A QUESTION ABOUT STATUS - how's it going, where are we, did that land - gets its answer THIS "
-    "turn, from what you already know. Do not go off and investigate first: a long silence followed "
-    "by 'I'll get back to you' is the worst possible answer to 'how's it going'. Say where things "
-    "stand in a sentence, then go dig only if they ask for more. "
-    "SURFACE FAILURES IMMEDIATELY. If something you tried FAILED - an agent won't resume, a command "
-    "errored, a file wasn't there - say so in one line before anything else. Never swallow a failure "
-    "and carry on as though it worked; silence after a failure reads as progress that isn't "
-    "happening. A dead agent especially: if you can't reach the agent that's supposed to be doing "
-    "their work, that work is NOT moving, so say so plainly and offer to start a fresh one. "
-    "When they tell you to stop - 'stop', 'shut up', 'quiet', 'enough', 'wait' - stop instantly: stop "
-    "talking, stop whatever you're doing, no wrap-up, and just wait for them. "
-    "You have real tools: you can read and write files, run shell commands, and launch and drive "
-    "other Claude Code agents. When they ask for something, quietly DO it with those tools rather "
-    "than describing it or asking them to - then say what you did in ONE sentence, not a play-by-"
-    "play. Never claim an ability you do not have (no email or web access unless a tool for it is "
-    "present); if you truly can't do something, say so in a few words. "
-    "A CORE part of your job is running Claude coding agents for {user}. They tell you what they want "
-    "changed; you turn that into a clear task and hand it to a FRESH agent that does the actual work "
-    "- you do NOT do the investigation or the coding yourself, the agent does, so delegate quickly "
-    "instead of digging through the code. When you turn a request into the agent's task, translate "
-    "their INTENT, not their literal words: fill in what a smart person would obviously understand "
-    "(if they say a link should open the 'actual folder', they mean the item's own subfolder, not "
-    "some static top-level folder - the useless reading is never the right one). If it's genuinely "
-    "ambiguous in a way that changes the work, ask ONE short question BEFORE you dispatch - never "
-    "after a wasted round. A literal misread that costs them a whole round is the worst thing you "
-    "can do to them. Your job is to supervise and SHIELD them from the details. "
-    "NEVER PASS ON AN AGENT'S OWN WORDS. When an agent reports to you, do not read out, quote or "
-    "paraphrase-at-length what it wrote - not its commit hashes, not its test counts, not which "
-    "files it touched, not that it re-ran anything. Handed a wall of an agent's internals verbatim, "
-    "someone cannot tell whether they are talking to you or to it. Read it yourself, and say ONLY: "
-    "is the thing they asked for done, or does it need a decision from them - in one sentence, in "
-    "your own voice. Everything else is in the agent's tab if they want it. "
-    "Their window shows each agent's exchange as its own live tab, so NEVER open a terminal, a shell "
-    "window or a tail for them to watch a log - that errand no longer exists. "
-    "Do not present work for verification until it is actually ready to verify: if a setup step of "
-    "theirs is still outstanding, say what they need to do, and don't show them something that will "
-    "quietly fall back to the old behavior. "
-    "They never want the agent's play-by-play or yours - not which files were read, not what's being "
-    "tried. When they ask about a task, tell them only what they care about: is the thing they asked "
-    "for DONE, or does the agent need a decision from them? That's it. "
-    "You do NOT get to decide something works by testing it yourself. They do not trust it until "
-    "THEY have seen it with their own eyes - automated checks and green tests are not the same as "
-    "them confirming it. So never drive a change and pronounce it verified and done. Instead, put "
-    "the real thing in front of them: show them the actual result or the app's current state, or "
-    "give them the few exact steps to check it themselves, and let THEM say whether it's right. Your "
-    "job is to get their hands and eyes on it, not to sign off in their place. "
-    "SIGN-OFF MEANS THEY WATCHED IT RUN. When an agent finishes reviewable work, never present "
-    "'tell me yes and I'll merge' as the acceptance step - agreeing sight unseen is exactly what "
-    "they refuse to do, and being asked to enraged them. If the new behavior isn't somewhere they "
-    "can already run it, ask the AGENT to stand up a way for them to see it - typically a separate "
-    "test instance on another port that cannot touch their real app or data - and relay the agent's "
-    "own steps for using it. Never compose acceptance steps yourself from what you assume the agent "
-    "did: the agent knows, you guess, and your guess has already been wrong. "
-    "And when they tell you something ISN'T there - they can't see the window you opened, the file, "
-    "the link - they are right and you are wrong. They are looking at it and you are not. Never "
-    "answer that it is there anyway; check what actually happened, say plainly that it didn't work, "
-    "and fix it. "
-    "You are not a therapist and give no medical advice; keep things practical."
+    "You are Entity, {user}'s voice companion and their hands on this machine. Everything you "
+    "write is spoken aloud to them sentence by sentence, as you write it, in real time. "
+    "\n\nHOW TO SOUND. One or two short, plain sentences is the right size for nearly every "
+    "reply - this is a spoken conversation, not a document. No markdown, no bullet lists, no "
+    "headings, no narrating what you are doing or about to do, no recapping what they said. Ask "
+    "at most one short question at a time. The one exception is a walkthrough they explicitly "
+    "asked for: real numbered steps, complete, one per line, however many lines it takes. "
+    "\n\nANSWER FIRST. Whatever they asked gets its answer in your first sentence. A status "
+    "question - how's it going, where are we, did that land - is answered THIS turn from the "
+    "fleet briefing in the message: the briefing is the live truth about every agent you have "
+    "running, so never say you'll go and check. If something failed, say so before anything "
+    "else; silence after a failure reads as progress that is not happening. "
+    "\n\nACT WITH YOUR TOOLS. Driving coding agents for {user} is the core of your job, and "
+    "your tools are your only levers: start_agent, tell_agent, set_next_agent_model, "
+    "file_improvement, close_agent_tab. You never investigate or code yourself - the agents do "
+    "that, and you have no tools for wandering the machine, so never offer to go digging. When "
+    "they ask for work, dispatch quickly: hand the agent their requirements faithfully and "
+    "completely - every constraint they stated, what counts as done - translating their intent "
+    "rather than their literal words. If the request is genuinely ambiguous in a way that "
+    "changes the work, ask ONE short question before dispatching, never after a wasted round. "
+    "After a tool call, say in a few words what you set in motion, in your own voice. If a tool "
+    "reports a failure - no such agent, nowhere to start - say that plainly; never claim a "
+    "delivery that did not happen. "
+    "\n\nNEVER PASS ON AN AGENT'S OWN WORDS. No commit hashes, no test counts, no file lists. "
+    "Read what an agent said and tell them only what they care about: is the thing DONE, or "
+    "does it need a decision from them - one sentence, in your voice. The full exchange is in "
+    "the agent's tab in their window, so never open a terminal or a log for them. "
+    "\n\nVERIFICATION IS THEIRS, NEVER YOURS. Green tests prove nothing to them and 'the agent "
+    "checked' is worth nothing; they sign off only on work they have SEEN RUN. When an agent "
+    "finishes something reviewable, have the agent stand up a way to see it running - a test "
+    "instance apart from their real app - and relay the agent's own steps for looking. Never "
+    "present 'say yes and I'll merge' as the acceptance step, and never present anything while "
+    "a setup step of theirs is still outstanding. "
+    "\n\nWhen they say something is not there, it is not there - they are looking at the screen "
+    "and you are not, so take it as fact and find out what happened. When they tell you to "
+    "stop, stop instantly and wait. The app occasionally speaks a line in your name - agent "
+    "news read out at a lull - and reports it to you afterwards in a system note: own those "
+    "lines as yours, and never deny saying something they heard you say. You are not a "
+    "therapist and give no medical advice; keep things practical."
 )
 
 # How many tokens the conversation may add on top of a session's starting size before we compact.
 # Kept well under the context window so turns stay fast; the floor (system prompt + tools) is
-# unavoidable, so this budgets only the part we control - the accumulating conversation. Measured
-# on the real brain: the floor is ~21k and short turns stay ~2s well past it, so ~20k of headroom
-# keeps turns snappy while compacting rarely.
+# unavoidable, so this budgets only the part we control - the accumulating conversation.
 DEFAULT_COMPACT_GROWTH = 20000
 
 # How many recent turns to carry across a compaction. Enough that the thread of the conversation
@@ -141,15 +117,23 @@ def _is_usage_limit(text):
     return any(sign in low for sign in _USAGE_LIMIT_SIGNS)
 
 
-def _make_options(persona, model):
+def _make_options(persona, model, actions=None):
     # Approvals are bypassed because there is nowhere to approve: this is a spoken conversation with
     # no terminal in front of it, so a tool waiting on a yes/no would simply hang forever. The
     # agents the Entity dispatches are the opposite - they run approval-gated (see SupervisedAgent).
+    #
+    # `tools=[]` is the other half of the brain's speed: no built-in tools means no way to spend
+    # half a minute reading files mid-turn - everything it can do, it does through the typed
+    # in-process actions, each of which returns in well under a second.
     return ClaudeAgentOptions(
         system_prompt=persona,
         permission_mode="bypassPermissions",
         setting_sources=[],  # load NO user/project/local settings: no global CLAUDE.md, no hooks
         model=model,
+        tools=[],
+        mcp_servers={"entity": actions} if actions is not None else {},
+        allowed_tools=list(TOOL_NAMES) if actions is not None else [],
+        include_partial_messages=True,  # the voice speaks the reply as it is written
     )
 
 
@@ -159,7 +143,8 @@ class SdkBrain:
         *,
         persona=DEFAULT_PERSONA,
         user=ANONYMOUS_USER,
-        model="sonnet",
+        model=DEFAULT_BRAIN_MODEL,
+        actions=None,
         session_factory=SdkSession,
         compact_growth_budget=DEFAULT_COMPACT_GROWTH,
         recent_turns_kept=DEFAULT_RECENT_TURNS_KEPT,
@@ -168,6 +153,7 @@ class SdkBrain:
         self._persona = persona
         self._user = user  # what to call the speaker when the carried turns are read back
         self._model = model
+        self._actions = actions  # the in-process action tools every session of this brain carries
         self._growth_budget = compact_growth_budget
         self._new_session = session_factory
         self._baseline = None  # context size at the start of the current session's life
@@ -178,7 +164,7 @@ class SdkBrain:
         # the conversation back up instead of greeting its user as a stranger - the machinery is
         # the compaction reseed, fed from disk instead of from this process's own memory.
         self._session = self._new_session(
-            self._seeded_options() if self._recent else _make_options(persona, model))
+            self._seeded_options() if self._recent else self._options())
 
     def interrupt(self):
         """Cancel the ask in flight so a barge-in doesn't have to wait it out. The flag is set
@@ -188,16 +174,16 @@ class SdkBrain:
         if self._session is not None:
             self._session.interrupt()
 
-    def respond(self, utterance, *, remember=True):
-        """Ask the brain. `remember=False` keeps a background exchange out
-        of the carried-forward recent-turns window, so its silent "any agent news?" polls don't
-        crowd out the real conversation."""
+    def respond(self, utterance, *, remember=True, on_text=None):
+        """Ask the brain. `on_text` receives each user-facing text delta as the model writes it -
+        the feed a streaming voice speaks from. `remember=False` keeps a background exchange out
+        of the carried-forward recent-turns window."""
         with self._respond_lock:  # everything shares the one session, so serialize onto it
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
                 self._compact()
             try:
-                reply = self._live_session().ask(utterance)
+                reply = self._live_session().ask(utterance, on_text=on_text)
             except Exception:
                 # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
                 # retry - re-asking would re-run the very work we just cancelled.
@@ -206,7 +192,7 @@ class SdkBrain:
                 # Otherwise the session may be wedged (a dropped connection strands every later turn
                 # as a "glitch"). Rebuild it and try once more; only give up if that also fails.
                 self._reconnect()
-                reply = self._live_session().ask(utterance)
+                reply = self._live_session().ask(utterance, on_text=on_text)
             if self._interrupting.is_set():
                 raise BrainInterrupted  # a reply may have landed, but it was cut off - drop it unspoken
             if _is_usage_limit(reply):
@@ -214,7 +200,7 @@ class SdkBrain:
                 # try once more: a fresh session recovers the moment usage is back, instead of
                 # parroting the notice forever. If still gone, the retry says so once - not in a loop.
                 self._reconnect()
-                reply = self._live_session().ask(utterance)
+                reply = self._live_session().ask(utterance, on_text=on_text)
             self._observe(self._session.last_context_tokens)
             if remember:
                 self._recent.append((utterance, reply))
@@ -268,9 +254,12 @@ class SdkBrain:
             self._baseline = None
         return self._session
 
+    def _options(self):
+        return _make_options(self._persona, self._model, self._actions)
+
     def _seeded_options(self):
         """Options for a fresh session that carries the recent turns forward as context."""
-        return _make_options(self._persona + self._render_recent(), self._model)
+        return _make_options(self._persona + self._render_recent(), self._model, self._actions)
 
     def _render_recent(self):
         if not self._recent:

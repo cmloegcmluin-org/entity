@@ -26,7 +26,7 @@ def test_a_remember_false_turn_stays_out_of_the_recent_window():
         def __init__(self, options):
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             return f"reply to {message}"
 
         def close(self):
@@ -52,7 +52,7 @@ def test_a_brain_seeded_with_past_turns_starts_mid_conversation():
             made.append(options)
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             return "reply"
 
         def close(self):
@@ -97,7 +97,7 @@ def test_a_rebuild_that_fails_leaves_no_session_rather_than_a_dead_one():
             if len(made) == 2:  # the rebuild can't reach the CLI either
                 raise RuntimeError("CLI not found")
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             if self.closed or self is made[0]:
                 raise RuntimeError("this session is gone")
             return "back with you"
@@ -123,7 +123,7 @@ def test_respond_rebuilds_the_session_when_it_hits_a_usage_limit_then_recovers()
             self.closed = False
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             if made.index(self) == 0:  # the wedged session parrots the spend-limit notice
                 return _LIMIT
             return "Merged. The drive icon opens the folder now."  # a fresh session, usage back
@@ -146,7 +146,7 @@ def test_a_persistent_usage_limit_is_surfaced_once_not_looped_forever():
             self.closed = False
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             return _LIMIT  # usage genuinely still gone on every session
 
         def close(self):
@@ -167,7 +167,7 @@ def test_interrupt_cancels_the_current_session():
             self.interrupted = False
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             return "hi"
 
         def interrupt(self):
@@ -193,7 +193,7 @@ def test_respond_does_not_retry_after_an_interrupt():
             self.asks = 0
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             self.asks += 1
             brain.interrupt()  # they barge in while we're waiting on the model
             raise RuntimeError("stream aborted by interrupt")
@@ -219,7 +219,7 @@ def test_respond_discards_a_partial_reply_after_an_interrupt():
         def __init__(self, options):
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             brain.interrupt()
             return "half a sentence they never asked to h"
 
@@ -242,7 +242,7 @@ def test_a_fresh_respond_after_an_interrupt_works_normally():
         def __init__(self, options):
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             return f"reply to {message}"
 
         def interrupt(self):
@@ -267,6 +267,56 @@ def test_brain_is_isolated_from_user_settings_and_hooks():
     assert opts.system_prompt == "PERSONA"
 
 
+def test_the_brain_has_no_built_in_tools_only_the_typed_actions():
+    # Its old Bash/Read tools are how a status question became fifteen minutes of digging. The
+    # fast brain talks and pulls levers; investigation belongs to the agents it starts.
+    actions = object()
+    opts = _make_options("PERSONA", "haiku", actions)
+
+    assert opts.tools == []  # every built-in tool is off
+    assert opts.mcp_servers == {"entity": actions}
+    assert all(name.startswith("mcp__entity__") for name in opts.allowed_tools)
+    assert opts.include_partial_messages is True  # the voice speaks the reply as it is written
+
+
+def test_the_brain_defaults_to_the_fast_model():
+    # Talking is a fast job for a fast model: first words in about a second. The agents doing the
+    # real work run Opus-tier - that default lives with the desk, not here.
+    made = []
+
+    class Session:
+        def __init__(self, options):
+            made.append(options)
+            self.last_context_tokens = 0
+
+        def close(self):
+            pass
+
+    SdkBrain(session_factory=Session)
+
+    assert "haiku" in made[0].model
+
+
+def test_text_deltas_stream_through_respond_to_the_caller():
+    class Session:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_text=None):
+            for piece in ("Star", "ting now."):
+                on_text(piece)
+            return "Starting now."
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=Session)
+    heard = []
+
+    assert brain.respond("go", on_text=heard.append) == "Starting now."
+    assert heard == ["Star", "ting now."]
+
+
 def test_respond_rebuilds_a_wedged_session_and_retries_once():
     made = []
 
@@ -276,7 +326,7 @@ def test_respond_rebuilds_a_wedged_session_and_retries_once():
             self.closed = False
             self.last_context_tokens = 0
 
-        def ask(self, message):
+        def ask(self, message, on_text=None):
             if made.index(self) == 0:  # the first session is wedged
                 raise RuntimeError("connection dropped")
             return "recovered reply"
@@ -302,7 +352,7 @@ class GrowingSession:
         self.last_context_tokens = 0
         self._per_turn = per_turn
 
-    def ask(self, message):
+    def ask(self, message, on_text=None):
         self.asks.append(message)
         self.last_context_tokens += self._per_turn
         return f"reply to {message}"

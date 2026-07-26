@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
-from claude_agent_sdk import ClaudeAgentOptions, ResultMessage
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, StreamEvent
 
 from entity.sdk_session import SdkSession, _context_tokens, extract_text
 
@@ -122,6 +122,47 @@ def test_every_message_reaches_the_caller_whole_as_it_streams():
 
     assert seen == list(StreamingClient.STREAM)  # every message, untouched
     assert reply == "Now the implementation:"  # the reply is still only its final word
+    session.close()
+
+
+def _delta(text):
+    return StreamEvent(uuid="u", session_id="s",
+                       event={"type": "content_block_delta",
+                              "delta": {"type": "text_delta", "text": text}})
+
+
+class PartialStreamingClient(FakeClient):
+    """A client running with partial messages on: deltas as the text is written, then the whole."""
+
+    STREAM = (
+        _delta("Star"),
+        StreamEvent(uuid="u", session_id="s",
+                    event={"type": "content_block_delta",
+                           "delta": {"type": "thinking_delta", "thinking": "hmm"}}),
+        _delta("ting now."),
+        FakeMsg([FakeBlock("Starting now.")]),
+        _finished(),
+    )
+
+    async def query(self, prompt):
+        self.asked = prompt
+
+    async def receive_response(self):
+        for message in self.STREAM:
+            yield message
+
+
+def test_text_deltas_reach_the_caller_as_the_reply_is_being_written():
+    # First words within a couple of seconds: a voice needs the reply as it is being written, not
+    # after the turn has finished. Only the user-facing text streams - thinking stays out of it.
+    client = PartialStreamingClient()
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
+    heard = []
+
+    reply = session.ask("go", on_text=heard.append)
+
+    assert heard == ["Star", "ting now."]
+    assert reply == "Starting now."  # the settled reply is unchanged by having streamed
     session.close()
 
 

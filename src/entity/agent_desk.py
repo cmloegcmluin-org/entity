@@ -142,8 +142,8 @@ class AgentDesk:
         """
         with self._lock:
             entry = self._desked.get(name)
-            if entry is not None and entry.state == "working":
-                return False
+            if entry is not None and entry.state not in ("idle", "failed"):
+                return False  # starting or working - live either way, and a live tab stays up
         log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
         if entry is None and (log is None or not log.exists()):
             return False

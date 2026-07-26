@@ -28,7 +28,7 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement"))
+                                "file_improvement", "close_agent_tab"))
 
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
@@ -98,7 +98,16 @@ def fleet_actions(desk, *, file_enhancement=append_enhancement, resolve=_resolve
         file_enhancement(str(args["item"]))
         return _say("Filed.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement]
+    @tool("close_agent_tab", "Close a finished agent's tab in the user's window. Only for agents "
+          "that are done - a working agent's tab stays open.", {"name": str})
+    async def close_agent_tab(args):
+        name = str(args["name"]).strip()
+        if not desk.retire(name):
+            return _say(f"Couldn't close {name} - it is still working, or there is no tab by "
+                        "that name.")
+        return _say(f"Closed {name}'s tab.")
+
+    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, close_agent_tab]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
 

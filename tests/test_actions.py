@@ -1,6 +1,8 @@
 import asyncio
+import os.path
+from pathlib import Path
 
-from entity.actions import fleet_actions
+from entity.actions import _resolve, fleet_actions
 
 
 class FakeDesk:
@@ -8,6 +10,7 @@ class FakeDesk:
         self.started = []
         self.told = []
         self.chosen = []
+        self.retired = []
         self._known = set(known)
 
     def start(self, name, cwd, task):
@@ -23,6 +26,10 @@ class FakeDesk:
 
     def running_on(self):
         return "Opus on high"
+
+    def retire(self, name):
+        self.retired.append(name)
+        return name in self._known
 
 
 def _call(tool, **args):
@@ -126,3 +133,65 @@ def test_filing_an_improvement_lands_it_in_the_profile():
 
     assert filed == ["louder notification chime"]
     assert "filed" in said.lower()
+
+
+def test_start_agent_with_an_empty_task_falls_back_to_the_default():
+    desk = FakeDesk()
+    tools = _tools(desk, resolve=lambda target: ["/wt/resume-me"], prepare=lambda path: None,
+                   default_task="DEFAULT TASK")
+
+    _call(tools["start_agent"], path="/wt/resume-me", task="")
+
+    assert desk.started[0][2] == "DEFAULT TASK"
+
+
+def test_closing_a_tab_retires_the_agent_through_the_desk():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["close_agent_tab"], name="gdoc-export")
+
+    assert desk.retired == ["gdoc-export"]
+    assert "closed" in said.lower()
+
+
+def test_a_tab_that_cannot_close_says_why_not_that_it_did():
+    desk = FakeDesk(known=())
+    tools = _tools(desk)
+
+    said = _call(tools["close_agent_tab"], name="fixer")
+
+    assert "still working" in said.lower() or "no tab" in said.lower()
+
+
+def test_resolve_globs_a_worktrees_container_to_its_actual_worktrees(tmp_path):
+    for name in ("wt1", "wt2"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    (tmp_path / "junk").mkdir()  # no .git - not a worktree, so no agent belongs in it
+
+    resolved = _resolve(str(tmp_path))
+
+    assert sorted(Path(p).name for p in resolved) == ["wt1", "wt2"]
+
+
+def test_resolve_never_explodes_a_single_worktree_into_its_subdirectories(tmp_path):
+    # The model named ONE worktree; globbing its subdirectories started an agent in .venv, one in
+    # docs, one in src... - a whole crowd working "the task" in folders that aren't worktrees at all.
+    worktree = tmp_path / "hungry-neumann"
+    worktree.mkdir()
+    (worktree / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    for name in (".venv", "docs", "src", "tests"):
+        (worktree / name).mkdir()
+
+    assert _resolve(str(worktree)) == [str(worktree)]  # one worktree, one agent
+
+
+def test_resolve_takes_explicit_comma_separated_paths():
+    assert _resolve("/x/one, /x/two") == ["/x/one", "/x/two"]
+
+
+def test_resolve_expands_a_home_relative_fresh_path():
+    # A brand-new worktree path named for new work won't exist yet, so it falls to the
+    # explicit-path branch - which must still expand ~ so the agent's cwd is real.
+    assert _resolve("~/work/new-agent") == [os.path.expanduser("~/work/new-agent")]

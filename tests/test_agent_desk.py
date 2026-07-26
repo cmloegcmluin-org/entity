@@ -44,7 +44,7 @@ class FakeAgent:
 
 
 def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None, run=None,
-          state=None):
+          state=None, law=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
@@ -54,7 +54,7 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=
         return agent
 
     return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor,
-                      log_dir=log_dir, run=run, state_path=state),
+                      log_dir=log_dir, run=run, state_path=state, law_path=law),
             outbox, made)
 
 
@@ -762,4 +762,32 @@ def test_the_standing_rule_carries_the_engineering_law_not_just_the_review_law()
     assert "full test suite" in task
     assert "merge queue" in task
     assert "CLAUDE.md" in task
+    desk.close()
+
+
+def test_every_task_points_the_agent_at_the_machine_wide_engineering_law(tmp_path):
+    # "why wouldn't that be in the global CLAUDE.md?" - it is, and agents can't load that file
+    # (its conversation rules break them). The engineering half now lives in its own file, and
+    # every task points there: one source, read fresh by each agent, never pasted stale.
+    law = tmp_path / "engineering.md"
+    law.write_text("# engineering law", encoding="utf-8")
+    desk, outbox, made = _desk(law=law)
+
+    desk.start("fixer", "/wt/fixer", "a task")
+
+    assert _wait_for(lambda: bool(outbox))
+    assert str(law) in made[0].messages[0]
+    assert "engineering law" in made[0].messages[0]
+    desk.close()
+
+
+def test_a_law_file_that_is_not_there_adds_no_pointer(tmp_path):
+    # A checkout without the split (another machine, a fresh clone) must not send agents chasing
+    # a file that does not exist.
+    desk, outbox, made = _desk(law=tmp_path / "missing.md")
+
+    desk.start("fixer", "/wt/fixer", "a task")
+
+    assert _wait_for(lambda: bool(outbox))
+    assert "missing.md" not in made[0].messages[0]
     desk.close()

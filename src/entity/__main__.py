@@ -34,7 +34,7 @@ from entity.outbox import Outbox
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
 from entity.transcript import Transcript, recent_turns
-from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice
+from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice, voice_choice
 from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
 
@@ -177,13 +177,15 @@ def _voice(announce):
         if paths is None:
             announce("(couldn't fetch the neural voice - staying on the system one)")
             return
-        engine = KokoroEngine(*paths)
+        name, speed = voice_choice(RUNTIME_DIR / "tts")
+        engine = KokoroEngine(*paths, voice=name, speed=speed)
         try:
             engine.say("Ready.")  # load the model here, off the startup path, and warm it
         except Exception as exc:
             announce(f"(the neural voice failed to load: {exc!r} - staying on the system one)")
             return
         voice.swap(Speaker(engine, play=play_samples))
+        announce(f"(the neural voice is in: {name} - change it in runtime/tts/voice.txt)")
 
     threading.Thread(target=upgrade, daemon=True).start()
     return voice

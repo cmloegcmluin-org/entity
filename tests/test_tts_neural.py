@@ -1,6 +1,23 @@
 import pytest
 
-from entity.tts_neural import KokoroEngine, SwappableTTS, ensure_voice
+from entity.tts_neural import DEFAULT_SPEED, DEFAULT_VOICE, KokoroEngine, SwappableTTS, ensure_voice, voice_choice
+
+
+def test_the_voice_choice_defaults_when_nothing_is_configured(tmp_path):
+    assert voice_choice(tmp_path) == (DEFAULT_VOICE, DEFAULT_SPEED)
+
+
+def test_voice_txt_beside_the_model_picks_the_voice_and_speed(tmp_path):
+    (tmp_path / "voice.txt").write_text("am_fenrir 1.1", encoding="utf-8")
+
+    assert voice_choice(tmp_path) == ("am_fenrir", 1.1)
+
+
+def test_a_garbled_speed_keeps_the_voice_and_drops_only_the_speed(tmp_path):
+    # A half-understood file must never cost the voice entirely.
+    (tmp_path / "voice.txt").write_text("am_fenrir fastish", encoding="utf-8")
+
+    assert voice_choice(tmp_path) == ("am_fenrir", DEFAULT_SPEED)
 
 
 def test_ensure_voice_leaves_files_already_on_disk_alone(tmp_path):

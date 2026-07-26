@@ -16,8 +16,29 @@ _RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-
 MODEL_FILE = "kokoro-v1.0.onnx"
 VOICES_FILE = "voices-v1.0.bin"
 
-DEFAULT_VOICE = "af_heart"
+# The user asked for a male voice; am_michael is the strongest male in the v1.0 voice pack.
+# voice.txt beside the model overrides it (see `voice_choice`), so trying another is an edit,
+# not a build.
+DEFAULT_VOICE = "am_michael"
 DEFAULT_SPEED = 1.0
+
+
+def voice_choice(directory):
+    """(voice, speed) from `voice.txt` beside the model - "am_fenrir 1.1" - or the defaults.
+
+    A file, because taste in voices is personal and runtime/ is where personal things live; and
+    forgiving, because a half-understood file must never cost the voice entirely."""
+    path = Path(directory) / "voice.txt"
+    try:
+        words = path.read_text(encoding="utf-8").split()
+    except OSError:
+        return DEFAULT_VOICE, DEFAULT_SPEED
+    voice = words[0] if words else DEFAULT_VOICE
+    try:
+        speed = float(words[1]) if len(words) > 1 else DEFAULT_SPEED
+    except ValueError:
+        speed = DEFAULT_SPEED
+    return voice, speed
 
 
 def _download(url, into):

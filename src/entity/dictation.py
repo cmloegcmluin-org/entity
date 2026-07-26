@@ -49,6 +49,11 @@ from entity.stt_mic import (
     rms,
 )
 
+# How long after end_speaking a frame still counts as the Entity's sound: its last word is in the
+# air when the audio call returns (speaker to mic is ~90ms on the measured desk), and the output
+# stream drains a beat after the last write. 10 frames = 300ms at the 30ms mic frame.
+SPEAK_TAIL_FRAMES = 10
+
 DEFAULT_MUTE_PHRASES = ("stop listening", "suspend")
 DEFAULT_WAKE_PHRASES = ("hey entity", "resume")
 # Rewind and say it again. Both are stock dictation idioms rather than anything they say about code,
@@ -105,6 +110,7 @@ class Dictation:
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
         self._bark = None  # while the Entity speaks: an Event a stop bark should fire
+        self._tail_pending = False  # end_speaking happened; the pump owes a grace window for the tail
 
     # ---- the Conversation-facing half ----------------------------------------------------------
 
@@ -178,8 +184,11 @@ class Dictation:
         self._auto_listen = on
 
     def end_speaking(self):
-        """It has finished (or been cut off) - back to however they had left the mic."""
+        """It has finished (or been cut off) - back to however they had left the mic. The pump is
+        told explicitly (`_tail_pending`) rather than left to sample the flag, because a reply can
+        begin and end between two mic frames and the tail grace must still happen."""
         self._speaking = False
+        self._tail_pending = True
         if self._auto_listen and not self._silenced:
             self._armed = True
         self._silenced = False
@@ -199,16 +208,43 @@ class Dictation:
 
     def pump(self):
         """The forever loop: frames in, draft text / state changes / levels / submits out. Runs on
-        its own thread against a real mic; tests run it inline against a finite one."""
+        its own thread against a real mic; tests run it inline against a finite one.
+
+        A burst is judged by the state it was CAPTURED in, never the state at its closing pause.
+        The Entity's reply used to start a burst whose pause came after end_speaking, and the
+        whether-to-draft check looked at the current state - so its own sentence became the user's
+        draft, word for word. Every speaking transition now cuts the burst in flight: what came
+        before the Entity opened its mouth is the user's, what its voice made is a bark-check and
+        nothing more, and a short grace window after end_speaking still counts as it talking,
+        because its last word is in the air (speaker to mic is ~90ms) after the audio call returns.
+        """
         floor = NoiseFloor()
         burst = Burst()
         silence = 0
         started = False
+        was_speaking = self._speaking
+        speech_tail = 0  # frames of grace after end_speaking that are still "it talking"
         for frame in self._mic.frames():
             if self._recorder is not None:
                 self._recorder.write(frame)  # to disk first, so a crash can't lose what they said
             if self._stop is not None and self._stop.is_set():
                 return
+            speaking_now = self._speaking
+            if speaking_now and not was_speaking:  # it opened its mouth mid-burst
+                if len(burst):  # what they had said so far is theirs - finish it as dictation
+                    self._end_burst(burst, heard_while_speaking=speech_tail > 0)
+                    burst, silence, started = Burst(), 0, False
+                speech_tail = 0
+            was_speaking = speaking_now
+            if self._tail_pending:  # it just finished a reply - maybe between two frames
+                self._tail_pending = False
+                if len(burst):  # the burst its voice made is a bark-check, never a draft
+                    self._end_burst(burst, heard_while_speaking=True)
+                    burst, silence, started = Burst(), 0, False
+                speech_tail = SPEAK_TAIL_FRAMES
+            entity_sounding = speaking_now or speech_tail > 0
+            if speech_tail:
+                speech_tail -= 1
             level = rms(frame)
             self._on_level(level if self.taking_dictation() else 0.0)
             speech = floor.is_speech(level)
@@ -217,38 +253,41 @@ class Dictation:
                     continue
                 started = True
             burst.add(frame, speech=speech, level=level)
-            if self._hearing is not None and self.taking_dictation():
+            if self._hearing is not None and self._armed and not entity_sounding:
                 # Only what they are being heard saying: the room while the mic is off, and the
                 # Entity's own voice through their speakers, have no business on screen as their words.
                 self._hearing.follow(burst)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over
             if ended or self._finish_burst:  # ...or they muted while still mid-sentence
-                self._end_burst(burst)
+                self._end_burst(burst, heard_while_speaking=entity_sounding)
                 burst, silence, started = Burst(), 0, False
             self._mid_burst = started
         if len(burst):  # a finite source ran out mid-burst (a real mic never does)
-            self._end_burst(burst)
+            self._end_burst(burst, heard_while_speaking=self._speaking or speech_tail > 0)
         self._mid_burst = False
 
-    def _end_burst(self, burst):
+    def _end_burst(self, burst, *, heard_while_speaking):
         """Hand one finished burst to the transcriber - unless there was no word in it. A burst
         with no sustained sound is a tap or a creak, and the model answers those with invented
-        words (see carries_speech), so it never gets asked."""
+        words (see carries_speech), so it never gets asked. `heard_while_speaking` is the state
+        the burst was captured in - the pump's call, since only it knows when the state flipped."""
         if self._hearing is not None:
             self._hearing.rest()  # the finished sentence is about to land; the live line makes way
         if burst.carries_speech():
-            self._absorb(burst.audio(), armed=self._armed or self._finish_burst)
+            self._absorb(burst.audio(), armed=self._armed or self._finish_burst,
+                         speaking=heard_while_speaking)
         self._finish_burst = False
 
-    def _absorb(self, audio, *, armed=None):
+    def _absorb(self, audio, *, armed=None, speaking=None):
         armed = self._armed if armed is None else armed
+        speaking = self._speaking if speaking is None else speaking
         # The "um"s and "uh"s go before anything reads the text, so no reader downstream has to
         # know they were ever there.
         text = without_hesitations(self._transcriber.transcribe(audio).strip())
         if not text:
             return
-        if self._speaking:  # its own voice, mostly - a bark check, never draft text
+        if speaking:  # its own voice, mostly - a bark check, never draft text
             if self._bark is not None and _is_stop_bark(text, STOP_WORDS):
                 self._bark.set()
             return

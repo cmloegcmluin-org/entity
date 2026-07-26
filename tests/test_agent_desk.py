@@ -42,7 +42,7 @@ class FakeAgent:
         self.closed = True
 
 
-def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None):
+def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
@@ -51,7 +51,8 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None):
         made.append(agent)
         return agent
 
-    return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor),
+    return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor,
+                      log_dir=log_dir),
             outbox, made)
 
 
@@ -376,6 +377,51 @@ def test_the_digest_with_nothing_running_says_so():
     desk, _, _ = _desk()
 
     assert desk.digest() == "No agents running."
+
+
+def test_retiring_a_finished_agent_closes_its_tab_by_moving_its_log(tmp_path):
+    # A tab closes when its log leaves the folder the window watches. The brain used to do the
+    # move with its own shell; it has no shell now, so the desk does it on the tool's behalf.
+    desk, outbox, _ = _desk(log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "a task")
+    assert _wait_for(lambda: bool(outbox))  # finished: its work() returned
+
+    assert desk.retire("fixer") is True
+
+    assert not (tmp_path / "fixer.log").exists()
+    assert (tmp_path / "closed" / "fixer.log").exists()
+    assert desk.roster() == []  # and the desk lets go of the finished session
+    desk.close()
+
+
+def test_a_working_agent_cannot_be_retired_out_from_under_them(tmp_path):
+    # Closing a live agent's tab would drop the user's view into work still happening.
+    hold = threading.Event()
+    desk, _, _ = _desk(hold=hold, log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "a task")
+    assert _wait_for(lambda: (tmp_path / "fixer.log").exists())
+
+    assert desk.retire("fixer") is False
+    assert (tmp_path / "fixer.log").exists()
+
+    hold.set()
+    desk.close()
+
+
+def test_retiring_an_agent_the_desk_never_had_still_moves_a_leftover_log(tmp_path):
+    # After a restart the desk is empty but yesterday's logs still hold tabs open. Retiring one
+    # is then purely the file move.
+    desk, _, _ = _desk(log_dir=tmp_path)
+    (tmp_path / "old-timer.log").write_text("x", encoding="utf-8")
+
+    assert desk.retire("old-timer") is True
+    assert (tmp_path / "closed" / "old-timer.log").exists()
+
+
+def test_retiring_something_with_no_log_and_no_agent_says_no(tmp_path):
+    desk, _, _ = _desk(log_dir=tmp_path)
+
+    assert desk.retire("ghost") is False
 
 
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):

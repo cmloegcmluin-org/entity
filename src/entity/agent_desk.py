@@ -133,6 +133,34 @@ class AgentDesk:
             ]
         return "\n".join(lines) or "No agents running."
 
+    def retire(self, name):
+        """Close an agent's tab: move its log into closed/ and let a finished session go.
+
+        False when there is nothing to retire, or the agent is still WORKING - closing a live
+        agent's tab would drop the user's view into work still happening. An agent the desk never
+        had (yesterday's, before a restart) is just its leftover log, and the move alone closes it.
+        """
+        with self._lock:
+            entry = self._desked.get(name)
+            if entry is not None and entry.state == "working":
+                return False
+        log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
+        if entry is None and (log is None or not log.exists()):
+            return False
+        if log is not None and log.exists():
+            closed = self._log_dir / "closed"
+            closed.mkdir(parents=True, exist_ok=True)
+            log.replace(closed / log.name)
+        if entry is not None:
+            with self._lock:
+                self._desked.pop(name, None)
+            try:
+                entry.agent.close()
+            except Exception:
+                pass  # the session may already be gone; the tab is what was asked about
+            self._write_roster()
+        return True
+
     def close(self):
         with self._lock:
             desked = list(self._desked.values())

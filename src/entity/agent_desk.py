@@ -99,7 +99,8 @@ class _Desked:
 
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
-                 monitor=None, clock=time.strftime, events=None, run=None, state_path=None):
+                 monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
+                 law_path=None):
         from entity.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
@@ -111,6 +112,7 @@ class AgentDesk:
         self._factory = agent_factory or _real_agent
         self._roster_path = Path(roster_path) if roster_path else None
         self._state_path = Path(state_path) if state_path else None  # the fleet's survival record
+        self._law_path = Path(law_path) if law_path else None  # the machine-wide engineering law
         self._log_dir = Path(log_dir) if log_dir else None
         # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
         # know nothing about agents: a note Entity wrote itself became an "agent" that then went
@@ -137,7 +139,17 @@ class AgentDesk:
         with self._lock:
             self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
                                          model=self._model, effort=self._effort)
-        self._dispatch(name, task + STANDING_RULE)
+        self._dispatch(name, task + STANDING_RULE + self._law_note())
+
+    def _law_note(self):
+        """The machine-wide engineering law, pointed at rather than pasted: one source, no size
+        ceiling, and each agent reads the CURRENT text, never a copy staled by Entity's uptime.
+        Silent when the file isn't there - a fresh machine must not send agents chasing it."""
+        if self._law_path is None or not self._law_path.exists():
+            return ""
+        return (f"\n\nThe user's machine-wide engineering law is in {self._law_path} - read "
+                "that file before you begin, and follow it as strictly as this repo's own "
+                "CLAUDE.md.")
 
     def revive(self):
         """Reopen every agent the last process recorded, each resumed on its old session.

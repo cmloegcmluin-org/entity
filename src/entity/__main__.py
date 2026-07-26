@@ -267,7 +267,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
     # does can block on agent work, and nothing it says doubles as a control channel.
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor,
-                     events=agent_events, state_path=AGENT_STATE)
+                     events=agent_events, state_path=AGENT_STATE,
+                     # The machine-wide engineering law, split out of the user's personal config
+                     # so working agents can be pointed at exactly it. Home-relative, so nothing
+                     # personal enters the source and a machine without the split just skips it.
+                     law_path=Path.home() / ".claude" / "engineering.md")
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.
     foreman = Foreman(desk, outbox)

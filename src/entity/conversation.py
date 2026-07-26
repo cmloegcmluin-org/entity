@@ -82,12 +82,23 @@ DEFAULT_DORMANT_AFTER = 180.0
 # be sayable even while the brain is mid-something-else.
 UPDATE_OFFER = "I've got an update on {what} when you're ready."
 
-# A bare go-ahead releases a held update. Exact matches only: "okay" mid-sentence is them talking,
-# not them asking for the news.
+# A bare go-ahead with SEVERAL updates held reads the numbered choice out. Exact matches only:
+# "okay" mid-sentence is them talking, not them asking for the list. With ONE update held, no
+# magic words are needed at all - whatever they say next carries the update into that reply.
 _GO_AHEADS = frozenset((
     "ok", "okay", "yes", "yeah", "yep", "sure", "ready", "go ahead", "go for it", "alright",
     "hit me", "im ready", "i m ready", "lets hear it", "let s hear it", "go",
 ))
+
+# The held update, put in front of the brain on the turn that answers the offer. Delivering the
+# STORED line as well was the repeat he heard: "Yeah, let me know" missed the exact go-ahead list,
+# the brain improvised the news from memory, and the stored sentence then played anyway.
+OFFERED_NOTICE = (
+    "[System note, not from the user: you told them an update on {about} was waiting, and they "
+    "have now answered. This reply IS the delivery. The update, which they have not heard yet: "
+    "{news}\nSay what it says once, complete, folded around whatever they just said - and never "
+    "repeat it in a later turn.]\n\n"
+)
 
 
 class _ThinkInterrupted(Exception):
@@ -395,15 +406,10 @@ class Conversation:
         return " and ".join(names)
 
     def _release_updates(self, heard):
-        """They said the word: the held update goes out now, as this turn."""
+        """They said the word and several are waiting: read out the numbered choice."""
         self._update_offered = False
-        if len(self._waiting) > 1:
-            self._announce()
-            return Turn(heard=heard, said=roll_call(self._waiting))
-        news = self._waiting.pop()
-        self._console.heads_up(news)
-        self._say(news, record=False, known=getattr(news, "composed", False))
-        return Turn(heard=heard, said=str(news))
+        self._announce()
+        return Turn(heard=heard, said=roll_call(self._waiting))
 
     def _they_are_talking(self):
         """Are they part-way through saying something? While they are, the Entity says nothing of its
@@ -491,18 +497,29 @@ class Conversation:
             self._paused = True
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
-        if self._update_offered and self._waiting and _canonical(heard) in _GO_AHEADS:
-            return self._release_updates(heard)  # they said the word; the held update is the turn
+        if self._update_offered and len(self._waiting) == 1:
+            # The offer's answer IS the delivery, whatever their words were: the held update rides
+            # into this turn's prompt and the brain says it once. Speaking the stored line as well
+            # - after the brain had already covered it from memory - is how he heard it all twice.
+            self._update_offered = False
+            self._announced = 0
+            return self._answer(heard, offered=self._waiting.pop())
+        if self._update_offered and self._waiting and canonical in _GO_AHEADS:
+            return self._release_updates(heard)  # several are held; read out the choice
         if self._waiting:  # they may be naming one of the agents the roll call just read out
             picked = self._take_pick(heard)
             if picked is not None:
                 return picked
         return self._answer(heard)
 
-    def _with_system_notes(self, heard):
+    def _with_system_notes(self, heard, offered=None):
         """Their words, with what the brain would otherwise have no way of knowing put in front:
-        the live fleet briefing, and everything said in its name since that it did not write."""
+        the live fleet briefing, everything said in its name since that it did not write, and -
+        on the turn that answers an update offer - the held update itself, to deliver once."""
         notes = ""
+        if offered is not None:
+            notes += OFFERED_NOTICE.format(
+                about=getattr(offered, "about", None) or "your agents", news=offered)
         if self._briefing is not None:
             facts = str(self._briefing()).strip()
             if facts:
@@ -512,7 +529,7 @@ class Conversation:
             notes += UNWRITTEN_NOTICE.format(lines="\n".join(f"- {line}" for line in unwritten))
         return notes + heard
 
-    def _answer(self, heard):
+    def _answer(self, heard, offered=None):
         """Think, and speak the reply as it is written.
 
         With a streaming voice and a streaming brain, each sentence sounds while the next is still
@@ -529,13 +546,15 @@ class Conversation:
             reply = open_stream(interrupt=self._interrupt, spoken_form=as_spoken)
         think_start = time.monotonic()
         try:
-            said = self._think(self._with_system_notes(heard),
+            said = self._think(self._with_system_notes(heard, offered),
                                on_text=reply.add if reply is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
+            self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
             release_floor()
             return None
         except Exception as exc:  # tell them the real cause - it reaches them nowhere else
+            self._keep_for_later(offered)  # the delivery turn died; the update must survive it
             self._settle(reply)
             said = self.error_reply.format(cause=_cause(exc))
             self._speak_reply(said)
@@ -569,6 +588,12 @@ class Conversation:
         drains unspoken once the interrupt is set, or was never fed)."""
         if reply is not None:
             reply.done()
+
+    def _keep_for_later(self, offered):
+        """An update popped into a turn that never delivered it goes back to waiting - they were
+        promised that line, and the failed turn must not be where it silently ends."""
+        if offered is not None:
+            self._waiting.insert(0, offered)
 
     def run(self, should_continue=lambda: True, on_turn=None):
         while should_continue():

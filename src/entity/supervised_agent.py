@@ -29,12 +29,14 @@ def _agent_options(cwd, model, effort, can_use_tool, resume=None):
         cwd=cwd,
         model=model,
         effort=effort,  # how hard it is told to think; their choice, said out loud (see entity.models)
-        # setting_sources=[] loads NO settings. Verified necessary: because the worktrees live
-        # under the user's home, "project"/"local" discovery walks up into ~/.claude and drags in
-        # their global reply-format CLAUDE.md + Stop hook (the agent starts answering in that
-        # format and latency blows up). Feeding each agent its worktree's own CLAUDE.md cleanly is
-        # the next refinement.
-        setting_sources=[],
+        # Only the PROJECT's settings: the worktree's checked-in CLAUDE.md - TDD, the merge
+        # process, everything a repo demands of anyone working in it - loads into every agent.
+        # The USER scope stays out, deliberately and verified: his global CLAUDE.md carries
+        # reply-format rules and a Stop hook written for agents he talks to directly, and loaded
+        # into a working agent they had it answering in his quoting format with its latency in
+        # ruins. "how to TDD etc. is ultra critical" - that is project law; the quoting rules are
+        # his-conversation law; the split keeps each where it belongs.
+        setting_sources=["project"],
         permission_mode="default",  # approvals ON: nothing runs without a decision
         can_use_tool=can_use_tool,
         # Reattach to everything the agent already knew: a restart used to strand the fleet, and

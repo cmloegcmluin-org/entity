@@ -747,3 +747,19 @@ def test_the_desk_hands_over_an_agents_recent_log_for_a_senior_read(tmp_path):
     assert "did: a task" in tail  # the exchange the fake agent streamed is in the tail
     assert desk.recent_log("nobody") == ""
     desk.close()
+
+
+def test_the_standing_rule_carries_the_engineering_law_not_just_the_review_law():
+    # "how to TDD etc. is ultra critical" - and an agent may work in a repo whose CLAUDE.md is
+    # thin or missing, so the discipline rides with the task itself: test-driven, full suite
+    # green, land through the repo's own process, leave it cleaner.
+    desk, outbox, made = _desk()
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))
+
+    [task] = made[0].messages
+    assert "test-drive" in task
+    assert "full test suite" in task
+    assert "merge queue" in task
+    assert "CLAUDE.md" in task
+    desk.close()

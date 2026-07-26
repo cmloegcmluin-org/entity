@@ -300,7 +300,9 @@ class Conversation:
             return
         news = self._waiting.pop()
         self._console.heads_up(news)  # shown in full, and spoken the same
-        self._say(news, record=False)
+        # Brain-composed news is the brain's own sentence: spoken as known, so the unwritten-lines
+        # ledger never reads its own words back to it as someone else's.
+        self._say(news, record=False, known=getattr(news, "composed", False))
 
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named."""
@@ -324,7 +326,10 @@ class Conversation:
         said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
         self._announced = len(self._waiting)
         self._console.heads_up(said)
-        self._say(said, record=False)
+        # Known only when the whole utterance is the brain's own sentence; with a roll call
+        # appended, part of what they hear is app-authored and the ledger must carry it.
+        self._say(said, record=False,
+                  known=getattr(news, "composed", False) and said == news)
         return Turn(heard=heard, said=said)
 
     def _they_are_talking(self):

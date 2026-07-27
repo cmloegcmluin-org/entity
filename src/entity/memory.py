@@ -31,6 +31,12 @@ LEXICON_POINTER = _RUNTIME / "lexicon-path.txt"
 # word to get right, a translation has a WRONG side, and the lexicon is shared with whatever else
 # transcribes them - a syntax it doesn't know would read as a term they never uses.
 DEFAULT_TRANSLATIONS_PATH = _RUNTIME / "translations.md"
+# Entity's OWN standing instructions - how it has been told to behave, accreted over time by the
+# user and by Entity itself when it is told to work differently from now on. This is the editable
+# overlay layered on top of the shipped `DEFAULT_PERSONA` base (which stays in the source, nameless);
+# it is NOT where `DEFAULT_PERSONA` lives. Gitignored like the rest of runtime, because how a
+# companion behaves for one person is personal.
+DEFAULT_PERSONA_ADDITIONS_PATH = _RUNTIME / "persona.md"
 
 # `{user}` is filled in from the profile's own title line by `compose_persona` - see `user_name`.
 USER_PLACEHOLDER = "{user}"
@@ -39,6 +45,12 @@ _PREAMBLE = (
     "Here is standing context about {user}'s life, for your awareness only. Do NOT raise any of "
     "it unprompted, and do not turn into a therapist or life-coach about it. "
     "Use it only to be more useful and less clueless when they bring something up themselves:"
+)
+
+_ADDITIONS_INTRO = (
+    "More standing instructions on how to be, added since - by {user}, and by you yourself when "
+    "they tell you to work differently from now on. Treat these as part of your core persona, every "
+    "bit as binding as the rules above:"
 )
 
 _LEXICON_INTRO = (
@@ -108,6 +120,11 @@ def load_lexicon(path=None):
     return _read(lexicon_path() if path is None else path)
 
 
+def load_persona_additions(path=DEFAULT_PERSONA_ADDITIONS_PATH):
+    """Entity's own accreted standing instructions, or "" when none have been added yet."""
+    return _read(path)
+
+
 def _read(path):
     try:
         return Path(path).read_text(encoding="utf-8")
@@ -165,16 +182,19 @@ def save_translations(text, path=DEFAULT_TRANSLATIONS_PATH):
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
-def compose_persona(base_persona, profile, learned="", lexicon=""):
-    """Fold the user's standing context into the brain's system prompt: life context (profile +
-    learned) under a do-not-play-therapist warning, and their lexicon under its own
-    recognize-these framing.
+def compose_persona(base_persona, profile, learned="", lexicon="", additions=""):
+    """Fold the user's standing context into the brain's system prompt: Entity's own accreted
+    standing instructions right after the base rules (they are how-to-behave, like the base), then
+    life context (profile + learned) under a do-not-play-therapist warning, then their lexicon under
+    its own recognize-these framing.
 
     This is also where the persona learns whose companion it is: every `{user}` in the assembled
     text becomes the name from the profile. Substituting here rather than at each template keeps
     one place that can leave a placeholder showing - and the window renders this exact text."""
     life = "\n\n".join(section.strip() for section in (profile, learned) if section.strip())
     sections = [base_persona]
+    if additions.strip():
+        sections.append(f"{_ADDITIONS_INTRO}\n\n{additions.strip()}")
     if life:
         sections.append(f"{_PREAMBLE}\n\n{life}")
     if lexicon.strip():
@@ -210,6 +230,26 @@ def append_learned(facts, path=DEFAULT_LEARNED_PATH):
     path = Path(path)
     existing = _read(path).rstrip() or "# Learned in past sessions"
     body = existing + "\n" + "\n".join(f"- {fact}" for fact in facts) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def save_persona_additions(text, path=DEFAULT_PERSONA_ADDITIONS_PATH):
+    """Write Entity's standing instructions back. Its persona is theirs to shape, so what they
+    cross out stays out and what they type is stored exactly as typed - the same contract as their
+    learned facts and their translations."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+
+
+def append_persona_addition(instruction, path=DEFAULT_PERSONA_ADDITIONS_PATH):
+    """Add one standing instruction, the way Entity files one when it is told to change how it
+    behaves from now on. Cumulative and bulleted - the mirror of `append_learned`, for how to be
+    rather than for facts about the user - so a whole persona can grow one instruction at a time."""
+    path = Path(path)
+    existing = _read(path).rstrip()
+    body = (existing + "\n" if existing else "") + f"- {instruction.strip()}\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
 

@@ -61,6 +61,39 @@ def test_load_lexicon_is_empty_when_missing(tmp_path):
     assert load_lexicon(tmp_path / "nope.md") == ""
 
 
+def test_load_persona_additions_is_empty_when_missing(tmp_path):
+    # Entity's own standing instructions - absent on a fresh checkout, so the persona still composes.
+    from entity.memory import load_persona_additions
+
+    assert load_persona_additions(tmp_path / "nope.md") == ""
+
+
+def test_persona_additions_are_saved_and_read_back(tmp_path):
+    # The window edits these in full - Entity's persona is theirs to curate, so what they type is
+    # what it reads next start, stored as typed rather than normalised.
+    from entity.memory import load_persona_additions, save_persona_additions
+
+    path = tmp_path / "persona.md"
+    save_persona_additions("- always answer in a whisper after midnight", path)
+
+    assert "always answer in a whisper after midnight" in load_persona_additions(path)
+
+
+def test_append_persona_addition_is_cumulative_and_bulleted(tmp_path):
+    # How Entity files one when told to change how it behaves - the same accretion as its learned
+    # facts, so the file reads as a list of standing instructions however it was started.
+    from entity.memory import append_persona_addition, load_persona_additions
+
+    path = tmp_path / "persona.md"
+    append_persona_addition("never read a commit hash aloud", path=path)
+    append_persona_addition("keep answers to one sentence after midnight", path=path)
+
+    text = load_persona_additions(path)
+    assert "never read a commit hash aloud" in text
+    assert "keep answers to one sentence after midnight" in text
+    assert text.count("- ") >= 2  # each landed as its own bullet, not smooshed into one
+
+
 def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
     out = compose_persona("BASE", "", "", lexicon="Notecraft — the audio-memo app")
 
@@ -72,6 +105,25 @@ def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
     # and it is NOT only their coined names: the domain terms of their fields belong here too, so
     # the framing must invite those rather than reading as "words the user made up"
     assert "domain" in out.lower()
+
+
+def test_compose_persona_folds_additions_in_as_binding_standing_instructions():
+    # Entity's own accreted instructions sit beside the base rules (how to behave), NOT under the
+    # life-context/therapy warning (which is for facts about the user), and are named to the user
+    # like everything else.
+    out = compose_persona("BASE RULES", "# Ada - standing profile\n\nintro\n", "",
+                          additions="- never read a commit hash aloud")
+
+    assert "BASE RULES" in out
+    assert "never read a commit hash aloud" in out
+    assert out.index("never read a commit hash aloud") > out.index("BASE RULES")
+    assert "{user}" not in out  # the additions' framing names the user too
+
+
+def test_compose_persona_leaves_the_base_alone_when_there_are_no_additions():
+    # The default: nothing added yet, so the composed persona is exactly the base plus the usual
+    # context - no empty "more instructions" header dangling with nothing under it.
+    assert compose_persona("BASE", "", "") == "BASE"
 
 
 def test_the_user_is_named_by_the_title_of_their_own_profile():

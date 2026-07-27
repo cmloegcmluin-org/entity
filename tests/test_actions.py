@@ -367,3 +367,15 @@ def test_a_filed_improvement_is_stamped_and_a_duplicate_is_refused():
     assert filed == [("warn him when credits run low", "2026-07-27 00:30")]
     assert "Filed" in first
     assert "already on the list" in second  # the refusal is said, never silently swallowed
+
+
+def test_revising_a_ticket_goes_through_by_id_and_a_missing_id_is_said():
+    desk, revised = FakeDesk(), []
+    tools = _tools(desk, revise=lambda item_id, text: revised.append((item_id, text)) or item_id == 7)
+
+    said_yes = _call(tools["revise_enhancement"], id=7, text="sharper words")
+    said_no = _call(tools["revise_enhancement"], id=99, text="anything")
+
+    assert revised == [(7, "sharper words"), (99, "anything")]
+    assert "7" in said_yes
+    assert "no item" in said_no.lower()

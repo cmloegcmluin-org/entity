@@ -367,6 +367,7 @@ class AgentDesk:
                 pass  # dirty or locked: the sweep's business later, not a failed retirement
             if entry.state == "idle" and entry.enhancement and self._complete_enhancement:
                 self._complete_enhancement(entry.enhancement)  # its ask is now answered
+            self._finished(name)  # a landing agent's clock runs until here; a retired one is off it
             self._persist()
         return True
 
@@ -425,7 +426,11 @@ class AgentDesk:
             self._events("died", name, str(exc))
             return
         self._set_state(name, "idle", last_word=reply)
-        self._finished(name)
+        if entry.delivery.stage != "landing":
+            # A landing agent still owes a merge report, so its silence clock keeps running - the
+            # overnight stall was invisible precisely because idle stopped the count. Retirement
+            # is what finally stops it.
+            self._finished(name)
         self._events("finished", name, reply)
 
     def _plain_notices(self, kind, agent, report):

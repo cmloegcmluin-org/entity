@@ -84,10 +84,20 @@ async function post(where, body) {
 
 const dictated = [];  // the chunks dictation put in the box, newest last, so "scratch that" can undo
 
+/* The draft outlives the page. Every other tab is its own page load, so navigating away tore this
+   one down and took the half-written turn with it - "the accumulated text has disappeared, but it
+   should persist". The words are kept as they change and put back when the page returns; only
+   sending or binning the draft lets go of them. (Binning fires an input event, so it is covered.) */
+const KEPT_DRAFT = "entity-draft";
+draft.value = sessionStorage.getItem(KEPT_DRAFT) || "";
+const keepDraft = () => sessionStorage.setItem(KEPT_DRAFT, draft.value);
+draft.addEventListener("input", keepDraft);
+
 function send() {
   const text = draft.value.trim();
   draft.value = "";
   dictated.length = 0;  // the box is empty; there is nothing left in it to take back
+  keepDraft();
   if (text) post("/submit", { text });
 }
 
@@ -98,7 +108,10 @@ function dictate(chunks) {
     draft.value = so_far && !/[ \n]$/.test(so_far) ? `${so_far} ${chunk}` : so_far + chunk;
     dictated.push(chunk);
   }
-  if (chunks.length) draft.scrollTop = draft.scrollHeight;
+  if (chunks.length) {
+    draft.scrollTop = draft.scrollHeight;
+    keepDraft();
+  }
 }
 
 /* "Scratch that" - take back what they just said, out of the box it was typed into. Only while the
@@ -112,6 +125,7 @@ function retract(times) {
     dictated.pop();
     draft.value = box.slice(0, box.length - chunk.length).replace(/[ \t]+$/, "");
   }
+  keepDraft();
 }
 
 /* What they are being heard saying, while they are still saying it. Replaced whole rather than appended

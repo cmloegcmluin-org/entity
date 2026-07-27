@@ -487,3 +487,13 @@ def test_the_win_enter_chord_reaches_the_page_as_one_send():
 
     assert client.get("/messages").get_json()["send"] is True
     assert client.get("/messages").get_json()["send"] is False  # and the box is sent once
+
+
+def test_the_clipboard_is_served_to_the_drafts_own_paste_menu():
+    # The embedded browser gives the draft box no paste menu, so the page asks the app - which
+    # runs on the same machine as the clipboard - instead of asking the browser for permission.
+    client = _client(clipboard=lambda: "words he copied elsewhere")
+
+    got = client.get("/clipboard").get_json()
+
+    assert got == {"text": "words he copied elsewhere"}

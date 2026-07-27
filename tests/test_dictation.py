@@ -823,4 +823,5 @@ def test_a_formatting_command_alone_is_just_its_formatting():
 
     dictation.pump()
 
-    assert ears.drafted in ([], ["\n\n"])  # nothing worth keeping either way, never the words
+    assert ears.drafted == ["\n\n"]  # the command IS its formatting - spoken alone,
+    # with a pause either side, is exactly how he says it, and it must still land

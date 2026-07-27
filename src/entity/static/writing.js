@@ -96,7 +96,16 @@ function freshRow(like) {
   row.className = "";
   row.querySelector("input").checked = false;
   row.removeAttribute("data-id");
-  row.querySelector(".tag")?.remove();
+  // The number's spot is reserved from the first keystroke - typing used to start in the space
+  // where the id belongs - and the placeholder becomes the real number when the save assigns it.
+  let tag = row.querySelector(".tag");
+  if (!tag) {
+    tag = document.createElement("span");
+    tag.className = "tag";
+    row.querySelector("input").after(tag);
+  }
+  tag.classList.add("pending");
+  tag.textContent = "#·";
   wordsOf(row).textContent = "";
   return row;
 }
@@ -153,11 +162,29 @@ for (const section of document.querySelectorAll(".section")) {
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
      it, and a stale answer here files a second copy of everything they have edited since. */
   let drawn = itemsOf(section).map((item) => item.text);
-  const save = (leaving) => {
+  const save = async (leaving) => {
     const items = itemsOf(section);
     const was = drawn;
     drawn = items.map((item) => item.text);
-    return post("/profile", asJson({ heading: section.dataset.heading, items, drawn: was }), leaving);
+    if (leaving) {
+      return post("/profile", asJson({ heading: section.dataset.heading, items, drawn: was }), true);
+    }
+    const response = await fetch("/profile", {
+      method: "POST", body: asJson({ heading: section.dataset.heading, items, drawn: was }),
+    });
+    announce("Saved");
+    // The server hands each sent row its number; the pending tags become the real ids in place,
+    // so a new item shows its number the moment it first saves rather than on the next page load.
+    const { ids } = await response.json();
+    rowsOf(section).forEach((row, at) => {
+      if (!ids || ids[at] == null) return;
+      row.dataset.id = ids[at];
+      const tag = row.querySelector(".tag");
+      if (tag) {
+        tag.textContent = `#${ids[at]}`;
+        tag.classList.remove("pending");
+      }
+    });
   };
 
   /* An item that gets done is ticked, never removed: it is the only record that a complaint was
@@ -229,3 +256,69 @@ for (const section of document.querySelectorAll(".section")) {
     }
   });
 }
+
+
+/* ---- Ctrl+F: the page's own find --------------------------------------------------------- */
+
+/* The embedded browser has no find bar, so the list pages carry their own: type, and every row
+   whose words match lights up; Enter walks them; Escape puts it away. */
+const finder = document.createElement("div");
+finder.id = "finder";
+finder.hidden = true;
+const finderBox = document.createElement("input");
+finderBox.type = "search";
+finderBox.placeholder = "Find…";
+const finderCount = document.createElement("span");
+finderCount.className = "count";
+finder.append(finderBox, finderCount);
+document.body.append(finder);
+
+let found = [];
+let foundAt = -1;
+
+function clearFound() {
+  for (const row of document.querySelectorAll(".found, .found-here")) {
+    row.classList.remove("found", "found-here");
+  }
+  found = [];
+  foundAt = -1;
+}
+
+function findNow() {
+  clearFound();
+  const wanted = finderBox.value.trim().toLowerCase();
+  if (!wanted) { finderCount.textContent = ""; return; }
+  for (const row of document.querySelectorAll(".checklist li")) {
+    if (row.textContent.toLowerCase().includes(wanted)) {
+      row.classList.add("found");
+      found.push(row);
+    }
+  }
+  finderCount.textContent = found.length ? `${found.length}` : "0";
+  if (found.length) visit(0);
+}
+
+function visit(at) {
+  if (!found.length) return;
+  found[foundAt]?.classList.remove("found-here");
+  foundAt = (at + found.length) % found.length;
+  const row = found[foundAt];
+  row.classList.add("found-here");
+  row.closest("details")?.setAttribute("open", "");  // a done match unfolds to be seen
+  row.scrollIntoView({ block: "center" });
+}
+
+finderBox.addEventListener("input", findNow);
+finderBox.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); visit(foundAt + 1); }
+  if (event.key === "Escape") { finder.hidden = true; clearFound(); finderCount.textContent = ""; }
+});
+
+addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    finder.hidden = false;
+    finderBox.focus();
+    finderBox.select();
+  }
+});

@@ -294,6 +294,9 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             numbered = sent["heading"].lower().startswith(ENHANCEMENTS_HEADING.lower())
             save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"],
                            number=numbered)
+            # The numbering mutates the sent items in place, so this is each row's id in the order
+            # the page sent them - what lets a new row show its number the moment it first saves.
+            return {"ids": [item.get("id") for item in sent["items"]]}
         return ("", 204)
 
     def _persona_additions():

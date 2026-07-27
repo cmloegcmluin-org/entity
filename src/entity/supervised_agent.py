@@ -14,12 +14,19 @@ from entity.sdk_session import SdkSession
 
 
 def _permission_handler(name, decide):
-    """Turn an agent's tool request into a yes/no for the user, and their answer into a result."""
+    """Turn an agent's tool request into an allow/deny, and the decision into a result.
+
+    `decide` returns True to allow, or a reason string to deny (a mechanical refusal the desk makes
+    itself - see `agent_desk.landing_block_reason`). The string must be tested with `is True`,
+    never for truthiness: a reason string is truthy, and mistaking it for approval would let
+    through the very landing it was refusing."""
 
     async def can_use_tool(tool_name, tool_input, context):
-        if await decide(name, tool_name, tool_input):
+        decision = await decide(name, tool_name, tool_input)
+        if decision is True:
             return PermissionResultAllow(behavior="allow", updated_input=tool_input)
-        return PermissionResultDeny(behavior="deny", message="the user said not now", interrupt=False)
+        message = decision if isinstance(decision, str) else "the user said not now"
+        return PermissionResultDeny(behavior="deny", message=message, interrupt=False)
 
     return can_use_tool
 

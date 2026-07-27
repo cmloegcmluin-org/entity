@@ -859,3 +859,100 @@ def test_a_law_file_that_is_not_there_adds_no_pointer(tmp_path):
     assert _wait_for(lambda: bool(outbox))
     assert "missing.md" not in made[0].messages[0]
     desk.close()
+
+
+def test_a_merge_before_approval_is_refused_with_a_reason():
+    # The code half of the review loop: an agent must not enqueue its own PR before the user has
+    # seen the work. frozen-tabs and enhancements-tab-fixes both merged with no verdict on file
+    # because the persona was only ASKED to wait - a gate that cannot forget is the fix.
+    from entity.agent_desk import landing_block_reason
+
+    reason = landing_block_reason("building", "Bash", {"command": "gh pr merge --auto"})
+
+    assert reason  # a non-empty string the agent is shown, not a silent no
+    assert "approved" in reason.lower()
+
+
+def test_landing_is_allowed_once_the_verdict_is_in():
+    # After an approved verdict the work's stage is "landing", and the mechanical push/PR/merge is
+    # exactly what should run - the gate must not stand in the way of the step it was waiting for.
+    from entity.agent_desk import landing_block_reason
+
+    assert landing_block_reason("landing", "Bash", {"command": "gh pr merge --auto"}) is None
+    assert landing_block_reason("landing", "Bash", {"command": "git push -u origin HEAD"}) is None
+
+
+def test_push_and_opening_a_pr_are_landing_too_not_only_the_merge():
+    # "pushing PRs, auto-merging, etc." - the whole outward-facing set is gated, not just the final
+    # enqueue, because a pushed branch with auto-merge armed lands with no further command.
+    from entity.agent_desk import landing_block_reason
+
+    assert landing_block_reason("building", "Bash", {"command": "git push origin HEAD"})
+    assert landing_block_reason("ready", "Bash", {"command": "gh pr create --fill --base main"})
+    assert landing_block_reason("ready", "Bash", {"command": "gh pr ready 42"})
+
+
+def test_local_work_and_presenting_never_trip_the_gate():
+    # Rebasing onto latest main and standing the app up to present it are the steps the agent takes
+    # BEFORE a verdict - blocking those would make presenting impossible and defeat the loop.
+    from entity.agent_desk import landing_block_reason
+
+    for command in ("git fetch origin", "git rebase origin/main", "git commit -m wip",
+                    "python -m entity", "gh pr view 42", "pytest -q"):
+        assert landing_block_reason("building", "Bash", {"command": command}) is None
+
+
+def test_only_bash_commands_are_gated():
+    # The gate reads shell commands; a read or an edit carries no way to ship work outward.
+    from entity.agent_desk import landing_block_reason
+
+    assert landing_block_reason("building", "Edit", {"file_path": "x", "new_string": "git push"}) is None
+    assert landing_block_reason("building", "Read", {"file_path": "gh pr merge"}) is None
+
+
+def test_the_desk_refuses_an_agents_landing_until_its_verdict_is_in():
+    # End to end through the SAME callback a real agent's tools pass through (the desk hands it to
+    # the factory): a landing command is denied while the work is unreviewed, and unblocked the
+    # instant an approved verdict moves the work to "landing".
+    import asyncio
+
+    desk, outbox, made = _desk()
+    name = _finished(desk, outbox)
+    decide = made[0].decide  # exactly what SupervisedAgent's permission handler will consult
+
+    blocked = asyncio.run(decide(name, "Bash", {"command": "gh pr merge --auto"}))
+    assert isinstance(blocked, str) and "approved" in blocked.lower()
+
+    desk.present(name, "steps")
+    desk.verdict(name, approved=True)
+
+    assert asyncio.run(decide(name, "Bash", {"command": "gh pr merge --auto"})) is True
+    desk.close()
+
+
+def test_the_desk_waves_ordinary_agent_work_through():
+    # The gate is narrow: everything that is not an unapproved landing still passes, so the agents
+    # the user runs unattended are not suddenly stopped at every step.
+    import asyncio
+
+    desk, outbox, made = _desk()
+    name = _finished(desk, outbox)
+    decide = made[0].decide
+
+    assert asyncio.run(decide(name, "Bash", {"command": "pytest -q"})) is True
+    assert asyncio.run(decide(name, "Edit", {"file_path": "x"})) is True
+    desk.close()
+
+
+def test_the_standing_rule_tells_the_agent_to_stop_at_presenting_and_wait_for_sign_off():
+    # The instruction half of the landing gate: presenting is where the agent STOPS. It lands only
+    # after the user has signed off, so a compliant agent never trips the code gate - and one that
+    # would try is told, in the task itself, why the push will be refused.
+    desk, outbox, made = _desk()
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))
+
+    [task] = made[0].messages
+    assert "signed off" in task
+    assert "do NOT push" in task
+    desk.close()

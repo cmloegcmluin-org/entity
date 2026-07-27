@@ -34,6 +34,7 @@ from entity.memory import (
     load_profile,
     load_translations,
     number_enhancements,
+    open_enhancements,
     translation_pairs,
     user_name,
 )
@@ -403,9 +404,19 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             Conversation(
                 stt, brain, tts, outbox=outbox, interrupt=barge_in,
                 console=console, read_pause=read_pause, timings=timings,
-                # The live truth about the fleet, in front of the brain every turn - so a status
-                # question is answered in the breath it was asked, with no file read in between.
-                briefing=lambda: f"{desk.digest()}\nFresh agents start on {desk.running_on()}.",
+                # The live truth about the fleet AND his Enhancements list, re-read from the file
+                # every turn: the boot persona's copy of the list went stale and got DISBELIEVED
+                # ("I can't see the Enhancements list"), while nothing carried in these per-turn
+                # notes has ever faded or been denied.
+                briefing=lambda: (
+                    f"{desk.digest()}\nFresh agents start on {desk.running_on()}."
+                    "\n\nHis Enhancements list - the OPEN items, live from the file this turn. "
+                    "You CAN see this list: it is right here, always current, and it is the same "
+                    "list his window's tab shows. You file to it with file_improvement, rewrite "
+                    "an item by number with revise_enhancement, and agents you start on an item "
+                    "tick it off when their work lands:\n"
+                    + (open_enhancements() or "(nothing open)")
+                ),
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
         except KeyboardInterrupt:
             stop.set()

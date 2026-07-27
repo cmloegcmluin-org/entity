@@ -19,6 +19,7 @@ invented that day, with no timestamps.
 """
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -46,12 +47,16 @@ STANDING_RULE = (
     "live instance of the app on its own port with its own scratch data, apart from their real "
     "one, and report the exact click-by-click steps to watch the new behavior happen. Never "
     "offer 'run the tests' as their verification: green tests are your evidence, not theirs, "
-    "and they will send it back. Three: engineering discipline is not optional - read the "
-    "repo's CLAUDE.md before you start and follow it; test-drive every change (one failing "
-    "test, the minimum code to pass it, refactor, again); run the project's full test suite "
-    "green before anything lands; land through the repo's own process - a repo with a PR merge "
-    "queue means push a branch, open a PR, enqueue it, and watch it to actually merged, never a "
-    "direct push to a shared main - and leave everything you touched cleaner than you found it."
+    "and they will send it back. Presenting is where you STOP: do NOT push, open a PR, enqueue, "
+    "or merge - a live instance for their eyes is not a landed change. Wait. The user's sign-off "
+    "reaches you in so many words; only then do you land it, and until then the desk itself "
+    "refuses the push, the PR and the merge. Three: engineering discipline is not optional - "
+    "read the repo's CLAUDE.md before you start and follow it; test-drive every change (one "
+    "failing test, the minimum code to pass it, refactor, again); run the project's full test "
+    "suite green before anything lands; once they have signed off, land through the repo's own "
+    "process - a repo with a PR merge queue means push a branch, open a PR, enqueue it, and watch "
+    "it to actually merged, never a direct push to a shared main - and leave everything you "
+    "touched cleaner than you found it."
 )
 
 
@@ -59,6 +64,36 @@ def _one_line(text, limit=160):
     """A task or a last word as one digest-sized line: its first line, capped."""
     line = str(text).strip().splitlines()[0] if str(text).strip() else ""
     return line if len(line) <= limit else line[:limit].rstrip() + "…"
+
+
+# Commands that ship work OUT to the shared remote - the point past which it is no longer just this
+# agent's private branch. An agent must not run one until the user has SEEN the work and approved
+# it. This is the code half of the review loop: the persona is only ASKED to wait for a verdict,
+# and a persona that forgets landed unreviewed PRs anyway (frozen-tabs and enhancements-tab-fixes
+# both merged with no verdict on file). git fetch/rebase and running the app to present it are NOT
+# here - they stay local, so presenting never trips the gate.
+_LANDING_COMMAND = re.compile(r"\bgit\s+push\b|\bgh\s+pr\s+(?:create|merge|ready)\b", re.IGNORECASE)
+
+LANDING_NOT_APPROVED = (
+    "Landing is blocked: the user has not approved this work yet, so pushing, opening a PR, "
+    "enqueuing, or merging is refused. Present it for their EYES first - stand up a live instance "
+    "and give the click-by-click steps - then stop and wait. When they sign off you will be told "
+    "to land it in so many words, and only then will these commands run."
+)
+
+
+def landing_block_reason(stage, tool_name, tool_input):
+    """Why a tool call must be refused, or None to allow it - the ONLY refusal the desk makes on
+    its own. A command that ships work to the shared remote (push, open a PR, enqueue, merge) is
+    denied unless the work's delivery has reached "landing", i.e. an approved verdict is on record.
+    Everything else passes: reads, edits, local git, running the app - the user runs these agents
+    unattended by choice. The reason is returned as text so a denied landing teaches the flow."""
+    if stage == "landing":
+        return None  # the user signed off; the mechanical landing is exactly what should run now
+    if tool_name != "Bash":
+        return None
+    command = str((tool_input or {}).get("command", ""))
+    return LANDING_NOT_APPROVED if _LANDING_COMMAND.search(command) else None
 
 
 # What a restarted Entity says to an agent it found recorded mid-task. The resumed session
@@ -350,10 +385,17 @@ class AgentDesk:
         self._write_roster()
 
     async def _decide(self, agent, tool_name, tool_input):
-        """Every tool an agent wants to use passes through here. Reading is waved through; anything
-        that writes or runs is what the user cares about, and they already run these agents
-        unattended, so it goes through too - but the desk is where that policy lives if it changes."""
-        return True
+        """Every tool an agent wants to use passes through here. Reads, edits, local git and running
+        the app to present it are waved through - the user runs these agents unattended by choice.
+        The one refusal is mechanical and cannot be forgotten: a command that ships work to the
+        shared remote (push, open a PR, enqueue, merge) is denied until an approved verdict is on
+        record (delivery stage "landing"), so an agent can never land what the user has not seen.
+        Returns True to allow, or the reason string the agent is shown when the landing is refused."""
+        with self._lock:
+            entry = self._desked.get(agent)
+            stage = entry.delivery.stage if entry is not None else None
+        reason = landing_block_reason(stage, tool_name, tool_input)
+        return True if reason is None else reason
 
     def _open_log(self, name):
         return Transcript(self._log_dir / f"{name}.log") if self._log_dir is not None else None

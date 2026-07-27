@@ -56,6 +56,20 @@ def test_permission_handler_denies_when_the_user_declines():
     assert result.behavior == "deny"
 
 
+def test_permission_handler_denies_with_the_reason_the_desk_gives():
+    # The desk returns a REASON string (not just False) when it refuses an unapproved landing; the
+    # handler must deny AND pass that reason to the agent, so a blocked push teaches the flow rather
+    # than reading as a bare "no". A truthy string must never be mistaken for approval.
+    async def decide(name, tool, tool_input):
+        return "Landing is blocked: the user has not approved this work yet."
+
+    handler = _permission_handler("fixer", decide)
+    result = asyncio.run(handler("Bash", {"command": "gh pr merge --auto"}, None))
+
+    assert result.behavior == "deny"
+    assert result.message == "Landing is blocked: the user has not approved this work yet."
+
+
 def test_work_sends_the_message_and_returns_the_agents_report():
     async def decide(*a):
         return True

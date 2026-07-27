@@ -80,7 +80,10 @@ for (const box of document.querySelectorAll(".writing")) {
 
 const rowsOf = (list) => [...list.querySelectorAll("li")];
 const wordsOf = (row) => row.querySelector(".item");
+/* The row carries its stable id as `data-id`, so a save sends it back and the same item keeps the
+   same number. A row he has just made has none yet; the server hands it the next one. */
 const itemsOf = (list) => rowsOf(list).map((row) => ({
+  id: row.dataset.id ? Number(row.dataset.id) : null,
   done: row.querySelector("input").checked,
   text: wordsOf(row).textContent,
 }));
@@ -158,6 +161,10 @@ for (const list of document.querySelectorAll(".checklist")) {
       const next = row.cloneNode(true);   // a row's shape is written once, in the page
       next.className = "";
       next.querySelector("input").checked = false;
+      // A fresh row is a fresh item: it keeps none of the id the row it was split from carries, so
+      // the server numbers it anew rather than two rows claiming one number.
+      next.removeAttribute("data-id");
+      next.querySelector(".tag")?.remove();
       wordsOf(next).textContent = said.slice(to);
       row.after(next);
       soon(list, save);

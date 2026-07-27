@@ -122,6 +122,10 @@ body.page .topbar {
                    border-radius: 6px; outline: none; }
 .checklist .item:focus { background: rgba(127, 255, 0, .07); }
 .checklist li.done .item { color: var(--dim); }
+/* The stable id he refers to a task by. Dim and monospaced so it reads as a tag on the item, not
+   as part of what he typed, and it never takes the caret - only the words beside it are edited. */
+.checklist .tag { flex: none; color: var(--dim); font-family: ui-monospace, "Cascadia Code", monospace;
+                  font-size: .78rem; user-select: none; }
 /* What it heard, and what they actually said. A rule is two things and an arrow between them, so it
    reads as one line rather than as a table to scan across. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }

@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import Flask, render_template, request
 
 from entity.memory import (
+    ENHANCEMENTS_HEADING,
     checklist_items,
     profile_sections,
     save_checklist,
@@ -260,7 +261,11 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         character they type."""
         if profile_path is not None:
             sent = request.get_json()
-            save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"])
+            # Only the enhancements list carries ids - the one he refers to by number - so only it
+            # numbers a new row on the way in. The other panes stay the plain lists they were.
+            numbered = sent["heading"].lower().startswith(ENHANCEMENTS_HEADING.lower())
+            save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"],
+                           number=numbered)
         return ("", 204)
 
     @app.get("/persona")

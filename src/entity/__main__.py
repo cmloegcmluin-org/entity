@@ -22,6 +22,7 @@ from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.mirror import TranscriptFeed
 from entity.narrator import Narrator
 from entity.memory import (
+    DEFAULT_PROFILE_PATH,
     append_learned,
     compose_persona,
     lexicon_terms,
@@ -29,6 +30,7 @@ from entity.memory import (
     load_lexicon,
     load_profile,
     load_translations,
+    number_enhancements,
     translation_pairs,
     user_name,
 )
@@ -421,6 +423,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
 
 
 def main(argv=None):
+    # Give every enhancement a stable #id before anything reads the profile: the brain composes its
+    # persona from this file and the window shows the same numbers, so "do twelve" points them both
+    # at one task. Idempotent - it writes only the first time, when something is still unnumbered.
+    number_enhancements(DEFAULT_PROFILE_PATH)
     argv = sys.argv[1:] if argv is None else argv
     text_mode = "--text" in argv
     muted = "--mute" in argv
@@ -459,11 +465,7 @@ def main(argv=None):
 
     from entity.chord import ChordListener, SubmitChord, foreground_is_ours
     from entity.desktop import open_window
-    from entity.memory import (
-        DEFAULT_LEARNED_PATH,
-        DEFAULT_PROFILE_PATH,
-        DEFAULT_TRANSLATIONS_PATH,
-    )
+    from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_TRANSLATIONS_PATH
     from entity.no_console import silence_child_consoles
     from entity.transcript import past_lines
     from entity.mirror import Mirror

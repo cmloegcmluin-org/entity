@@ -70,7 +70,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) flush
 
 for (const box of document.querySelectorAll(".writing")) {
   // Which page this box belongs to, and so where it writes itself back to.
-  const where = box.dataset.learned ? "/memory" : "/translations";
+  const where = box.dataset.persona ? "/persona" : box.dataset.learned ? "/memory" : "/translations";
   const save = (leaving) => post(where, asForm({ body: box.value }), leaving);
   box.addEventListener("input", () => soon(box, save));
   box.addEventListener("blur", () => flush(box));

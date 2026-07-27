@@ -23,6 +23,7 @@ from entity.memory import (
     profile_sections,
     save_checklist,
     save_learned,
+    save_persona_additions,
     save_translations,
     translation_pairs,
 )
@@ -158,7 +159,7 @@ class Agents:
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
                opener=open_link, mirror=None,
                profile_path=None, learned_path=None, translations_path=None, terms=(), persona="",
-               agent_logs_dir=None, clock=None):
+               persona_additions_path=None, agent_logs_dir=None, clock=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
@@ -168,6 +169,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     profile_path = Path(profile_path) if profile_path else None
     learned_path = Path(learned_path) if learned_path else None
     translations_path = Path(translations_path) if translations_path else None
+    persona_additions_path = Path(persona_additions_path) if persona_additions_path else None
     agents = Agents(agent_logs_dir, clock)
 
     def _profile_text():
@@ -277,10 +279,25 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                            number=numbered)
         return ("", 204)
 
+    def _persona_additions():
+        if persona_additions_path is None or not persona_additions_path.exists():
+            return ""
+        return persona_additions_path.read_text(encoding="utf-8")
+
     @app.get("/persona")
     def show_persona():
+        """The whole persona the brain reads, laid out but never rewritten - and below it, the one
+        part of it that is editable: its own accreted standing instructions. The read-only view
+        already includes them (they are composed into `persona`); the box is where they change."""
         return render_template("persona.html", here="/persona",
-                               blocks=persona_paragraphs(persona), length=len(persona))
+                               blocks=persona_paragraphs(persona), length=len(persona),
+                               additions=_persona_additions())
+
+    @app.post("/persona")
+    def write_persona():
+        if persona_additions_path is not None:
+            save_persona_additions(request.form["body"], persona_additions_path)
+        return ("", 204)
 
     def _own_translations():
         if translations_path is None or not translations_path.exists():

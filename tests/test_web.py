@@ -281,6 +281,23 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     assert "Edit as text" not in page and "<textarea" not in page
 
 
+def test_entitys_own_standing_instructions_are_shown_and_saved_back(tmp_path):
+    # The persona was the one config the window could read but never write - the very gap that let
+    # Entity say it couldn't update itself. Now its own accreted instructions have an editable box,
+    # like what it has learned, while the full composed persona stays shown read-only above it.
+    additions = tmp_path / "persona.md"
+    additions.write_text("- never read a commit hash aloud\n", encoding="utf-8")
+    client = _client(persona="BREVITY IS YOUR RULE.", persona_additions_path=additions)
+
+    page = client.get("/persona").get_data(as_text=True)
+    assert "never read a commit hash aloud" in page   # in an editable box, not only the read-only text
+    assert 'data-persona="true"' in page
+
+    client.post("/persona", data={"body": "- never read a commit hash aloud\n- one line at night"})
+
+    assert "one line at night" in additions.read_text(encoding="utf-8")
+
+
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):
     learned = tmp_path / "learned.md"
     learned.write_text("- prefers metric units\n", encoding="utf-8")

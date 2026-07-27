@@ -382,6 +382,29 @@ def test_an_item_he_edits_after_ticking_it_is_not_filed_a_second_time(tmp_path):
     )
 
 
+def test_a_pasted_block_is_not_duplicated_when_the_page_saves_it_again(tmp_path):
+    # A block pasted into one row is stored split into its lines. If the page has not reloaded it
+    # still holds the one combined row, so a second save would compare the file's split lines
+    # against the combined text, find no match, and file every line a second time - which is one
+    # of the ways the same task ended up here in twenty half-finished copies. The carry-over has to
+    # compare on the lines an item is STORED as, the same way the file keeps them.
+    from entity.memory import profile_sections, save_checklist
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] keep\n", encoding="utf-8")
+
+    save_checklist(path, "Enhancements",
+                   [{"done": False, "text": "keep"}, {"done": False, "text": "one\ntwo\nthree"}],
+                   drawn=["keep"])
+    save_checklist(path, "Enhancements",
+                   [{"done": False, "text": "keep"}, {"done": False, "text": "one\ntwo\nthree"}],
+                   drawn=["keep", "one\ntwo\nthree"])
+
+    assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
+        "- [ ] keep\n- [ ] one\n- [ ] two\n- [ ] three"
+    )
+
+
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
     # The window's Goals/Projects/Enhancements panes are editable; saving one writes that section
     # back into the profile without disturbing a word of the others.

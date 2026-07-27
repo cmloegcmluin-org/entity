@@ -29,6 +29,7 @@ from entity.memory import (
     lexicon_terms,
     load_learned,
     load_lexicon,
+    load_persona_additions,
     load_profile,
     load_translations,
     number_enhancements,
@@ -185,10 +186,12 @@ def _open_ears(announce):
 
 def _persona():
     """Everything the Entity has been told about how to be - the standing rules, the user's own
-    context, and every instruction added since. Composed in one place because the window shows this
-    exact text, and a second copy would drift from the one the brain reads."""
+    context, and every instruction added since (its own persona overlay). Composed in one place
+    because the window shows this exact text, and a second copy would drift from the one the brain
+    reads."""
     return (
-        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon())
+        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon(),
+                        additions=load_persona_additions())
         + _agent_inbox_note(AGENT_INBOX)
         + _fresh_worktree_note()
         + _projects_note()
@@ -470,7 +473,11 @@ def main(argv=None):
 
     from entity.chord import ChordListener, SubmitChord, foreground_is_ours
     from entity.desktop import open_window
-    from entity.memory import DEFAULT_LEARNED_PATH, DEFAULT_TRANSLATIONS_PATH
+    from entity.memory import (
+        DEFAULT_LEARNED_PATH,
+        DEFAULT_PERSONA_ADDITIONS_PATH,
+        DEFAULT_TRANSLATIONS_PATH,
+    )
     from entity.no_console import silence_child_consoles
     from entity.transcript import past_lines
     from entity.mirror import Mirror
@@ -497,6 +504,7 @@ def main(argv=None):
         on_auto_listen=lambda on: mic.get("set_auto_listen", lambda _: None)(on),
         profile_path=DEFAULT_PROFILE_PATH, learned_path=DEFAULT_LEARNED_PATH,
         translations_path=DEFAULT_TRANSLATIONS_PATH,
+        persona_additions_path=DEFAULT_PERSONA_ADDITIONS_PATH,
         # The same list the mic is about to be built with, so the page says what is in force
         # rather than what could be.
         terms=_vocab_terms(),

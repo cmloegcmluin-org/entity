@@ -2,15 +2,17 @@
 {% block title %} · Persona{% endblock %}
 
 {% block content %}
-{#- Everything Entity has been told about how to be, in the words it actually reads. Read-only:
-    this is assembled at startup out of the profile and what it has learned, not typed here - so
-    it is laid out, never rewritten. Where it shouts is where its author meant a new section, and
-    that is the only break added. -#}
+{#- Everything Entity has been told about how to be, in the words it actually reads. The composed
+    whole is read-only - assembled at startup and only laid out here, never rewritten, so a second
+    edited copy can't drift from what the brain reads. The one part of it that IS editable is its
+    own accreted standing instructions, in the box below: change those and it reads them next start.
+    That box is why the persona is no longer the one config the window could read but never write. -#}
 <main id="content" class="reading">
   <section class="section">
     <h2>What Entity has been told</h2>
     <p class="note">{{ "{:,}".format(length) }} characters, exactly as the brain reads them.
-      Assembled at startup from your profile, what it has learned, and your lexicon.</p>
+      Assembled at startup from your profile, what it has learned, your lexicon, and the standing
+      instructions below.</p>
     <article class="persona">
       {% for block in blocks %}
       <p>
@@ -19,5 +21,19 @@
       {% endfor %}
     </article>
   </section>
+
+  <section class="section">
+    <h2>Standing instructions you've added</h2>
+    <details class="as-text" open>
+      <summary>How you've told Entity to behave, plus anything it files here itself. One per line;
+        it picks up changes when it next starts.</summary>
+      <textarea class="writing" data-persona="true"
+                aria-label="Entity's standing instructions">{{ additions }}</textarea>
+    </details>
+  </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='writing.js') }}"></script>
 {% endblock %}

@@ -15,8 +15,8 @@ class FakeDesk:
         self.verdicts = []
         self._known = set(known)
 
-    def start(self, name, cwd, task):
-        self.started.append((name, cwd, task))
+    def start(self, name, cwd, task, enhancement=None):
+        self.started.append((name, cwd, task, enhancement))
 
     def send(self, name, message):
         self.told.append((name, message))
@@ -78,8 +78,35 @@ def test_start_agent_puts_a_fresh_agent_on_the_task(tmp_path):
 
     said = _call(tools["start_agent"], path=str(worktree), task="fix the drive link")
 
-    assert desk.started == [("fix-drive-link", str(worktree), "fix the drive link")]
+    assert desk.started == [("fix-drive-link", str(worktree), "fix the drive link", None)]
     assert "fix-drive-link" in said
+
+
+def test_start_agent_tags_the_agent_with_the_enhancement_it_takes_on(tmp_path):
+    # When the agent is taking an item off the Enhancements list, that item rides along verbatim so
+    # it ticks itself off the list when the work lands (agent_desk.retire).
+    desk = FakeDesk()
+    worktree = tmp_path / "better-voice"
+    worktree.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+
+    _call(tools["start_agent"], path=str(worktree), task="wire the neural voice",
+          enhancement="Better voice")
+
+    assert desk.started == [("better-voice", str(worktree), "wire the neural voice", "Better voice")]
+
+
+def test_start_agent_leaves_the_tag_empty_when_no_enhancement_is_named(tmp_path):
+    # Most work is not a listed enhancement; a blank tag must become no tag, never an empty-string
+    # item the wrap-up then tries to tick off nothing with.
+    desk = FakeDesk()
+    worktree = tmp_path / "one-off"
+    worktree.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+
+    _call(tools["start_agent"], path=str(worktree), task="a one-off fix", enhancement="  ")
+
+    assert desk.started == [("one-off", str(worktree), "a one-off fix", None)]
 
 
 def test_start_agent_makes_the_worktree_when_the_path_is_new(tmp_path):

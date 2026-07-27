@@ -65,15 +65,20 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement, resolve
     @tool("start_agent", "Start a fresh coding agent working on a task. `path` is the absolute "
           "path of the worktree to work in (a new path gets a new worktree cut from current "
           "origin/main). `task` is the user's requirements, passed on faithfully and completely - "
-          "every constraint they stated.", {"path": str, "task": str})
+          "every constraint they stated. `enhancement` is optional: when this agent is taking on "
+          "an item from the user's Enhancements list, pass that item's exact text so it ticks "
+          "itself off the list when the work lands; leave it out for any other work.",
+          {"path": str, "task": str, "enhancement": str})
     async def start_agent(args):
         paths = resolve(str(args["path"]))
         if not paths:
             return _say("I couldn't find any sessions to drive there.")
+        enhancement = str(args.get("enhancement") or "").strip() or None
         for path in paths:
             if not Path(path).exists():  # new work means a new worktree, cut from current origin/main
                 prepare(path)
-            desk.start(Path(path).name, path, str(args.get("task") or default_task))
+            desk.start(Path(path).name, path, str(args.get("task") or default_task),
+                       enhancement=enhancement)
         names = ", ".join(Path(path).name for path in paths)
         return _say(f"Started {names} on {desk.running_on()}.")
 

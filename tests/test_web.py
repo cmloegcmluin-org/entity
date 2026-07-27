@@ -499,19 +499,6 @@ def test_the_clipboard_is_served_to_the_drafts_own_paste_menu():
     assert got == {"text": "words he copied elsewhere"}
 
 
-def test_the_poll_carries_the_reply_being_composed():
-    from entity.mirror import Mirror, TranscriptFeed
-
-    feed = TranscriptFeed()
-    mirror = Mirror(feed)
-    client = _client(model=mirror.model, mirror=mirror)
-    feed.push("composing", "First half")
-
-    shown = client.get("/messages?since=0").get_json()
-
-    assert shown["composing"] == "First half"
-
-
 def test_saving_the_enhancements_hands_back_each_rows_number():
     # "when I'm inputting new tickets here the ID doesn't appear at first" - the page needs the
     # number the save assigned, so a fresh row shows its id the moment it first saves.

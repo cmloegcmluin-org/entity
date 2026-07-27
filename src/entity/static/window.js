@@ -153,33 +153,6 @@ function retract(times) {
   keepDraft();
 }
 
-/* The reply as Entity writes it: a live bubble that fills word by word alongside the voice, so
-   the text is on screen WITH the audio instead of after it ("audio precedes text display"). The
-   finished message replaces it in the same poll that clears it. */
-const composing = { node: null };
-function showComposing(text) {
-  if (!text) {
-    if (composing.node) { composing.node.remove(); composing.node = null; }
-    return;
-  }
-  const atEnd = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
-  if (!composing.node) {
-    const said = document.createElement("div");
-    said.className = "said left composing";
-    const who = document.createElement("div");
-    who.className = "who";
-    who.append("Entity");
-    const box = document.createElement("div");
-    box.className = "box";
-    said.append(who, box);
-    thread.append(said);
-    composing.node = said;
-  }
-  const box = composing.node.querySelector(".box");
-  if (box.textContent !== text) box.textContent = text;
-  if (atEnd) thread.scrollTop = thread.scrollHeight;
-}
-
 /* What they are being heard saying, while they are still saying it. Replaced whole rather than appended
    to, because the server sends the whole settled line each poll; it only ever grows, so the end is
    where the new words are and where it is scrolled to. */
@@ -227,6 +200,7 @@ let shownState = null;  // the poll repeats the state four times a second, and r
 function showState(state, loudness) {
   if (state !== shownState) {
     shownState = state;
+    mic.disabled = false;  // the first state report proves the mic exists; until then clicks died silently
     mic.className = `btn ${state === "muted" ? "" : state}`;
     // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
     mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
@@ -254,7 +228,6 @@ async function refresh() {
     drawn = shown.total;
     listSessions(shown.sessions);
     showState(shown.state, shown.level);
-    showComposing(shown.composing || "");
     showHearing(shown.hearing || "");
     retract(shown.retract || 0);  // before the words beside it, which are always newer
     dictate(shown.dictated || []);

@@ -72,7 +72,10 @@ CONDUCT_NOTICE = (
     "what happened THIS turn - no running totals that mix in old work. No internal vocabulary "
     "to them, ever: tool names, stage words, routing words - plain words or nothing. And when "
     "you do not KNOW, say you don't know - never guess: a guess in knowledge's voice sends them "
-    "chasing a fiction.]\n\n"
+    "chasing a fiction. And when they ask you to FIX something, the behavior they describe is "
+    "the disease, not the wish - if a fix's direction is at all ambiguous, say the change back "
+    "in one short sentence ('so same-named groups CAN combine - yes?') and wait for the yes "
+    "before dispatching.]\n\n"
 )
 
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
@@ -578,10 +581,6 @@ class Conversation:
 
         def carry(piece):
             spoken_parts.append(piece)
-            # The words go to the SCREEN the moment they are written, not after the audio: he
-            # heard the voice before any text existed on screen, and reading along beats being
-            # read to. The same delta stream feeds the voice, so screen and ear stay identical.
-            self._console.composing("".join(spoken_parts))
             reply.add(piece)
 
         release_floor = self._hold_the_floor(
@@ -593,13 +592,11 @@ class Conversation:
                                on_text=carry if reply is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
-            self._console.composing("")
             self._settle(reply)
             release_floor()
             return None
         except Exception as exc:  # tell them the real cause - it reaches them nowhere else
             self._keep_for_later(offered)  # the delivery turn died; the update must survive it
-            self._console.composing("")
             self._settle(reply)
             said = self.error_reply.format(cause=_cause(exc))
             self._speak_reply(said)
@@ -609,14 +606,14 @@ class Conversation:
         if not said.strip():
             # Nothing to say - the turn completed silently. A blank "entity>" line or an empty
             # utterance would be noise.
-            self._console.composing("")
             self._settle(reply)
             release_floor()
             return Turn(heard=heard, said="")
         speak_start = time.monotonic()
         if reply is not None:
-            # The finished message replaces the live composing bubble in the same breath.
-            self._console.composing("")
+            # On screen the moment the text is complete - the audio is still going out, and
+            # reading the whole of it beats being read to ("I want to see all the text
+            # immediately up front and then hear it").
             self._console.reply(said)
             reply.done()  # then wait out the rest of the audio
             if self._interrupted():  # the audio was cut partway - the record must say so

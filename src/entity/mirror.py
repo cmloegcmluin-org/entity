@@ -110,9 +110,6 @@ class Mirror:
         # The sentence they are still in the middle of. A state, not a hand-off: it stands on screen
         # until it grows or is taken down, so every poll carries it.
         self.hearing = ""
-        # The reply being written right now, shown as a live bubble so the words arrive WITH the
-        # voice instead of after it. A state like hearing: it stands until it changes or clears.
-        self.composing = ""
         self._typed = []      # dictation's words, waiting for the page to put them in the box
         self._send = False    # dictation said "over": the box is to be sent as it stands
         self._retract = 0     # they said "scratch that": chunks already in the box to take back out
@@ -126,8 +123,6 @@ class Mirror:
                 self.level = payload
             elif op == "hearing":
                 self.hearing = payload
-            elif op == "composing":
-                self.composing = payload
             elif op == "draft":
                 self._typed.append(payload)
             elif op == "retract":

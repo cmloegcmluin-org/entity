@@ -71,8 +71,8 @@ makes it feel live:
 - `setting_sources=[]` loads **none** of your user/project/local settings, so the Entity never
   inherits your global coding `CLAUDE.md` or hooks. (Loading them made it answer in quoted-block
   reply format and fire that format's Stop hook every turn, which exploded latency to ~50s.)
-- Acting goes through five **typed in-process tools** (`entity.actions`): `start_agent`,
-  `tell_agent`, `set_next_agent_model`, `file_improvement`, `close_agent_tab` — with
+- Acting goes through **typed in-process tools** (`entity.actions`) — `start_agent`, `tell_agent`,
+  `set_next_agent_model`, `file_improvement`, `update_persona`, `close_agent_tab`, … — with
   `permission_mode="bypassPermissions"`, because a spoken conversation has no terminal to approve
   in. The coding agents it dispatches are the opposite: those run approval-gated
   (`entity.supervised_agent`) on Opus-tier models.
@@ -98,6 +98,9 @@ hear is its own sentence about what it set in motion — never a control phrase:
 - `tell_agent(name, message)` — say something more to an agent already running; an undeliverable
   message comes back as a failure it has to tell you about, never a claimed delivery.
 - `file_improvement(item)` — file an enhancement into your profile, visible in the window at once.
+- `update_persona(instruction)` / `remember(fact)` — Entity editing itself: a standing change to
+  how it behaves lands in its persona overlay, a durable fact in what it has learned. Both take
+  hold next start, and both are editable by hand on the Persona and Memory pages.
 - `mark_ready(name, steps)` / `record_verdict(name, verdict, feedback)` — the delivery loop as
   code: presented work is recorded with its see-it-running steps, and a verdict can only be
   recorded on work that was presented. Approval sends the agent to land it and — once it reports

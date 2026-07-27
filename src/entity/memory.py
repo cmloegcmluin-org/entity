@@ -246,7 +246,10 @@ ENHANCEMENTS_HEADING = "Enhancements"
 # The list predates the boxes, so a plain "- item" is read as an unticked one and upgraded the first
 # time anything writes it back. That migrates the file by use rather than by rewriting, under them,
 # a personal file the running app may be autosaving at the same moment.
-_BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?P<item>.*)$")
+# A stable `#id` may ride between the box and the words - "add IDs to all of the enhancements so I
+# can refer to them by ID". It is `#` and digits only, so a line whose words merely open with a `#`
+# (a hashtag, "#3 of 5") is not mistaken for a numbered one.
+_BULLET = re.compile(r"^(\s*)[-*]\s+(?:\[(?P<tick>[ xX])\]\s+)?(?:#(?P<id>\d+)\s+)?(?P<item>.*)$")
 UNTICKED, TICKED = "- [ ] ", "- [x] "
 
 
@@ -262,8 +265,10 @@ def checklist_items(body):
         match = _BULLET.match(line)
         text = (match.group("item") if match else line).strip()
         if text:
+            has_id = match is not None and match.group("id") is not None
             items.append({"done": match is not None and (match.group("tick") or " ") != " ",
-                          "text": text})
+                          "text": text,
+                          "id": int(match.group("id")) if has_id else None})
     return items
 
 
@@ -280,9 +285,17 @@ def checklist_markdown(items):
 
     A row holding several lines - a block pasted into one of them - becomes the items it reads as.
     Stored whole it would be one bullet with newlines inside it, and those lines come back as
-    items that have lost their place in the list."""
-    return "\n".join((TICKED if item["done"] else UNTICKED) + line
-                     for item in items for line in _lines(item["text"]))
+    items that have lost their place in the list. Its `#id`, if it has one, stays on the first of
+    those lines: the rest are fresh items and are numbered on the next pass, never handed a copy of
+    an id already in use."""
+    out = []
+    for item in items:
+        box = TICKED if item["done"] else UNTICKED
+        tag = f"#{item['id']} " if item.get("id") is not None else ""
+        for line in _lines(item["text"]):
+            out.append(box + tag + line)
+            tag = ""
+    return "\n".join(out)
 
 
 def _lines(text):
@@ -306,7 +319,34 @@ def find_heading(sections, stem):
     return next((h for h in sections if h.lower().startswith(lowered)), stem)
 
 
-def save_checklist(path, heading, items, *, drawn):
+def _next_id(items):
+    return max((item["id"] for item in items if item.get("id") is not None), default=0) + 1
+
+
+def _assign_ids(items):
+    """Give every item without one the next id after the highest in use, in order. Stable: an item
+    that already has an id keeps it, so a number he has been told stays pointing at the same task."""
+    next_id = _next_id(items)
+    for item in items:
+        if item.get("id") is None:
+            item["id"] = next_id
+            next_id += 1
+    return items
+
+
+def number_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+    """Ensure every enhancement carries a stable `#id` he can refer to it by. Idempotent, and it
+    writes only when something was actually unnumbered - so it can run each time the page is opened
+    without churning a personal file the running app may be autosaving at the same moment."""
+    path = Path(path)
+    resolved = find_heading(profile_sections(_read(path)), heading)
+    items = checklist_items(profile_sections(_read(path)).get(resolved, ""))
+    if all(item["id"] is not None for item in items):
+        return
+    save_section(path, resolved, checklist_markdown(_assign_ids(items)))
+
+
+def save_checklist(path, heading, items, *, drawn, number=False):
     """Write one section's list back, as the markdown the file keeps and the brain reads.
 
     `drawn` is what the page believes the file holds - the words of every item it was drawn with,
@@ -314,16 +354,23 @@ def save_checklist(path, heading, items, *, drawn):
     Entity files enhancements into this same list while the window sits open, and every keystroke
     writes the whole list back, so without this the next character they type deletes them.
 
-    Compared on the STORED lines of an item, not on the text a row holds: the file keeps one line
-    per item, so a block pasted into a single row is stored split into its lines. Comparing the
-    combined text a row still holds against those split lines finds no match and files every line
-    a second time - which is one of the ways the same task piled up here in half-finished copies.
-    Splitting both sides the way the file stores them also absorbs the `- x` -> `- [ ] x` upgrade,
-    since the words are unchanged by it."""
+    An item is told from a fresh one two ways. By `#id` when it has one (`number`): the same id is
+    the same item, so editing it in place cannot fork it even when the page has lost track of what
+    it last sent. And by its STORED lines otherwise: the file keeps one line per item, so a block
+    pasted into a single row is stored split into its lines, and comparing the combined text the row
+    still holds against those split lines would file every line a second time - one of the ways the
+    same task piled up here in half-finished copies. Splitting both sides the way the file stores
+    them also absorbs the `- x` -> `- [ ] x` upgrade, since the words are unchanged by it.
+
+    With `number`, brand-new rows (no id yet) are handed the next number as they are written."""
     seen = _stored_lines(item["text"] for item in items) | _stored_lines(drawn)
+    sent_ids = {item["id"] for item in items if item.get("id") is not None}
     gained = [item for item in checklist_items(profile_sections(_read(path)).get(heading, ""))
-              if item["text"] not in seen]
-    save_section(path, heading, checklist_markdown(items + gained))
+              if (item["id"] is None or item["id"] not in sent_ids) and item["text"] not in seen]
+    merged = items + gained
+    if number:
+        _assign_ids(merged)
+    save_section(path, heading, checklist_markdown(merged))
 
 
 def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
@@ -375,7 +422,8 @@ def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_H
         if match is None or (match.group("tick") or " ") != " ":
             continue  # not a bullet, or already ticked
         if wanted in match.group("item").strip().lower():
-            lines[index] = TICKED + match.group("item").strip()
+            tag = f"#{match.group('id')} " if match.group("id") else ""
+            lines[index] = TICKED + tag + match.group("item").strip()
             path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             return True
     return False

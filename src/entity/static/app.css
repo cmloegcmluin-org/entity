@@ -126,6 +126,16 @@ body.page .topbar {
    as part of what he typed, and it never takes the caret - only the words beside it are edited. */
 .checklist .tag { flex: none; color: var(--dim); font-family: ui-monospace, "Cascadia Code", monospace;
                   font-size: .78rem; user-select: none; }
+/* Done tasks fold away at the foot of their list so what he still has to act on is what he sees.
+   The summary is the same quiet label as the section headings, with a caret that turns when it
+   opens - and it starts shut, since the point is to get them out of the way. */
+.done-fold { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.done-fold summary { font-size: .76rem; color: var(--dim); cursor: pointer; letter-spacing: .04em;
+                     text-transform: uppercase; list-style: none; padding: 2px 0; }
+.done-fold summary::-webkit-details-marker { display: none; }
+.done-fold summary::before { content: "\25B8"; margin-right: 6px; display: inline-block; }
+.done-fold[open] summary::before { transform: rotate(90deg); }
+.done-fold .done-list { margin-top: 6px; }
 /* What it heard, and what they actually said. A rule is two things and an arrow between them, so it
    reads as one line rather than as a table to scan across. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }

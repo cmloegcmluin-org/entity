@@ -123,30 +123,35 @@ function caretIn(words) {
           lengthBefore(words, spot.endContainer, spot.endOffset)];
 }
 
-for (const list of document.querySelectorAll(".checklist")) {
+/* A section is one list, whether it is drawn as one or as an open list with a folded Done one
+   beneath it. So the unit here is the <section>, not a <ul>: a save gathers every row under it,
+   and an edit in either list writes the whole thing back. */
+for (const section of document.querySelectorAll(".section")) {
   /* What the page believes the file holds, so a save can tell their own edit from an item Entity
      filed into the same section while the window sat open. It is what was last SENT rather than
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
      it, and a stale answer here files a second copy of everything they have edited since. */
-  let drawn = itemsOf(list).map((item) => item.text);
+  let drawn = itemsOf(section).map((item) => item.text);
   const save = (leaving) => {
-    const items = itemsOf(list);
+    const items = itemsOf(section);
     const was = drawn;
     drawn = items.map((item) => item.text);
-    return post("/profile", asJson({ heading: list.dataset.heading, items, drawn: was }), leaving);
+    return post("/profile", asJson({ heading: section.dataset.heading, items, drawn: was }), leaving);
   };
 
   /* An item that gets done is ticked, never removed: it is the only record that a complaint was
-     heard and acted on. Dimmed rather than struck through, so it stays legible. */
-  list.addEventListener("change", (event) => {
+     heard and acted on. Dimmed rather than struck through, so it stays legible. It joins the Done
+     fold on the next draw of the page, not the instant it is ticked - moving it out from under the
+     caret mid-click would be its own surprise. */
+  section.addEventListener("change", (event) => {
     event.target.closest("li").classList.toggle("done", event.target.checked);
-    atOnce(list, save);
+    atOnce(section, save);
   });
 
-  list.addEventListener("input", () => soon(list, save));
-  list.addEventListener("focusout", () => flush(list));
+  section.addEventListener("input", () => soon(section, save));
+  section.addEventListener("focusout", () => flush(section));
 
-  list.addEventListener("keydown", (event) => {
+  section.addEventListener("keydown", (event) => {
     const words = event.target.closest(".item");
     if (!words) return;
     const row = words.closest("li");
@@ -167,16 +172,18 @@ for (const list of document.querySelectorAll(".checklist")) {
       next.querySelector(".tag")?.remove();
       wordsOf(next).textContent = said.slice(to);
       row.after(next);
-      soon(list, save);
+      soon(section, save);
       caretTo(next, true);                // ...which loses focus, and sends what was just made
-    } else if (event.key === "Backspace" && !words.textContent && rowsOf(list).length > 1) {
-      /* Backspace out of a row they made and did not fill in, the way they made it. Only an empty one:
-         an item with words in it is removed by emptying it first, never by one stray keystroke. */
+    } else if (event.key === "Backspace" && !words.textContent
+               && row.closest("ul").querySelectorAll("li").length > 1) {
+      /* Backspace out of a row they made and did not fill in, the way they made it. Only an empty
+         one: an item with words is removed by emptying it first, never by a stray keystroke. Never
+         the last row of a list, so the open list always keeps a line to type into. */
       event.preventDefault();
       const above = row.previousElementSibling;
       const back = above || row.nextElementSibling;
       row.remove();
-      soon(list, save);
+      soon(section, save);
       caretTo(back, !above);
     }
   });

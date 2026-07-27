@@ -174,6 +174,27 @@ def test_saving_the_enhancements_page_numbers_a_new_row_but_leaves_goals_plain(t
     assert "- [ ] swim, thrice" in saved and "#" not in profile_sections(saved)["Goals"]
 
 
+def test_completed_items_sit_in_a_collapsible_done_section_at_the_bottom(tmp_path):
+    # "All the completed tasks went to a done section at the bottom that is collapsible." The done
+    # ones fold away so the list he still has to act on is what he sees; the fold is a <details>, so
+    # it opens on a click with no script of its own.
+    import re
+
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements they want (roadmap, not now)\n"
+                       "- [ ] #1 still to do\n- [x] #2 finished one\n- [x] #3 also done\n\n"
+                       "## Goals\n- [ ] run\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/profile").get_data(as_text=True)
+    fold = re.search(r"<details[^>]*class=\"done-fold\".*?</details>", page, re.S)
+    assert fold is not None
+    body = fold.group(0)
+    assert "finished one" in body and "also done" in body   # the done ones are folded away
+    assert "still to do" not in body                          # the open one is not
+    assert "Done" in body and "2" in body                     # the summary counts them
+
+
 def test_every_translation_in_force_is_on_the_page_and_a_users_own_save_back(tmp_path):
     # "can we have an explicit list of translations I can see" - so the ones that ship are listed
     # beside their own, rather than being applied invisibly.

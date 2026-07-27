@@ -26,7 +26,9 @@
   </main>
 
   <div class="column">
-    <button type="button" id="mic" class="btn">○ mic off</button>
+    {#- Born disabled: clicks before the mic exists were dropped silently, which read as a broken
+        button. The first state report is what proves the mic is live, and enables it. -#}
+    <button type="button" id="mic" class="btn" disabled>● record</button>
     <div id="meter"><div id="level"></div></div>
     <label class="switch"><input type="checkbox" id="auto"> auto-listen</label>
     <button type="button" id="send" class="btn send">Submit</button>

@@ -64,8 +64,14 @@ class Polisher:
         self._lock = threading.Lock()
 
     def warmup(self):
-        """Open the session now, at startup, so the first submit pays no cold start."""
-        self._ensure_session()
+        """Open the session AND run one tiny repair now, at startup. Opening alone was not warm:
+        the session's first inference still took longer than the deadline, so the first real
+        submit of a session went through unrepaired - the chopped Highdeas ask that cost a whole
+        misdispatched agent. The model must have answered once before it is fast."""
+        try:
+            self._ensure_session().ask(PROMPT.format(text="warm up. Ready to go."))
+        except Exception:
+            pass  # a failed warmup costs only the first submit's repair, never the startup
 
     def polish(self, text):
         """The text with its sentence boundaries repaired - or exactly as given, whenever the

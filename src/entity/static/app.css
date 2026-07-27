@@ -374,11 +374,7 @@ body.page .topbar {
                      border-radius: 6px; cursor: pointer; }
 #paste-menu button:hover { background: rgba(127, 255, 0, .12); }
 
-/* The reply being written right now: the same bubble shape, slightly translucent until the
-   finished message replaces it in the same breath. */
-.said.composing .box { opacity: .85; }
-
-/* The section heading carries both counts - open leads, since open is what he acts on. */
+/* The section heading carries the open count - what he acts on; done is counted at its fold. */
 h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-left: 10px; }
 
 /* A new row reserves its number's spot at once - typing used to start in the space where the id

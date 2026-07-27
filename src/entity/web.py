@@ -208,7 +208,6 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             "state": mirror.state if mirror is not None else "muted",
             "level": mirror.level if mirror is not None else 0.0,
             "hearing": mirror.hearing if mirror is not None else "",
-            "composing": mirror.composing if mirror is not None else "",
             "retract": retract,
             "dictated": typed,
             "send": send,

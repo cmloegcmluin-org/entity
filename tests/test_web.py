@@ -449,7 +449,7 @@ def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):
     assert client.post("/agents/fixer/close").status_code == 204
 
     assert not (logs / "fixer.log").exists()
-    assert (logs / "closed" / "fixer.log").exists()
+    assert (tmp_path / "agent-logs-archive" / "fixer.log").exists()
     assert 'data-agent="fixer"' not in client.get("/agents").get_data(as_text=True)
     assert client.post("/agents/fixer/close").status_code == 404  # and it is not a path to touch
 

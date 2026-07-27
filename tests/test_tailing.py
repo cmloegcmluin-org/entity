@@ -1,4 +1,4 @@
-from entity.tailing import LogTail, discover
+from entity.tailing import LogTail, archive_dir, discover
 
 
 def test_discover_lists_log_files_by_name(tmp_path):
@@ -7,6 +7,18 @@ def test_discover_lists_log_files_by_name(tmp_path):
     (tmp_path / "notes.txt").write_text("z", encoding="utf-8")  # not a log - not a tab
 
     assert discover(tmp_path) == ["fixer", "helper"]
+
+
+def test_the_archive_is_a_sibling_of_the_live_folder_so_discover_stays_clear_of_it(tmp_path):
+    # The one rule both the desk and the window archive by: an archived log lands OUTSIDE the
+    # folder discover globs, so it never comes back as a tab. A subfolder would be re-discovered
+    # on the next poll if discover ever recursed; a sibling never can be.
+    live = tmp_path / "agent-logs"
+    live.mkdir()
+    archive = archive_dir(live)
+
+    assert archive == tmp_path / "agent-logs-archive"
+    assert archive.parent == live.parent and archive not in live.parents
 
 
 def test_discover_survives_a_directory_that_does_not_exist_yet(tmp_path):

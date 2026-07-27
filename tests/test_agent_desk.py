@@ -44,7 +44,7 @@ class FakeAgent:
 
 
 def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None, run=None,
-          state=None, law=None):
+          state=None, law=None, complete=None):
     outbox = outbox or Outbox()
     made = made if made is not None else []
 
@@ -54,7 +54,8 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=
         return agent
 
     return (AgentDesk(outbox, agent_factory=factory, roster_path=roster, monitor=monitor,
-                      log_dir=log_dir, run=run, state_path=state, law_path=law),
+                      log_dir=log_dir, run=run, state_path=state, law_path=law,
+                      complete_enhancement=complete),
             outbox, made)
 
 
@@ -460,6 +461,66 @@ def test_retiring_something_with_no_log_and_no_agent_says_no(tmp_path):
     desk, _, _ = _desk(log_dir=tmp_path)
 
     assert desk.retire("ghost") is False
+
+
+def test_retiring_an_agent_ticks_off_the_enhancement_it_was_completing(tmp_path):
+    # The enhancements list is the pool agents pick from; a finished agent's item should tick
+    # itself off. The wrap-up is the moment: the work has landed and the tab is closing, so what
+    # was an open ask is now done. The item rides with the agent from the start, never guessed
+    # from its task, because a wrong tick corrupts the list's record of what was asked and answered.
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs",
+                            complete=lambda item: ticked.append(item) or True)
+    desk.start("voice", "/tmp/wt", "wire up the better voice", enhancement="Better voice")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert desk.retire("voice") is True
+
+    assert ticked == ["Better voice"]
+    desk.close()
+
+
+def test_a_failed_agent_never_ticks_its_enhancement_done(tmp_path):
+    # Retiring a DIED agent still wraps up its leftovers, but its ask is NOT answered - ticking it
+    # off would record a failure as a completion, the checklist's worst possible lie.
+    ticked = []
+    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+                     log_dir=tmp_path / "agent-logs",
+                     complete_enhancement=lambda item: ticked.append(item) or True)
+    desk.start("doomed", "/tmp/wt", "attempt it", enhancement="Better voice")
+    assert _wait_for(lambda: bool(desk._desked) and desk._desked["doomed"].state == "failed")
+
+    assert desk.retire("doomed") is True
+
+    assert ticked == []
+    desk.close()
+
+
+def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
+    # "I close it and reopen it constantly." An agent dispatched for an enhancement often outlives
+    # the process it was started in, so the tag has to live in the survival record - otherwise a
+    # revived agent lands its work and the item it was for never ticks.
+    import json
+
+    state = tmp_path / "agents.json"
+    logs = tmp_path / "agent-logs"
+    first, outbox, _ = _desk(state=state, log_dir=logs)
+    first.start("voice", "/wt/voice", "wire the voice", enhancement="Better voice")
+    assert _wait_for(lambda: bool(outbox))
+
+    [saved] = json.loads(state.read_text(encoding="utf-8"))
+    assert saved["enhancement"] == "Better voice"  # the tag is in the survival record
+    first.close()
+
+    ticked = []
+    revived = AgentDesk(Outbox(),
+                        agent_factory=lambda name, cwd, decide, **k: FakeAgent(name, cwd, decide),
+                        state_path=state, log_dir=logs,
+                        complete_enhancement=lambda item: ticked.append(item) or True)
+    revived.revive()
+
+    assert revived.retire("voice") is True
+    assert ticked == ["Better voice"]  # and the revived agent still ticks it
 
 
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):

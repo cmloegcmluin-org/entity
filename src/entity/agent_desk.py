@@ -85,7 +85,7 @@ REJECTED_TRY_AGAIN = (
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
-    def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None):
+    def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None):
         self.agent = agent
         self.cwd = cwd
         self.task = task
@@ -93,6 +93,10 @@ class _Desked:
         self.model = model  # what it was started on, so a revival can put it back on the same
         self.effort = effort
         self.delivery = delivery or Delivery()  # where this work stands in the review loop
+        # The Enhancements-list item this agent is here to complete, verbatim, or None. Carried
+        # from the start rather than matched from the task later, so the tick lands on exactly the
+        # line the user wrote - a wrong tick would corrupt the list's record of ask and answer.
+        self.enhancement = enhancement
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -101,10 +105,14 @@ class _Desked:
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
                  monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
-                 law_path=None):
+                 law_path=None, complete_enhancement=None):
         from entity.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
+        # How a finished agent's Enhancements-list item gets ticked off (memory.complete_enhancement),
+        # or None to skip it. Injected so the desk needn't know where the profile lives, and so a
+        # desk with no profile behind it (most tests) simply does not tick.
+        self._complete_enhancement = complete_enhancement
         # What happened - finished, died - goes to the events sink as (kind, agent, report); the
         # narrator words it in the brain's own voice. Undirected, the desk speaks the old way:
         # a capped notice (or the death line) straight to the outbox.
@@ -132,16 +140,18 @@ class AgentDesk:
         self._lock = threading.Lock()
         self._threads = []
 
-    def start(self, name, cwd, task):
+    def start(self, name, cwd, task, enhancement=None):
         """Put a fresh agent on `task` in `cwd`. Returns immediately; the agent's reply arrives in
-        the Outbox when it lands.
+        the Outbox when it lands. `enhancement`, when given, is the Enhancements-list item this
+        agent is completing - ticked off its list when the agent is retired.
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
         agent = self._factory(name, cwd, self._decide, model=self._model, effort=self._effort)
         with self._lock:
             self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
-                                         model=self._model, effort=self._effort)
+                                         model=self._model, effort=self._effort,
+                                         enhancement=enhancement)
         self._dispatch(name, task + STANDING_RULE + self._law_note())
 
     def _law_note(self):
@@ -181,7 +191,8 @@ class AgentDesk:
                 desked = _Desked(agent, entry.get("cwd"), entry.get("task", ""),
                                  self._open_log(name), model=model, effort=effort,
                                  delivery=Delivery(entry.get("delivery") or "building",
-                                                   entry.get("steps")))
+                                                   entry.get("steps")),
+                                 enhancement=entry.get("enhancement"))
                 desked.state = "idle"
                 self._desked[name] = desked
             revived.append(name)
@@ -288,15 +299,16 @@ class AgentDesk:
 
     def retire(self, name):
         """Wrap a finished agent up in one gesture: close its tab (the log moves into the archive),
-        let the session go, and remove its worktree.
+        tick off the Enhancements item it was completing, let the session go, and remove its
+        worktree.
 
         "It should probably archive the agent log... and always do stuff like archive the Claude
-        session and worktree" - three chores nobody should have to name separately. False when
-        there is nothing to retire, or the agent is still live - closing a live agent's tab would
-        drop the user's view into work still happening. An agent the desk never had (yesterday's,
-        before a restart) is just its leftover log, and the move alone closes it. A worktree that
-        refuses removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never
-        fails over it."""
+        session and worktree" - chores nobody should have to name separately. False when there is
+        nothing to retire, or the agent is still live - closing a live agent's tab would drop the
+        user's view into work still happening. An agent the desk never had (yesterday's, before a
+        restart) is just its leftover log, and the move alone closes it. A worktree that refuses
+        removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never fails
+        over it. Only a cleanly finished agent ticks its item: a DIED one never marks its ask done."""
         with self._lock:
             entry = self._desked.get(name)
             if entry is not None and entry.state not in ("idle", "failed"):
@@ -318,6 +330,8 @@ class AgentDesk:
                 self._run(["git", "-C", entry.cwd, "worktree", "remove", entry.cwd], check=True)
             except Exception:
                 pass  # dirty or locked: the sweep's business later, not a failed retirement
+            if entry.state == "idle" and entry.enhancement and self._complete_enhancement:
+                self._complete_enhancement(entry.enhancement)  # its ask is now answered
             self._persist()
         return True
 
@@ -429,7 +443,8 @@ class AgentDesk:
                 {"name": name, "cwd": entry.cwd, "task": entry.task,
                  "session_id": getattr(entry.agent, "session_id", None),
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
-                 "delivery": entry.delivery.stage, "steps": entry.delivery.steps}
+                 "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
+                 "enhancement": entry.enhancement}
                 for name, entry in self._desked.items()
             ]
         self._state_path.parent.mkdir(parents=True, exist_ok=True)

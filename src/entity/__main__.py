@@ -24,6 +24,7 @@ from entity.narrator import Narrator
 from entity.memory import (
     DEFAULT_PROFILE_PATH,
     append_learned,
+    complete_enhancement,
     compose_persona,
     lexicon_terms,
     load_learned,
@@ -273,7 +274,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                      # The machine-wide engineering law, split out of the user's personal config
                      # so working agents can be pointed at exactly it. Home-relative, so nothing
                      # personal enters the source and a machine without the split just skips it.
-                     law_path=Path.home() / ".claude" / "engineering.md")
+                     law_path=Path.home() / ".claude" / "engineering.md",
+                     # Wrapping up an agent started for an Enhancements item ticks that item off
+                     # the user's list (profile.md) - the pool they file into, self-draining as
+                     # the work lands.
+                     complete_enhancement=complete_enhancement)
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.
     foreman = Foreman(desk, outbox)

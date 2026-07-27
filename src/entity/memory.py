@@ -281,8 +281,19 @@ def checklist_markdown(items):
     A row holding several lines - a block pasted into one of them - becomes the items it reads as.
     Stored whole it would be one bullet with newlines inside it, and those lines come back as
     items that have lost their place in the list."""
-    return "\n".join((TICKED if item["done"] else UNTICKED) + line.strip()
-                     for item in items for line in item["text"].splitlines() if line.strip())
+    return "\n".join((TICKED if item["done"] else UNTICKED) + line
+                     for item in items for line in _lines(item["text"]))
+
+
+def _lines(text):
+    """The lines a row is stored as: one per non-empty line, stripped. A block pasted into one row
+    is kept as the several lines it reads as, so it is split the same way wherever the file's form
+    of an item is what matters - writing it, and telling one already stored from a fresh edit."""
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _stored_lines(texts):
+    return {line for text in texts for line in _lines(text)}
 
 
 def find_heading(sections, stem):
@@ -303,10 +314,13 @@ def save_checklist(path, heading, items, *, drawn):
     Entity files enhancements into this same list while the window sits open, and every keystroke
     writes the whole list back, so without this the next character they type deletes them.
 
-    Compared on the WORDS of an item, never on the line it is stored as - the file upgrades `- x`
-    to `- [ ] x` the first time anything writes it, and comparing lines read that upgrade as an
-    item nobody had seen and filed a second copy of everything they had edited."""
-    seen = {item["text"] for item in items} | set(drawn)
+    Compared on the STORED lines of an item, not on the text a row holds: the file keeps one line
+    per item, so a block pasted into a single row is stored split into its lines. Comparing the
+    combined text a row still holds against those split lines finds no match and files every line
+    a second time - which is one of the ways the same task piled up here in half-finished copies.
+    Splitting both sides the way the file stores them also absorbs the `- x` -> `- [ ] x` upgrade,
+    since the words are unchanged by it."""
+    seen = _stored_lines(item["text"] for item in items) | _stored_lines(drawn)
     gained = [item for item in checklist_items(profile_sections(_read(path)).get(heading, ""))
               if item["text"] not in seen]
     save_section(path, heading, checklist_markdown(items + gained))

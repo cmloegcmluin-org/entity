@@ -241,14 +241,21 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         """The four sections, down one page, every one of them a checklist. They are the same kind
         of thing - a list of lines under a heading - and only Enhancements drew boxes, so three of
         the four handed them raw markdown to decode. Matched by prefix, since a profile glosses its
-        own headings, and shown in the profile's order rather than ours where both agree."""
+        own headings, and shown in the profile's order rather than ours where both agree.
+
+        Each list is split into what is still open and what is done: the done ones fold into a
+        collapsible section at its foot, so what he still has to act on is what he sees."""
         found = _profile_text()
-        sections = [
-            # A box to click, not `- [x]` spelled out for the reader to decode.
-            {"title": title, "heading": heading, "items": checklist_items(found[heading])}
-            for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
-            if heading is not None
-        ]
+
+        def section(title, heading):
+            items = checklist_items(found[heading])
+            return {"title": title, "heading": heading,
+                    "active": [item for item in items if not item["done"]],
+                    "done": [item for item in items if item["done"]]}
+
+        sections = [section(title, heading)
+                    for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
+                    if heading is not None]
         return render_template("profile.html", here="/profile", sections=sections)
 
     @app.post("/profile")

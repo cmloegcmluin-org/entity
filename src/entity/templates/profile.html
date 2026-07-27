@@ -23,18 +23,32 @@
     no box to edit the section as raw markdown any more - it was the only way to add an item and
     it lost them ("I add new items, tab away, tab back, and they're just gone"), so for as long as
     it stood there was no way to file an enhancement at all. -#}
+{#- A section is one list, drawn as two: what is still open, and - folded into a <details> at its
+    foot - what is done. The heading rides on the <section>, not either list, because a save gathers
+    every row under it (open first, then done) and writes them back as one list. -#}
 <main id="content" class="reading">
   {% for section in sections %}
-  <section class="section">
+  <section class="section" data-heading="{{ section.heading }}">
     <h2>{{ section.title }}</h2>
     {#- An item that gets done is ticked, never removed: a done item is the only record that a
         complaint was heard and acted on. Dimmed rather than struck through, so it stays legible
         - "that makes it impossible to read; simply dim the text when it has been checked". -#}
-    <ul class="checklist" data-heading="{{ section.heading }}">
-      {% for item in section["items"] %}{{ row(item) }}
-      {% else %}{{ row() }}{# somewhere to type when a section is empty; Enter grows it from there #}
+    <ul class="checklist">
+      {% for item in section["active"] %}{{ row(item) }}
+      {% else %}{{ row() }}{# somewhere to type when nothing is open; Enter grows it from there #}
       {% endfor %}
     </ul>
+    {#- The done ones fold away so the list he still has to act on is what he sees. A <details> is
+        collapsible on its own, no script - and it starts shut, since the point is to get them out
+        of the way. -#}
+    {% if section["done"] %}
+    <details class="done-fold">
+      <summary>Done · {{ section["done"] | length }}</summary>
+      <ul class="checklist done-list">
+        {% for item in section["done"] %}{{ row(item) }}{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
   </section>
   {% else %}
   <p class="empty">No profile is loaded, so there is nothing here to edit.</p>

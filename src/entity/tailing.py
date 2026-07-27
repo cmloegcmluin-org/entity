@@ -16,6 +16,16 @@ def discover(directory):
     return sorted(child.stem for child in path.glob("*.log"))
 
 
+def archive_dir(live_dir):
+    """Where a finished agent's log goes to rest: runtime/agent-logs-archive/, a SIBLING of the
+    live folder rather than a subfolder of it, so `discover` (which globs the live folder) can
+    never turn an archived log back into a window tab. Defined in one place so the desk's own
+    wrap-up (`retire`) and the window's close button always send a log to the same archive - two
+    call sites naming the folder themselves is how they drift and a fleet ends up with its history
+    split across two directories."""
+    return Path(live_dir).parent / "agent-logs-archive"
+
+
 class LogTail:
     def __init__(self, path):
         self._path = Path(path)

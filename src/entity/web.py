@@ -28,7 +28,7 @@ from entity.memory import (
 )
 from entity.links import link_parts, offers, open_link
 from entity.mirror import SIDES, TranscriptModel, sessions
-from entity.tailing import LogTail, discover
+from entity.tailing import LogTail, archive_dir, discover
 from entity.vocabulary import translations_in_force
 
 SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
@@ -126,6 +126,9 @@ class Agents:
 
     def __init__(self, directory, clock):
         self._directory = Path(directory) if directory else None
+        # The fleet's one archive, shared with the desk's own wrap-up (see tailing.archive_dir), so
+        # a log closed here and one the desk retires land in the same place.
+        self._archive = archive_dir(self._directory) if self._directory else None
         self._clock = clock
         self._read = {}  # name -> (LogTail, TranscriptModel)
 
@@ -138,10 +141,9 @@ class Agents:
         back on the next poll."""
         self._read.pop(name, None)
         log = self._directory / f"{name}.log" if self._directory else None
-        if log is not None and log.exists():
-            closed = self._directory / "closed"
-            closed.mkdir(parents=True, exist_ok=True)
-            log.replace(closed / log.name)
+        if log is not None and log.exists() and self._archive is not None:
+            self._archive.mkdir(parents=True, exist_ok=True)
+            log.replace(self._archive / log.name)
 
     def entries(self, name):
         if name not in self._read:

@@ -27,6 +27,7 @@ from entity.delivery import Delivery, DeliveryError
 from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from entity.relay import notice
 from entity.steps import SAID, render
+from entity.tailing import archive_dir
 from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
@@ -114,6 +115,8 @@ class AgentDesk:
         self._state_path = Path(state_path) if state_path else None  # the fleet's survival record
         self._law_path = Path(law_path) if law_path else None  # the machine-wide engineering law
         self._log_dir = Path(log_dir) if log_dir else None
+        # Where a finished agent's log goes to rest - the fleet's one archive (see tailing).
+        self._archive_dir = archive_dir(self._log_dir) if self._log_dir else None
         # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
         # know nothing about agents: a note Entity wrote itself became an "agent" that then went
         # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
@@ -284,7 +287,7 @@ class AgentDesk:
         return "\n".join(lines) or "No agents running."
 
     def retire(self, name):
-        """Wrap a finished agent up in one gesture: close its tab (the log moves into closed/),
+        """Wrap a finished agent up in one gesture: close its tab (the log moves into the archive),
         let the session go, and remove its worktree.
 
         "It should probably archive the agent log... and always do stuff like archive the Claude
@@ -301,10 +304,9 @@ class AgentDesk:
         log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
         if entry is None and (log is None or not log.exists()):
             return False
-        if log is not None and log.exists():
-            closed = self._log_dir / "closed"
-            closed.mkdir(parents=True, exist_ok=True)
-            log.replace(closed / log.name)
+        if log is not None and log.exists() and self._archive_dir is not None:
+            self._archive_dir.mkdir(parents=True, exist_ok=True)
+            log.replace(self._archive_dir / log.name)
         if entry is not None:
             with self._lock:
                 self._desked.pop(name, None)

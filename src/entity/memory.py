@@ -490,6 +490,22 @@ def revise_enhancement(item_id, text, path=DEFAULT_PROFILE_PATH, heading=ENHANCE
     return False
 
 
+def complete_enhancement_by_id(item_id, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+    """Tick enhancement #id done, keeping its number and its words exactly as they were. False
+    when no item carries that id. The brain could file and rewrite but not FINISH - asked to
+    check items off, it wrote a literal "[x]" into their words instead ("No you idiot... I'm
+    saying to check them off!"). Done is a state, not a spelling; this flips the state."""
+    path = Path(path)
+    resolved = find_heading(profile_sections(_read(path)), heading)
+    items = checklist_items(profile_sections(_read(path)).get(resolved, ""))
+    for item in items:
+        if item.get("id") == int(item_id):
+            item["done"] = True
+            save_section(path, resolved, checklist_markdown(items))
+            return True
+    return False
+
+
 def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """Tick the enhancement whose text contains `item`, in place. True if one was found.
 

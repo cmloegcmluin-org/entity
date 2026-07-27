@@ -677,3 +677,32 @@ def test_a_missing_profile_reads_as_no_open_enhancements(tmp_path):
     from entity.memory import open_enhancements
 
     assert open_enhancements(tmp_path / "absent.md") == ""
+
+
+def test_an_enhancement_can_be_checked_off_by_its_id(tmp_path):
+    # "No you idiot... I'm saying to check them off!" The brain had tools to file and rewrite but
+    # nothing that flips an item to done - so it mangled the words with a literal "[x]" instead.
+    # Done by number: the tick flips, the id and the words stay exactly as they were.
+    from entity.memory import complete_enhancement_by_id
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn about credits" + chr(10) + "- [ ] #8 something else" + chr(10),
+                    encoding="utf-8")
+
+    done = complete_enhancement_by_id(7, path)
+
+    assert done is True
+    text = path.read_text(encoding="utf-8")
+    assert "- [x] #7 warn about credits" in text
+    assert "- [ ] #8 something else" in text
+
+
+def test_checking_off_an_id_nobody_has_says_so(tmp_path):
+    from entity.memory import complete_enhancement_by_id
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 an item" + chr(10),
+                    encoding="utf-8")
+
+    assert complete_enhancement_by_id(99, path) is False
+    assert "- [ ] #7 an item" in path.read_text(encoding="utf-8")

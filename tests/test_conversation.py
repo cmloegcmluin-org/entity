@@ -24,7 +24,9 @@ class FakeBrain:
 
     def respond(self, utterance):
         self.heard.append(utterance)
-        return f"reply to {utterance}"
+        # Echo the USER'S words, not the system notes the loop prefixed - a real brain answers
+        # the person, and tests about replies must not also be tests of the annotation.
+        return f"reply to {_words(utterance)}"
 
 
 class FakeTTS:
@@ -408,7 +410,7 @@ def test_turn_transcribes_thinks_and_speaks():
 
     turn = convo.turn()
 
-    assert brain.heard == ["hello"]
+    assert [_words(u) for u in brain.heard] == ["hello"]
     assert tts.spoken == ["reply to hello"]  # the reply itself is the whole exchange - no stock lines
     assert turn == Turn(heard="hello", said="reply to hello")
 
@@ -568,8 +570,9 @@ def test_answering_the_offer_hands_the_update_to_the_brain_to_deliver_once():
     assert _words(brain.heard[-1]) == "yeah, let me know"
     assert turn.said.startswith("reply to")
     # Never spoken as its own stored line - once through the brain's reply is the whole delivery.
-    assert "The fix is ready to look at on localhost:5200." not in tts.spoken
-    assert len([said for said in tts.spoken if "ready to look at" in said]) == 1
+    # (The fake echoes only his words, so the whole spoken record is: the offer, then the reply.)
+    assert tts.spoken == ["I've got an update on asana-submit-fix when you're ready.",
+                          "reply to yeah, let me know"]
 
 
 def test_a_go_ahead_with_several_held_still_reads_out_the_choice():
@@ -781,7 +784,7 @@ def test_blank_utterance_is_skipped():
     turn = convo.turn()
 
     assert turn is None
-    assert brain.heard == []
+    assert [_words(u) for u in brain.heard] == []
     assert tts.spoken == []
 
 
@@ -799,7 +802,7 @@ def test_run_loops_until_should_continue_is_false():
 
     convo.run(should_continue=should_continue)
 
-    assert brain.heard == ["one", "two"]
+    assert [_words(u) for u in brain.heard] == ["one", "two"]
     assert tts.spoken == ["reply to one", "reply to two"]
 
 
@@ -811,7 +814,7 @@ def test_farewell_ends_the_conversation_without_asking_the_brain():
 
     convo.run()
 
-    assert brain.heard == ["hi"]
+    assert [_words(u) for u in brain.heard] == ["hi"]
     assert "Goodbye, Entity." not in brain.heard
     assert tts.spoken[-1] == convo.farewell_reply
 
@@ -1131,7 +1134,10 @@ def test_news_the_brain_composed_is_not_read_back_to_it_as_someone_elses():
     convo.turn()  # the composed line goes out at the lull
     convo.turn()
 
-    assert heard == ["what needs my eyes exactly"]  # no system note; it already knows it said it
+    # No unwritten-lines note: it already knows it said it. (The standing conduct note rides
+    # on every turn and is not about lines said in its name.)
+    assert [_words(u) for u in heard] == ["what needs my eyes exactly"]
+    assert "spoken to them in YOUR name" not in heard[0]
 
 
 def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
@@ -1148,7 +1154,8 @@ def test_its_own_answers_are_not_read_back_to_it_as_someone_elses():
     convo.turn()
     convo.turn()
 
-    assert heard[1] == "thanks"  # nothing to report: it wrote its own last line itself
+    assert _words(heard[1]) == "thanks"  # nothing to report: it wrote its own last line itself
+    assert "spoken to them in YOUR name" not in heard[1]
 
 
 class StreamingTTS(FakeTTS):
@@ -1308,7 +1315,7 @@ def test_the_fleet_briefing_is_in_front_of_the_brain_every_turn():
 
     convo.turn()
 
-    assert heard[0].startswith("[Fleet briefing")
+    assert "[Fleet briefing" in heard[0]
     assert "fixer: working" in heard[0]
     assert heard[0].rstrip().endswith("how's it going")  # their words close the message
 
@@ -1325,4 +1332,22 @@ def test_an_empty_briefing_adds_nothing():
 
     convo.turn()
 
-    assert heard == ["hi"]
+    assert _words(heard[0]) == "hi"
+    assert "[Fleet briefing" not in heard[0]  # an empty briefing earns no empty box
+
+
+def test_every_turn_carries_the_standing_conduct_note():
+    # Three behaviors survived their persona bans and had to be re-corrected live: announcing a
+    # tool call before making it and again after (the same sentence twice in one bubble), the
+    # "You're absolutely right" reflex, and running counts that mix old work into new ("all six
+    # items filed" when three were). A rule read once at session start loses to habit by
+    # mid-session; this one rides in front of the brain on every single turn.
+    brain = FakeBrain()
+    convo = Conversation(FakeSTT(["hi"]), brain, FakeTTS())
+
+    convo.turn()
+
+    [prompt] = brain.heard
+    assert "act first" in prompt.lower()
+    assert "absolutely right" in prompt.lower()
+    assert "this turn" in prompt.lower()

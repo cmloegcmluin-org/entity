@@ -587,7 +587,11 @@ def test_it_reports_whether_they_are_part_way_through_a_sentence():
     dictation.pump()
 
     assert True in seen  # it did say so while a burst was still in the air
-    assert dictation.is_mid_utterance() is False  # and stopped once they paused - mic still armed
+    # A pause no longer reads as done - his pauses are where the news offer once barged in - but
+    # handing the turn over does: the submit closes the thought along with the mic.
+    assert dictation.is_mid_utterance() is True
+    dictation.submit("a sentence")
+    assert dictation.is_mid_utterance() is False
 
 
 def test_the_sounds_he_makes_while_thinking_never_reach_the_draft():
@@ -737,3 +741,52 @@ def test_a_stop_bark_while_it_merely_thinks_still_cuts_the_turn():
 
     assert caught.get("stopped") is True  # the bark cut the think
     assert ears.drafted == []  # and never became draft text
+
+
+def test_submitting_puts_the_mic_down_like_saying_over_does():
+    # "Auto-listen bug: Entity drops to listening mode after speaking even when auto-listen is
+    # unchecked." The mic survived a button/chord submit, so the next reply ended with the ear
+    # already open and he read it as auto-listen. A submit is the whole gesture, whichever way
+    # it is made: turn handed over, mic down. Auto-listening re-arms at end_speaking, as built.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), pause_frames=3, **ears.kwargs())
+    assert dictation.taking_dictation()
+
+    dictation.submit("the drafted turn")
+
+    assert not dictation.taking_dictation()
+    assert ears.states[-1] == "muted"
+    dictation.set_auto_listen(True)
+    dictation.begin_speaking()
+    dictation.end_speaking()
+    assert dictation.taking_dictation()  # auto-listen, and only auto-listen, reopens it
+
+
+def test_a_pause_in_his_dictation_still_counts_as_him_mid_thought():
+    # "Entity interrupted me while I was talking... it should never do that." His natural pauses
+    # end bursts, so the old is-he-talking check (mid-burst only) said no exactly then, and the
+    # news offer barged into his pause. While the mic is armed and words landed recently, he is
+    # still composing - unprompted speech holds.
+    ears = Ears()
+    clock = {"now": 100.0}
+    dictation = Dictation(FakeTranscriber("the first half of a thought"),
+                          FakeMic(_burst_then_pause()), pause_frames=3,
+                          clock=lambda: clock["now"], **ears.kwargs())
+
+    dictation.pump()  # the burst landed in the draft; the burst itself is over
+
+    assert ears.drafted == ["the first half of a thought"]
+    assert dictation.is_mid_utterance()  # he paused; he did not finish
+    clock["now"] += 60.0
+    assert not dictation.is_mid_utterance()  # a real lull, not a breath
+
+
+def test_a_muted_mic_is_never_mid_utterance():
+    ears = Ears()
+    clock = {"now": 100.0}
+    dictation = Dictation(FakeTranscriber("words"), FakeMic(_burst_then_pause()),
+                          pause_frames=3, clock=lambda: clock["now"], **ears.kwargs())
+    dictation.pump()
+    dictation.set_recording(False)
+
+    assert not dictation.is_mid_utterance()  # mic down means the floor is open

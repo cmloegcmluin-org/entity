@@ -178,7 +178,7 @@ def test_a_choice_naming_no_model_changes_nothing():
 def test_filing_an_improvement_lands_it_in_the_profile():
     desk = FakeDesk()
     filed = []
-    tools = _tools(desk, file_enhancement=filed.append)
+    tools = _tools(desk, file_enhancement=lambda item, stamp=None: filed.append(item) or True)
 
     said = _call(tools["file_improvement"], item="louder notification chime")
 
@@ -348,3 +348,22 @@ def test_ask_foreman_hands_the_stuck_agent_to_the_senior_layer():
 
     assert foreman.considered == [("gdoc-export", "It wants to know which auth library to use.")]
     assert "foreman" in said.lower()
+
+
+def test_a_filed_improvement_is_stamped_and_a_duplicate_is_refused():
+    desk, filed = FakeDesk(), []
+
+    def keeper(item, stamp=None):
+        if filed:
+            return False
+        filed.append((item, stamp))
+        return True
+
+    tools = _tools(desk, file_enhancement=keeper, clock=lambda fmt: "2026-07-27 00:30")
+
+    first = _call(tools["file_improvement"], item="warn him when credits run low")
+    second = _call(tools["file_improvement"], item="warn him when credits run low")
+
+    assert filed == [("warn him when credits run low", "2026-07-27 00:30")]
+    assert "Filed" in first
+    assert "already on the list" in second  # the refusal is said, never silently swallowed

@@ -578,3 +578,49 @@ def test_saving_a_section_that_is_not_there_yet_adds_it(tmp_path):
     save_section(path, "Enhancements", "- dark mode")
 
     assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == "- dark mode"
+
+
+def test_a_filed_enhancement_carries_its_filing_time(tmp_path):
+    # "When filing enhancement items, always include timestamps pointing to the exact conversation
+    # messages that spawned them" - weeks later, an undated one-liner has lost its story.
+    from entity.memory import append_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] old one" + chr(10),
+                    encoding="utf-8")
+
+    filed = append_enhancement("speak slower", path, stamp="2026-07-27 00:12")
+
+    assert filed is True
+    assert "- [ ] speak slower (filed 2026-07-27 00:12)" in path.read_text(encoding="utf-8")
+
+
+def test_refiling_the_same_words_does_not_pile_up_a_duplicate(tmp_path):
+    # Five separate tickets in his list are one bug, refiled - and this session's drive filed the
+    # auto-listen bug twice and the grammar layer twice in one evening. The same words, still
+    # open, are the same ask: say so instead of stacking another copy.
+    from entity.memory import append_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #4 fix the auto-listen bug (filed 2026-07-26 22:11)" + chr(10),
+                    encoding="utf-8")
+
+    filed = append_enhancement("Fix the auto-listen bug", path, stamp="2026-07-27 00:15")
+
+    assert filed is False
+    assert path.read_text(encoding="utf-8").count("auto-listen bug") == 1
+
+
+def test_the_same_words_already_ticked_do_file_anew(tmp_path):
+    # A DONE item is history, not a standing ask: the complaint coming back means it regressed,
+    # and refusing the filing would erase the news that it did.
+    from entity.memory import append_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [x] #4 fix the auto-listen bug" + chr(10),
+                    encoding="utf-8")
+
+    filed = append_enhancement("fix the auto-listen bug", path)
+
+    assert filed is True
+    assert "- [ ] fix the auto-listen bug" in path.read_text(encoding="utf-8")

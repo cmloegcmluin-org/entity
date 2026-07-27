@@ -38,6 +38,7 @@ ends, so answering costs nothing - except after that same cut-off, for the same 
 
 import queue
 import threading
+import time
 
 from entity.hesitation import without_hesitations
 from entity.phrases import canonical, ends_with_command, strip_leading_command, wakes
@@ -57,6 +58,12 @@ from entity.stt_mic import (
 # air when the audio call returns (speaker to mic is ~90ms on the measured desk), and the output
 # stream drains a beat after the last write. 10 frames = 300ms at the 30ms mic frame.
 SPEAK_TAIL_FRAMES = 10
+
+# How long after his last drafted words he still counts as mid-thought. His natural pauses end
+# bursts, so "is a burst open" said no exactly in those pauses - and the news offer barged into
+# one ("Entity interrupted me while I was talking... it should never do that"). Not measured off
+# recordings, so it errs long: held news costs seconds, an interruption costs the thought.
+DICTATION_LULL = 12.0
 
 DEFAULT_MUTE_PHRASES = ("stop listening", "suspend")
 DEFAULT_WAKE_PHRASES = ("hey entity", "resume")
@@ -87,6 +94,7 @@ class Dictation:
         interrupt=None,
         recorder=None,
         hearing=None,
+        clock=time.monotonic,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -117,6 +125,8 @@ class Dictation:
         self._stop_words = STOP_WORDS  # what counts as a bark, per the watcher that installed _bark
         self._script = None  # while the Entity speaks: a callable for the words it is saying
         self._tail_pending = False  # end_speaking happened; the pump owes a grace window for the tail
+        self._clock = clock
+        self._last_worded = None  # when words last landed in the draft: the mid-thought clock
 
     # ---- the Conversation-facing half ----------------------------------------------------------
 
@@ -134,8 +144,16 @@ class Dictation:
                 continue
 
     def submit(self, text):
-        """The window hands over the draft - as edited, which is the whole point of the box."""
+        """The window hands over the draft - as edited, which is the whole point of the box.
+
+        And the mic goes down with it, exactly as a spoken "over" puts it down: the turn is
+        handed over, the composing is finished. Leaving it armed made every reply end with the
+        ear already open, which read as auto-listen firing while unchecked - auto-listening
+        (and only it) reopens the mic when the reply ends."""
         self._submitted.put(text.strip())
+        self._last_worded = None  # the thought was handed over; he is not mid-anything now
+        if self._armed:
+            self.set_recording(False)
 
     def catch_stop(self, active, words=STOP_WORDS, script=None, audio=None):
         """The duplex watch, held for a whole reply turn. True the moment they bark a stop; False
@@ -199,9 +217,14 @@ class Dictation:
         Being ARMED is not the answer: the mic here is a state they leave on for the whole
         conversation, so "is it armed" is yes from the moment they start until they stop, and taking
         that for "they are talking" left the Entity unable to say anything unprompted ever again.
-        A burst that has started and not yet ended is the real thing to keep out of.
+        But an open burst alone is not the answer either: his natural pauses END bursts, and the
+        news offer barged into one of those pauses mid-thought. Mid-utterance is an open burst, or
+        an armed mic whose draft gained words moments ago - a thought still being composed. A
+        submit or a disarm closes it at once.
         """
-        return self._mid_burst
+        composing = (self._armed and self._last_worded is not None
+                     and self._clock() - self._last_worded < DICTATION_LULL)
+        return self._mid_burst or composing
 
     def begin_speaking(self):
         """The Entity has started talking: stop taking dictation until it's done."""
@@ -339,6 +362,7 @@ class Dictation:
             self._maybe_wake(text)
 
     def _take_dictation(self, text, *, deliberate=False):
+        self._last_worded = self._clock()  # words are landing: he is mid-thought from here
         spoken = canonical(text)
         if ends_with_command(spoken, self._mutes):
             self._draft_before_mute(text, spoken, deliberate=deliberate)

@@ -188,3 +188,39 @@ def test_a_quiet_narration_offers_the_foreman_as_the_prod():
     assert _wait_for(outbox)
     [(asked, _)] = brain.asked
     assert "ask_foreman" in asked
+
+
+def test_a_handled_prefix_is_stripped_and_never_reaches_his_ears():
+    # "The word 'handled' doesn't appear to refer to anything in my previous message... What are
+    # you talking about?" The brain wrote "Handled - <news>" and the exact-match swallow let the
+    # whole thing through, protocol word first. The word is routing, never speech: alone it is
+    # swallowed, and in front of real news the news goes out without it.
+    brain, outbox = FakeBrain("Handled - entity-self-edit is waiting on the merge queue."), Outbox()
+    Narrator(brain, outbox).tell("finished", "entity-self-edit", "waiting on the queue")
+
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert str(news) == "entity-self-edit is waiting on the merge queue."
+    assert "handled" not in str(news).lower()
+
+
+def test_handled_with_punctuation_is_still_swallowed_whole():
+    responded = threading.Event()
+
+    class KickingBrain(FakeBrain):
+        def respond(self, utterance, *, remember=True, on_text=None):
+            try:
+                return super().respond(utterance, remember=remember, on_text=on_text)
+            finally:
+                responded.set()
+
+    outbox = Outbox()
+    Narrator(KickingBrain("Handled!"), outbox).tell("finished", "fixer", "continuing")
+
+    assert responded.wait(2.0)
+    settled = threading.Event()
+    for _ in range(20):
+        if outbox:
+            break
+        settled.wait(0.01)
+    assert not outbox

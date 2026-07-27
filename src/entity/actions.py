@@ -14,6 +14,7 @@ every one of them returns in well under a second - the desk does agent work on i
 
 import os.path
 import re
+import time
 from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
@@ -57,7 +58,8 @@ def _resolve(target):
 
 def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
                   add_persona=append_persona_addition, remember_fact=append_learned,
-                  resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK):
+                  resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
+                  clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
     tools themselves).
 
@@ -103,9 +105,11 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
         return _say(f"Next agent goes on {desk.choose(*choice)}.")
 
     @tool("file_improvement", "File one self-improvement item on the user's Enhancements list, "
-          "the moment they ask for it. One call per item.", {"item": str})
+          "the moment they ask for it. One call per item - and never re-file words already on "
+          "the list; the tool refuses duplicates and says so.", {"item": str})
     async def file_improvement(args):
-        file_enhancement(str(args["item"]))
+        if not file_enhancement(str(args["item"]), stamp=clock("%Y-%m-%d %H:%M")):
+            return _say("That one is already on the list, still open - not filing a second copy.")
         return _say("Filed.")
 
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "

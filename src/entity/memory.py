@@ -413,12 +413,31 @@ def save_checklist(path, heading, items, *, drawn, number=False):
     save_section(path, heading, checklist_markdown(merged))
 
 
-def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+def _same_ask(one, another):
+    """The same words, give or take casing, spacing, and a filing stamp: the same ask."""
+    strip = lambda text: re.sub(r"\s*\(filed [^)]*\)\s*$", "", text)
+    fold = lambda text: " ".join(strip(text).casefold().split())
+    return fold(one) == fold(another)
+
+
+def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING, *, stamp=None):
     """File one enhancement bullet INSIDE its section, so the window's tab (which re-reads this
-    file) shows it the moment it lands - not at the end of the file under some other heading."""
+    file) shows it the moment it lands - not at the end of the file under some other heading.
+
+    `stamp` dates the filing in place - "include timestamps... so context is preserved even if we
+    don't get to addressing them for many weeks". And the same words already OPEN on the list are
+    the same ask, so they are not filed twice (False comes back instead): one evening's drive
+    stacked the auto-listen bug and the grammar layer two copies each. A TICKED copy never blocks
+    a refiling - the complaint coming back means it regressed, and that is news worth a fresh line.
+    """
     path = Path(path)
     text = _read(path)
     heading = find_heading(profile_sections(text), heading)
+    standing = checklist_items(profile_sections(text).get(heading, ""))
+    if any(not existing["done"] and _same_ask(existing["text"], item) for existing in standing):
+        return False
+    if stamp:
+        item = f"{item} (filed {stamp})"
     lines = text.splitlines()
     insert_at = None
     inside = False
@@ -438,6 +457,7 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
     lines.insert(insert_at, UNTICKED + item)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
 
 
 def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):

@@ -62,6 +62,17 @@ BRIEFING_NOTICE = (
     "[Fleet briefing, from the app - the live state of your agents as of this turn:\n{briefing}]\n\n"
 )
 
+# Conduct that rode only in the persona and lost to habit by mid-session - each line below was
+# banned once, recurred live, and had to be corrected by the user again. A rule read at session
+# start fades; this one is in front of the brain on every turn, where the failure happens.
+CONDUCT_NOTICE = (
+    "[Standing conduct, every turn: act first - never say what you are about to do with a tool; "
+    "call it, then say ONCE what you did, and never restate the same fact in different words in "
+    "one reply. Never open with 'You're absolutely right' or any agreement reflex. Speak only of "
+    "what happened THIS turn - no running totals that mix in old work. And no internal vocabulary "
+    "to them, ever: tool names, stage words, routing words - plain words or nothing.]\n\n"
+)
+
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
 # instant rather than waiting out the next check-in.
 DEFAULT_INTERRUPT_POLL = 0.05
@@ -531,7 +542,7 @@ class Conversation:
         """Their words, with what the brain would otherwise have no way of knowing put in front:
         the live fleet briefing, everything said in its name since that it did not write, and -
         on the turn that answers an update offer - the held update itself, to deliver once."""
-        notes = ""
+        notes = CONDUCT_NOTICE
         if offered is not None:
             notes += OFFERED_NOTICE.format(
                 about=getattr(offered, "about", None) or "your agents", news=offered)

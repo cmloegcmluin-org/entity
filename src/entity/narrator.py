@@ -9,9 +9,15 @@ the outbox for the lull. The relay's plain notice survives only as the fallback 
 cannot answer, because news must never die with a wedged session.
 """
 
+import re
 import threading
 
 from entity.relay import notice
+
+# The routing word, wherever it leads the reply. "Handled - <news>" reached the user verbatim and
+# he had to ask what it referred to ("The word 'handled' doesn't appear to refer to anything...").
+# Alone it means silence; leading real news it is stripped, because it is protocol, never speech.
+_HANDLED_LEAD = re.compile(r"(?i)^handled\b[\s\-–—:,.!]*")
 
 # What the brain is asked, by kind of event. Each is a system-originated turn: the brain answers
 # it the way it answers anything - and because it composed the words, it remembers saying them.
@@ -27,8 +33,9 @@ PROMPTS = {
         "names, no file lists. And if the report is only the agent pausing mid-task - narrating "
         "a step, asking leave to continue, nothing done and nothing the user must decide - do "
         "not interrupt them at all: use tell_agent to tell it to continue, and answer with the "
-        "single word: handled. If it is stuck on something TECHNICAL - it needs feedback or a "
-        "decision you can't confidently give - use ask_foreman instead of guessing or bothering "
+        "single word: handled - the whole reply, never the first word of a longer one, and never "
+        "a word you say TO the user. If it is stuck on something TECHNICAL - it needs feedback or "
+        "a decision you can't confidently give - use ask_foreman instead of guessing or bothering "
         "the user; only their own calls (preference, scope, sign-off) go to them.]"
     ),
     # A finished turn from an agent that was landing already-approved work: the loop's last leg.
@@ -86,8 +93,11 @@ class Narrator:
             said = self._brain.respond(prompt, remember=True)
         except Exception:
             said = ""
-        if said.strip().rstrip(".!").lower() == "handled":
-            return  # the brain kicked the agent onward itself; there is no news to deliver
+        else:
+            stripped = _HANDLED_LEAD.sub("", said.strip())
+            if said.strip() and not stripped:
+                return  # the brain kicked the agent onward itself; there is no news to deliver
+            said = stripped
         if said.strip():
             self._outbox.push(said.strip(), about=agent, composed=True)
         else:

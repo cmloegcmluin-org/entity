@@ -150,6 +150,17 @@ class Burst:
         return carries_speech(self._voiced, min_run=DELIBERATE_RUN)
 
 
+def _filler_segments(text):
+    """How this chunk reads as punctuation-split segments, and whether every one is pure filler -
+    a backchannel word or a stock phrase and nothing else."""
+    segments = [seg for seg in re.split(r"[.!?,;]+", text) if seg.strip()]
+    def is_filler(segment):
+        words = [w for w in (re.sub(r"[^a-z]", "", part.lower()) for part in segment.split()) if w]
+        return bool(words) and (all(w in _BACKCHANNEL for w in words)
+                                or " ".join(words) in _STOCK_PHRASES)
+    return len(segments), all(is_filler(seg) for seg in segments)
+
+
 def _is_invented(text, terminator, *, deliberate=False):
     """True if the chunk is nothing the user said - filler the model hears in near-silence, or its
     stock answer to a stretch with no words in it. Never true of a chunk carrying the terminator, so
@@ -158,13 +169,18 @@ def _is_invented(text, terminator, *, deliberate=False):
     `deliberate` is the burst's own testimony (see Burst.sounds_deliberate): sound that ran long
     enough to be someone actually talking. A REAL "thank you" was being eaten by this filter -
     "it's more important for when I'm trying to actually say it that it can hear me" - and what
-    separates his from the phantoms is the voice under it, which the text alone cannot show."""
-    if deliberate:
-        return False
-    words = [re.sub(r"[^a-z]", "", w.lower()) for w in text.split()]
-    words = [w for w in words if w]
+    separates his from the phantoms is the voice under it, which the text alone cannot show.
+    But deliberate SOUND is not deliberate SPEECH: music and scraped chairs run past the line
+    too, and the bypass waved through whole STRINGS of fillers invented over them ("Thank you.
+    Mm-hmm. Yeah. Thank you." came back). Nobody's real turn is three-plus filler phrases and
+    nothing else, so those read as invented whatever the sound under them; one or two ("yeah,
+    thank you") stay his."""
+    words = [w for w in (re.sub(r"[^a-z]", "", part.lower()) for part in text.split()) if w]
     if not words or terminator in words:
         return False
+    segments, all_filler = _filler_segments(text)
+    if deliberate:
+        return all_filler and segments >= 3
     return all(w in _BACKCHANNEL for w in words) or " ".join(words) in _STOCK_PHRASES
 
 

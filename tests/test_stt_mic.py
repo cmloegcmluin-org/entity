@@ -487,3 +487,17 @@ def test_covered_by_with_no_script_covers_nothing():
     from entity.stt_mic import covered_by
 
     assert covered_by("any words at all spoken here", "") is False
+
+
+def test_a_string_of_phantom_fillers_is_invented_even_over_real_sound():
+    # "'Thank you. Mm-hmm. Yeah. Thank you.' regression" - loud NON-speech sound (music, a chair)
+    # runs past the deliberate line, and the bypass then waved through whole strings of fillers
+    # the model invented over it. Nobody's real turn is three-plus filler phrases and nothing
+    # else; a single "thank you" carried by real voice still lands.
+    from entity.stt_mic import _is_invented
+
+    assert _is_invented("Thank you. Mm-hmm. Yeah. Thank you.", "over", deliberate=True) is True
+    assert _is_invented("thank you", "over", deliberate=True) is False
+    assert _is_invented("yeah, thank you", "over", deliberate=True) is False
+    assert _is_invented("Okay. Yeah. Mm-hmm.", "over", deliberate=True) is True
+    assert _is_invented("yeah the build is green, thank you", "over", deliberate=True) is False

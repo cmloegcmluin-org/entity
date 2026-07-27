@@ -194,12 +194,18 @@ auto.onchange = () => post("/auto-listen", { on: auto.checked });
 
 const LEVEL_FULL = 0.06;  // the meter tops out around loud speech, so ordinary talk moves it
 
+let shownState = null;  // the poll repeats the state four times a second, and rewriting the
+                        // button's class each time restarts its CSS animation at frame zero -
+                        // which is why the recording pulse never visibly pulsed.
 function showState(state, loudness) {
-  mic.className = `btn ${state === "muted" ? "" : state}`;
-  // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
-  mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
-  mic.title = { recording: "Stop recording", muted: "Start recording",
-                speaking: "Stop it talking" }[state];
+  if (state !== shownState) {
+    shownState = state;
+    mic.className = `btn ${state === "muted" ? "" : state}`;
+    // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
+    mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
+    mic.title = { recording: "Stop recording", muted: "Start recording",
+                  speaking: "Stop it talking" }[state];
+  }
   level.style.width = state === "recording"
     ? `${Math.min(1, loudness / LEVEL_FULL) * 100}%`
     : "0";

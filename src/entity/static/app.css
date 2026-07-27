@@ -313,8 +313,7 @@ body.page .topbar {
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.send { color: var(--accent); border-color: rgba(127, 255, 0, .35); }
 .btn.send:hover { background: rgba(127, 255, 0, .12); }
-#mic.recording { color: var(--accent); border-color: var(--accent); }
-#mic.speaking { color: #ff9b9b; border-color: #ff9b9b; }
+
 
 /* The meter spans the column, because it is the column's width that says what full is. */
 #meter { height: 10px; border-radius: 5px; background: var(--panel); overflow: hidden; }
@@ -354,10 +353,10 @@ body.page .topbar {
 /* The mic button is glyphs for ACTIONS, never a state to decode: "buttons which state the
    current state and click them to change it are inherently confusing." Recording pulses so the
    live mic is visible from across the room. */
-#mic.recording { color: #ff5b5b; border-color: #ff5b5b; animation: mic-pulse 1.6s ease-in-out infinite; }
+#mic.recording { color: #ff5b5b; border-color: #ff5b5b; animation: mic-pulse 1.2s ease-in-out infinite; }
 @keyframes mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 91, 91, .45); }
-  50% { box-shadow: 0 0 0 6px rgba(255, 91, 91, 0); }
+  0%, 100% { background: rgba(255, 91, 91, .08); box-shadow: 0 0 0 0 rgba(255, 91, 91, .45); }
+  50% { background: rgba(255, 91, 91, .34); box-shadow: 0 0 0 7px rgba(255, 91, 91, 0); }
 }
 #mic.speaking { color: var(--fg); }
 

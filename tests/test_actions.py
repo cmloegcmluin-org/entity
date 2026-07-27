@@ -186,6 +186,33 @@ def test_filing_an_improvement_lands_it_in_the_profile():
     assert "filed" in said.lower()
 
 
+def test_updating_the_persona_records_a_standing_instruction():
+    # The gap this closes: Entity could file an enhancement but had no lever to change how it
+    # itself behaves. A typed tool, like every other - it cannot be half-written or leak into the
+    # voice, and it lands in the same overlay the window edits.
+    desk = FakeDesk()
+    added = []
+    tools = _tools(desk, add_persona=added.append)
+
+    said = _call(tools["update_persona"], instruction="never read a commit hash aloud")
+
+    assert added == ["never read a commit hash aloud"]
+    assert "persona" in said.lower() or "standing" in said.lower()
+
+
+def test_remembering_a_fact_appends_it_to_what_entity_has_learned():
+    # Write access to its memory: told a durable fact, Entity can keep it now, not only at the
+    # end-of-session consolidation. Facts arrive as a list, the way `append_learned` takes them.
+    desk = FakeDesk()
+    remembered = []
+    tools = _tools(desk, remember_fact=lambda facts: remembered.extend(facts))
+
+    said = _call(tools["remember"], fact="they keep their coffee mug on the left")
+
+    assert remembered == ["they keep their coffee mug on the left"]
+    assert "remember" in said.lower() or "noted" in said.lower()
+
+
 def test_start_agent_with_an_empty_task_falls_back_to_the_default():
     desk = FakeDesk()
     tools = _tools(desk, resolve=lambda target: ["/wt/resume-me"], prepare=lambda path: None,

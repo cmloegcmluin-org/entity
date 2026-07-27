@@ -19,7 +19,7 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from entity.delivery import DeliveryError
-from entity.memory import append_enhancement
+from entity.memory import append_enhancement, append_learned, append_persona_addition
 from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
@@ -29,7 +29,8 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "close_agent_tab", "mark_ready",
+                                "file_improvement", "update_persona", "remember",
+                                "close_agent_tab", "mark_ready",
                                 "record_verdict", "ask_foreman"))
 
 DEFAULT_TASK = (
@@ -54,8 +55,9 @@ def _resolve(target):
     return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
-def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement, resolve=_resolve,
-                  prepare=prepare_worktree_for, default_task=DEFAULT_TASK):
+def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
+                  add_persona=append_persona_addition, remember_fact=append_learned,
+                  resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK):
     """The action tools, wired to this desk and foreman: (server config for the options, the
     tools themselves).
 
@@ -105,6 +107,21 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement, resolve
     async def file_improvement(args):
         file_enhancement(str(args["item"]))
         return _say("Filed.")
+
+    @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
+          "about how you talk or act - when the user tells you to work differently from now on (not "
+          "a one-off for this turn). It joins your persona and takes effect next time you start. "
+          "One call per instruction.", {"instruction": str})
+    async def update_persona(args):
+        add_persona(str(args["instruction"]))
+        return _say("Added to your standing instructions - it's part of your persona from next start.")
+
+    @tool("remember", "Keep one durable fact about the user that came up - a preference, a "
+          "commitment, a life detail worth having next time. For lasting facts, not this turn's "
+          "chatter. One call per fact.", {"fact": str})
+    async def remember(args):
+        remember_fact([str(args["fact"])])
+        return _say("Noted - I'll remember that.")
 
     @tool("close_agent_tab", "Wrap up a finished agent: its tab closes (the log is archived), "
           "its session ends, and its worktree is removed. Call it unprompted once the user has "
@@ -157,8 +174,8 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement, resolve
         foreman.consider(str(args["name"]).strip(), str(args["question"]))
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, close_agent_tab,
-             mark_ready, record_verdict, ask_foreman]
+    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, update_persona,
+             remember, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
 

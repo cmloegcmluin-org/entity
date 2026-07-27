@@ -88,6 +88,27 @@ const itemsOf = (list) => rowsOf(list).map((row) => ({
   text: wordsOf(row).textContent,
 }));
 
+/* A fresh, empty row shaped like an existing one. A new item carries none of the id the row it was
+   cloned from has, so the server numbers it anew rather than two rows claiming one number. The page
+   is the one place a row's shape is written, so a new row is made by cloning, never by building. */
+function freshRow(like) {
+  const row = like.cloneNode(true);
+  row.className = "";
+  row.querySelector("input").checked = false;
+  row.removeAttribute("data-id");
+  row.querySelector(".tag")?.remove();
+  wordsOf(row).textContent = "";
+  return row;
+}
+
+/* Pasting a block is how a list arrives from somewhere else - a page, a doc, another list. Each
+   line becomes its own item ("assume any newline is a checklist item when pasting"), and a line
+   that comes punctuated as a bullet is stripped back to its words, so a pasted bullet list becomes
+   the items it reads as instead of smooshing into one note. */
+const LIST_MARKER = /^\s*(?:[-*•]|\d+[.)])\s+/;
+const pastedLines = (text) =>
+  text.split(/\r?\n/).map((line) => line.replace(LIST_MARKER, "").trim()).filter(Boolean);
+
 /* Put the caret in a row, at one end or the other of what it says. */
 function caretTo(row, atStart) {
   const words = wordsOf(row);
@@ -151,6 +172,32 @@ for (const section of document.querySelectorAll(".section")) {
   section.addEventListener("input", () => soon(section, save));
   section.addEventListener("focusout", () => flush(section));
 
+  /* A pasted block becomes one item per line. The first line joins whatever the caret was in; the
+     rest become fresh rows after it, and the words that were to the right of the caret ride on the
+     last one. Without this the browser drops a block into a single row and it smooshes into one
+     note - and a plain-text paste can lose its line breaks entirely, which is why the lines are
+     read off the clipboard here rather than out of the row afterwards. */
+  section.addEventListener("paste", (event) => {
+    const words = event.target.closest(".item");
+    if (!words) return;
+    const lines = pastedLines(event.clipboardData.getData("text/plain"));
+    if (!lines.length) return;   // nothing but blank lines and markers - let the default no-op
+    event.preventDefault();
+    const said = words.textContent;
+    const [from, to] = caretIn(words);
+    words.textContent = said.slice(0, from) + lines[0];
+    let anchor = words.closest("li");
+    for (const line of lines.slice(1)) {
+      const next = freshRow(anchor);
+      wordsOf(next).textContent = line;
+      anchor.after(next);
+      anchor = next;
+    }
+    wordsOf(anchor).textContent += said.slice(to);
+    soon(section, save);
+    caretTo(anchor, false);
+  });
+
   section.addEventListener("keydown", (event) => {
     const words = event.target.closest(".item");
     if (!words) return;
@@ -163,13 +210,7 @@ for (const section of document.querySelectorAll(".section")) {
       const said = words.textContent;
       const [from, to] = caretIn(words);
       words.textContent = said.slice(0, from);
-      const next = row.cloneNode(true);   // a row's shape is written once, in the page
-      next.className = "";
-      next.querySelector("input").checked = false;
-      // A fresh row is a fresh item: it keeps none of the id the row it was split from carries, so
-      // the server numbers it anew rather than two rows claiming one number.
-      next.removeAttribute("data-id");
-      next.querySelector(".tag")?.remove();
+      const next = freshRow(row);
       wordsOf(next).textContent = said.slice(to);
       row.after(next);
       soon(section, save);

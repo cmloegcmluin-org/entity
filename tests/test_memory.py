@@ -279,6 +279,18 @@ def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
     assert "- [x] better voice" in path.read_text(encoding="utf-8")
 
 
+def test_completing_a_numbered_enhancement_keeps_its_id(tmp_path):
+    # Ticking rewrites the line, and its id has to survive that - a done item he can still refer to
+    # by number is the point of numbering the done ones at all.
+    from entity.memory import complete_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] #12 better voice\n", encoding="utf-8")
+
+    assert complete_enhancement("better voice", path=path) is True
+    assert "- [x] #12 better voice" in path.read_text(encoding="utf-8")
+
+
 def test_a_section_reads_back_as_the_items_the_window_ticks():
     # The window draws boxes to click, so what it is handed is items - whether each is done and
     # what it says - rather than lines for it to parse a second time. The file stays markdown:
@@ -288,11 +300,35 @@ def test_a_section_reads_back_as_the_items_the_window_ticks():
     stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
 
     assert checklist_items(stored) == [
-        {"done": False, "text": "better voice"},
-        {"done": True, "text": "speaker enrollment"},
-        {"done": False, "text": "a bullet from before the boxes"},
-        {"done": False, "text": "prose"},   # any line with words on it is an item
+        {"done": False, "text": "better voice", "id": None},
+        {"done": True, "text": "speaker enrollment", "id": None},
+        {"done": False, "text": "a bullet from before the boxes", "id": None},
+        {"done": False, "text": "prose", "id": None},   # any line with words on it is an item
     ]
+
+
+def test_an_enhancement_carries_a_stable_id_read_off_its_line():
+    # "add IDs to all of the enhancements so I can refer to them by ID." The number rides in the
+    # line - `#7` after the box - so the brain, which reads this same file, knows which item he
+    # means when he says "do seven". A line without one reads as unnumbered, not as id zero.
+    from entity.memory import checklist_items
+
+    assert checklist_items("- [ ] #7 better voice\n- [x] #3 done thing\n- plain\n- #notanid x") == [
+        {"done": False, "text": "better voice", "id": 7},
+        {"done": True, "text": "done thing", "id": 3},
+        {"done": False, "text": "plain", "id": None},
+        {"done": False, "text": "#notanid x", "id": None},   # only #<digits> is an id
+    ]
+
+
+def test_an_id_is_written_back_onto_the_line_it_belongs_to():
+    from entity.memory import checklist_markdown
+
+    assert checklist_markdown([{"done": False, "text": "better voice", "id": 7},
+                               {"done": True, "text": "done thing", "id": 3},
+                               {"done": False, "text": "no number"}]) == (
+        "- [ ] #7 better voice\n- [x] #3 done thing\n- [ ] no number"
+    )
 
 
 def test_the_items_go_back_as_the_markdown_the_brain_reads():
@@ -403,6 +439,62 @@ def test_a_pasted_block_is_not_duplicated_when_the_page_saves_it_again(tmp_path)
     assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
         "- [ ] keep\n- [ ] one\n- [ ] two\n- [ ] three"
     )
+
+
+def test_numbering_gives_every_enhancement_a_stable_id(tmp_path):
+    # Legacy items carry no number; numbering fills them in from the next id after the highest
+    # already in use, and leaves the ones that have an id where they are. Idempotent: a second run
+    # over an already-numbered list changes nothing, so it can run each time the page is opened.
+    from entity.memory import number_enhancements, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements he wants (roadmap)\n- [ ] alpha\n- [x] #5 beta\n- gamma\n",
+                    encoding="utf-8")
+
+    number_enhancements(path)
+    once = profile_sections(path.read_text(encoding="utf-8"))["Enhancements he wants (roadmap)"]
+    assert once == "- [ ] #6 alpha\n- [x] #5 beta\n- [ ] #7 gamma"
+
+    number_enhancements(path)  # nothing left unnumbered
+    assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements he wants (roadmap)"] == once
+
+
+def test_saving_enhancements_numbers_new_rows_and_never_forks_one_being_edited(tmp_path):
+    # The bug that filled this list with copies: an item edited to new words read as a new item.
+    # A stable id is the fix at the root - the same id means the same item, so editing #1 in place
+    # cannot fork it even when the page has lost track of what it last sent (drawn empty), and a
+    # brand-new row (no id yet) is handed the next number.
+    from entity.memory import profile_sections, save_checklist
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] #1 alpha\n", encoding="utf-8")
+
+    save_checklist(path, "Enhancements",
+                   [{"id": 1, "done": False, "text": "alpha, revised"},
+                    {"id": None, "done": False, "text": "beta"}],
+                   drawn=[], number=True)
+
+    assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
+        "- [ ] #1 alpha, revised\n- [ ] #2 beta"
+    )
+
+
+def test_an_enhancement_filed_while_the_page_sat_open_keeps_its_own_new_id(tmp_path):
+    # Entity files into this list while the window is open. The filed item has no id until the page
+    # saves; when it does, the carry-over must keep it AND give it a number distinct from the row he
+    # was typing - not collide the two on "no id yet".
+    from entity.memory import append_enhancement, profile_sections, save_checklist
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements\n- [ ] #1 alpha\n", encoding="utf-8")
+    append_enhancement("filed by voice", path=path)   # lands unnumbered, after alpha
+
+    save_checklist(path, "Enhancements",
+                   [{"id": 1, "done": False, "text": "alpha, revised"}],
+                   drawn=["alpha"], number=True)
+
+    body = profile_sections(path.read_text(encoding="utf-8"))["Enhancements"]
+    assert body == "- [ ] #1 alpha, revised\n- [ ] #2 filed by voice"
 
 
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):

@@ -413,8 +413,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                     "\n\nHis Enhancements list - the OPEN items, live from the file this turn. "
                     "You CAN see this list: it is right here, always current, and it is the same "
                     "list his window's tab shows. You file to it with file_improvement, rewrite "
-                    "an item by number with revise_enhancement, and agents you start on an item "
-                    "tick it off when their work lands:\n"
+                    "an item by number with revise_enhancement, tick one DONE with "
+                    "check_off_enhancement the moment its ask is finished, and agents you start "
+                    "on an item tick it off themselves when their work lands:\n"
                     + (open_enhancements() or "(nothing open)")
                 ),
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)

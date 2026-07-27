@@ -21,7 +21,7 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from entity.delivery import DeliveryError
 from entity.memory import (append_enhancement, append_learned, append_persona_addition,
-                           revise_enhancement)
+                           complete_enhancement_by_id, revise_enhancement)
 from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
@@ -31,7 +31,7 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "revise_enhancement", "update_persona", "remember",
+                                "file_improvement", "revise_enhancement", "check_off_enhancement", "update_persona", "remember",
                                 "close_agent_tab", "mark_ready",
                                 "record_verdict", "ask_foreman", "run_errand"))
 
@@ -58,7 +58,8 @@ def _resolve(target):
 
 
 def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
-                  revise=revise_enhancement, add_persona=append_persona_addition,
+                  revise=revise_enhancement, check_off=complete_enhancement_by_id,
+                  add_persona=append_persona_addition,
                   remember_fact=append_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
                   clock=time.strftime):
@@ -130,6 +131,14 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             return _say(f"No item carries #{args['id']} - check the number on the tab.")
         return _say(f"Rewrote #{args['id']}.")
 
+    @tool("check_off_enhancement", "Mark one Enhancements-list item DONE by its #id, the moment "
+          "the thing it asks for is finished - never by rewriting its words. The tick flips; the "
+          "number and the words stay.", {"id": int})
+    async def check_off_item_tool(args):
+        if not check_off(int(args["id"])):
+            return _say(f"No item carries #{args['id']} - check the number on the tab.")
+        return _say(f"#{args['id']} is checked off.")
+
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
           "about how you talk or act - when the user tells you to work differently from now on (not "
           "a one-off for this turn). It joins your persona and takes effect next time you start. "
@@ -197,7 +206,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
     tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
-             run_errand, update_persona,
+             check_off_item_tool, run_errand, update_persona,
              remember, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 

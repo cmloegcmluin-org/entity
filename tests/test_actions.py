@@ -398,3 +398,15 @@ def test_a_little_chore_goes_to_the_errand_hand_not_an_agent_tab():
 
     assert errands.chores == ["archive the old fixer log"]
     assert "note" in said.lower()
+
+
+def test_checking_off_by_id_flips_the_tick_and_a_missing_id_is_said():
+    desk, ticked = FakeDesk(), []
+    tools = _tools(desk, check_off=lambda item_id: ticked.append(item_id) or item_id == 43)
+
+    said_yes = _call(tools["check_off_enhancement"], id=43)
+    said_no = _call(tools["check_off_enhancement"], id=999)
+
+    assert ticked == [43, 999]
+    assert "checked off" in said_yes
+    assert "no item" in said_no.lower()

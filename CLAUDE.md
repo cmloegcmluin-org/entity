@@ -170,7 +170,7 @@ turn and streams the reply into the voice as it is written. `voice.py` is how a 
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: twelve typed in-process tools wired to
+model is in. `actions.py` is everything the brain can DO: thirteen typed in-process tools wired to
 the desk — among them update_persona and remember, its levers to edit its own persona overlay
 (`runtime/persona.md`) and memory the way it files an enhancement — its speech carries no control
 phrases and its options carry no built-in tools.

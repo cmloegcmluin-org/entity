@@ -57,6 +57,18 @@ body.page { padding: 10px; }
 /* ---- the bar that replaced the tabs -------------------------------------------------------- */
 
 .topbar { display: flex; align-items: center; gap: 8px; }
+/* The bar stays put while a reading page scrolls under it, so the tabs are always a click away -
+   halfway down a long profile they used to scroll out of reach with everything else. Only the
+   reading pages scroll at the document level; the conversation is a fixed-height grid that never
+   does, so this is scoped to them, and it carries its own opaque background so the sections slide
+   under the bar rather than showing through the tabs. */
+body.page .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
 .topbtn { font-size: .85rem; padding: 5px 12px; text-decoration: none; }
 .topbtn.here { color: var(--accent); border-color: rgba(127, 255, 0, .45); }
 /* A save nobody can see is a save nobody trusts. */

@@ -14,6 +14,14 @@ def _client(model=None, **wiring):
     return create_app(model if model is not None else _model(), **wiring).test_client()
 
 
+def _rule_for(css, selector):
+    """The declaration block served for exactly this selector, so an assertion names the rule it
+    means rather than fishing for a substring anywhere in the stylesheet."""
+    start = css.index(selector + " {")
+    body = css.index("{", start) + 1
+    return css[body:css.index("}", body)]
+
+
 def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
     model = _model("===== 2026-07-18 =====",
                    "[02:41:38] you said: morning",
@@ -67,6 +75,20 @@ def test_the_bar_reaches_every_page_that_used_to_be_a_tab(tmp_path):
         page = client.get(path).get_data(as_text=True)
         assert page.count('class="btn topbtn') == len(pages)  # every page reaches every other one
         assert f'href="{path}"' in page
+
+
+def test_the_bar_stays_frozen_at_the_top_while_a_reading_page_scrolls_under_it():
+    # The profile and the pages beside it scroll at the document level, so a bar left in normal
+    # flow scrolls away and the tabs go out of reach halfway down a long profile. It is pinned
+    # instead - stuck to the top of the page over its own opaque background, so the sections slide
+    # under it rather than showing through. (The conversation is a fixed-height grid that never
+    # scrolls, so this is scoped to the reading pages and leaves that view untouched.)
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    frozen = _rule_for(css, "body.page .topbar")
+    assert "position: sticky" in frozen
+    assert "top: 0" in frozen
+    assert "background:" in frozen  # opaque, or the scrolled content bleeds through the tabs
 
 
 def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):

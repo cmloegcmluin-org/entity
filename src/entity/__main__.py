@@ -384,6 +384,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         console = Console(voice=True, record=session_record.write, listening_notice="",
                           echo=lambda t: None,
                           overwrite=lambda t: feed.push("overwrite", t),
+                          composing=lambda text: feed.push("composing", text),
                           messages=lambda role, text: feed.push("message", (role, text)))
     else:
         console = Console(voice=not text_mode, record=session_record.write)

@@ -1351,3 +1351,37 @@ def test_every_turn_carries_the_standing_conduct_note():
     assert "act first" in prompt.lower()
     assert "absolutely right" in prompt.lower()
     assert "this turn" in prompt.lower()
+
+
+def test_the_reply_streams_onto_the_screen_as_it_is_written():
+    # "Douglas hears Entity's voice before seeing the text on screen." The same delta stream that
+    # feeds the voice now feeds a live bubble: the words grow on screen as they are written, and
+    # the finished message replaces the live text in the same breath (composing clears to "").
+    composed = []
+    console = Console(echo=lambda line: None, composing=composed.append)
+
+    class StreamingBrain:
+        def respond(self, utterance, *, on_text=None):
+            for piece in ("First half ", "and the rest."):
+                on_text(piece)
+            return "First half and the rest."
+
+    class FakeReply:
+        def __init__(self):
+            self.sounding = False
+
+        def add(self, piece):
+            pass
+
+        def done(self):
+            return "First half and the rest."
+
+    class StreamingTTS:
+        def stream(self, *, interrupt=None, spoken_form=None):
+            return FakeReply()
+
+    convo = Conversation(FakeSTT(["hi"]), StreamingBrain(), StreamingTTS(), console=console)
+
+    convo.turn()
+
+    assert composed == ["First half ", "First half and the rest.", ""]

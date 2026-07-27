@@ -373,3 +373,7 @@ body.page .topbar {
                      border: none; color: inherit; font: inherit; padding: 6px 14px;
                      border-radius: 6px; cursor: pointer; }
 #paste-menu button:hover { background: rgba(127, 255, 0, .12); }
+
+/* The reply being written right now: the same bubble shape, slightly translucent until the
+   finished message replaces it in the same breath. */
+.said.composing .box { opacity: .85; }

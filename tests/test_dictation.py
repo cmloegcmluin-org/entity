@@ -802,3 +802,25 @@ def test_a_submitted_draft_passes_through_the_polisher_on_its_way_to_the_loop():
     dictation.submit("do it. As we discussed")
 
     assert dictation.listen() == "do it as we discussed"
+
+
+def test_spoken_formatting_commands_become_formatting_not_words():
+    # "I should be able to speak commands like 'paragraph break' and have them become formatting."
+    ears = Ears()
+    dictation = Dictation(
+        FakeTranscriber("first point paragraph break second point new line third"),
+        FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted == ["first point\n\nsecond point\nthird"]
+
+
+def test_a_formatting_command_alone_is_just_its_formatting():
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("new paragraph"),
+                          FakeMic(_burst_then_pause()), pause_frames=3, **ears.kwargs())
+
+    dictation.pump()
+
+    assert ears.drafted in ([], ["\n\n"])  # nothing worth keeping either way, never the words

@@ -37,6 +37,7 @@ ends, so answering costs nothing - except after that same cut-off, for the same 
 """
 
 import queue
+import re
 import threading
 import time
 
@@ -71,6 +72,21 @@ DEFAULT_WAKE_PHRASES = ("hey entity", "resume")
 # and both are already what a person says when taking a sentence back mid-thought ("the blue one,
 # scratch that, the red one") - so the usage that would be a false alarm IS the one it is for.
 DEFAULT_RETRACT_PHRASES = ("scratch that", "strike that")
+
+# Spoken formatting: said aloud, these become the formatting they name, never words in the draft
+# ("I should be able to speak commands like 'paragraph break'"). Stock dictation idioms, so the
+# utterance that would be a false alarm is the one they exist for. Order matters: the two-word
+# paragraph forms go before "new line", or "new paragraph" would half-match nothing.
+_FORMATTING = (
+    (re.compile(r"[,.;:]?\s*\b(?:paragraph break|new paragraph)\b[,.;:]?\s*", re.IGNORECASE), "\n\n"),
+    (re.compile(r"[,.;:]?\s*\b(?:new line|line break)\b[,.;:]?\s*", re.IGNORECASE), "\n"),
+)
+
+
+def _spoken_formatting(text):
+    for phrase, becomes in _FORMATTING:
+        text = phrase.sub(becomes, text)
+    return text
 
 
 class Dictation:
@@ -395,7 +411,9 @@ class Dictation:
             return
         if _is_invented(text, self._terminator, deliberate=deliberate):
             return  # Parakeet's hallucinated filler on near-silence, not them
-        self._on_draft(text)
+        text = _spoken_formatting(text)
+        if text.strip():
+            self._on_draft(text)
 
     def _retract_what_he_took_back(self, spoken):
         """"Scratch that" - rewind, and say it again. True if this chunk was them doing that.

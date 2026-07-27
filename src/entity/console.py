@@ -29,7 +29,7 @@ def _overwrite_flushed(text):
 
 class Console:
     def __init__(self, *, echo=_print_flushed, overwrite=_overwrite_flushed, record=None,
-                 messages=None, voice=True, thinking_notice="(thinking…)",
+                 messages=None, composing=None, voice=True, thinking_notice="(thinking…)",
                  listening_notice="(listening… say 'over' when you're done)"):
         self._echo = echo
         self._overwrite = overwrite
@@ -38,6 +38,9 @@ class Console:
         self._record = record or (lambda line: None)
         # Who said each line, for a conversation view. Empty for a terminal, which shows prefixes.
         self._messages = messages or (lambda role, text: None)
+        # The reply as it is being written, for a window that shows the words WITH the voice -
+        # "audio precedes text display" was the bug. Empty text means the composing is over.
+        self._composing = composing or (lambda text: None)
         # A voice run narrates the mic - "listening", and what it heard. A typed run needs neither:
         # they have their own prompt and their own words on screen already.
         self._voice = voice
@@ -78,6 +81,10 @@ class Console:
     def thinking(self):
         self._line(self._thinking_notice)
         self._messages("status", self._thinking_notice)
+
+    def composing(self, text):
+        """The reply so far, mid-stream - or "" when it is finished and the real message stands."""
+        self._composing(text)
 
     def reply(self, text):
         self._line(f"entity> {text}\n")  # trailing blank line separates turns in the transcript

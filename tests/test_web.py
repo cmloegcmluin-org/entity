@@ -497,3 +497,16 @@ def test_the_clipboard_is_served_to_the_drafts_own_paste_menu():
     got = client.get("/clipboard").get_json()
 
     assert got == {"text": "words he copied elsewhere"}
+
+
+def test_the_poll_carries_the_reply_being_composed():
+    from entity.mirror import Mirror, TranscriptFeed
+
+    feed = TranscriptFeed()
+    mirror = Mirror(feed)
+    client = _client(model=mirror.model, mirror=mirror)
+    feed.push("composing", "First half")
+
+    shown = client.get("/messages?since=0").get_json()
+
+    assert shown["composing"] == "First half"

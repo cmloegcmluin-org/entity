@@ -578,6 +578,10 @@ class Conversation:
 
         def carry(piece):
             spoken_parts.append(piece)
+            # The words go to the SCREEN the moment they are written, not after the audio: he
+            # heard the voice before any text existed on screen, and reading along beats being
+            # read to. The same delta stream feeds the voice, so screen and ear stay identical.
+            self._console.composing("".join(spoken_parts))
             reply.add(piece)
 
         release_floor = self._hold_the_floor(
@@ -589,11 +593,13 @@ class Conversation:
                                on_text=carry if reply is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
+            self._console.composing("")
             self._settle(reply)
             release_floor()
             return None
         except Exception as exc:  # tell them the real cause - it reaches them nowhere else
             self._keep_for_later(offered)  # the delivery turn died; the update must survive it
+            self._console.composing("")
             self._settle(reply)
             said = self.error_reply.format(cause=_cause(exc))
             self._speak_reply(said)
@@ -603,13 +609,14 @@ class Conversation:
         if not said.strip():
             # Nothing to say - the turn completed silently. A blank "entity>" line or an empty
             # utterance would be noise.
+            self._console.composing("")
             self._settle(reply)
             release_floor()
             return Turn(heard=heard, said="")
         speak_start = time.monotonic()
         if reply is not None:
-            # On screen the moment the text is complete - the audio is still going out, and
-            # reading along beats being read to and shown the words afterwards.
+            # The finished message replaces the live composing bubble in the same breath.
+            self._console.composing("")
             self._console.reply(said)
             reply.done()  # then wait out the rest of the audio
             if self._interrupted():  # the audio was cut partway - the record must say so

@@ -224,3 +224,13 @@ def test_handled_with_punctuation_is_still_swallowed_whole():
             break
         settled.wait(0.01)
     assert not outbox
+
+
+def test_an_errands_outcome_is_worded_like_any_other_news():
+    brain, outbox = FakeBrain("Done - that old log is tucked into the archive."), Outbox()
+    Narrator(brain, outbox).tell("errand", "errands", "Moved the log into the archive.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "chore" in asked
+    assert "Moved the log into the archive." in asked

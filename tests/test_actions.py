@@ -62,8 +62,17 @@ class FakeForeman:
         self.considered.append((name, question))
 
 
-def _tools(desk, foreman=None, **kwargs):
-    server, tools = fleet_actions(desk, foreman or FakeForeman(), **kwargs)
+class FakeErrands:
+    def __init__(self):
+        self.chores = []
+
+    def run(self, chore):
+        self.chores.append(chore)
+
+
+def _tools(desk, foreman=None, errands=None, **kwargs):
+    server, tools = fleet_actions(desk, foreman or FakeForeman(), errands or FakeErrands(),
+                                  **kwargs)
     return {tool.name: tool for tool in tools}
 
 
@@ -379,3 +388,13 @@ def test_revising_a_ticket_goes_through_by_id_and_a_missing_id_is_said():
     assert revised == [(7, "sharper words"), (99, "anything")]
     assert "7" in said_yes
     assert "no item" in said_no.lower()
+
+
+def test_a_little_chore_goes_to_the_errand_hand_not_an_agent_tab():
+    desk, errands = FakeDesk(), FakeErrands()
+    tools = _tools(desk, errands=errands)
+
+    said = _call(tools["run_errand"], chore="archive the old fixer log")
+
+    assert errands.chores == ["archive the old fixer log"]
+    assert "note" in said.lower()

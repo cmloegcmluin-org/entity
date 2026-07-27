@@ -790,3 +790,15 @@ def test_a_muted_mic_is_never_mid_utterance():
     dictation.set_recording(False)
 
     assert not dictation.is_mid_utterance()  # mic down means the floor is open
+
+
+def test_a_submitted_draft_passes_through_the_polisher_on_its_way_to_the_loop():
+    # His call on where the punctuation repair runs: "before submitting to it... hopefully only a
+    # second of wait time" - the agent should read sentences, not pause-chopped fragments.
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), pause_frames=3,
+                          polish=lambda text: text.replace(". As", " as"), **ears.kwargs())
+
+    dictation.submit("do it. As we discussed")
+
+    assert dictation.listen() == "do it as we discussed"

@@ -170,11 +170,11 @@ turn and streams the reply into the voice as it is written. `voice.py` is how a 
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: eleven typed in-process tools wired to
+model is in. `actions.py` is everything the brain can DO: twelve typed in-process tools wired to
 the desk — among them update_persona and remember, its levers to edit its own persona overlay
 (`runtime/persona.md`) and memory the way it files an enhancement — its speech carries no control
 phrases and its options carry no built-in tools.
-`foreman.py` is the senior layer between the talker and the workers: engaged only through the
+`polish.py` is the punctuation repairman: one warm Haiku session that fixes pause-chopped sentence breaks in a submitted draft inside a hard deadline, word-safe by code (a repair that changes any word is refused wholesale). `errands.py` is the quiet errand hand: small local chores - move a file, tidy a folder - run in one helper session with file tools, no agent tab, its outcome narrated like any other news. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
 brain's ask_foreman tool, one persistent Opus-high session that reads a stuck agent's task,
 situation and log tail, settles technical snags itself through its one tell_agent tool (answering
 "handled", which is swallowed), and escalates to the user only what is genuinely theirs — its

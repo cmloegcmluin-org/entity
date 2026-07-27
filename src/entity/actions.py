@@ -33,7 +33,7 @@ TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
                                 "file_improvement", "revise_enhancement", "update_persona", "remember",
                                 "close_agent_tab", "mark_ready",
-                                "record_verdict", "ask_foreman"))
+                                "record_verdict", "ask_foreman", "run_errand"))
 
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
@@ -57,7 +57,7 @@ def _resolve(target):
     return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
-def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
+def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
                   revise=revise_enhancement, add_persona=append_persona_addition,
                   remember_fact=append_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
@@ -113,6 +113,14 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
         if not file_enhancement(str(args["item"]), stamp=clock("%Y-%m-%d %H:%M")):
             return _say("That one is already on the list, still open - not filing a second copy.")
         return _say("Filed.")
+
+    @tool("run_errand", "Do a small local chore yourself - move or archive a file, tidy a "
+          "folder, read something and report back - without opening a visible agent tab. For "
+          "features and repo work use start_agent; this is for the little things the user asks "
+          "for in passing. The outcome comes back as its own note when done.", {"chore": str})
+    async def run_errand(args):
+        errands.run(str(args["chore"]))
+        return _say("Doing that little job now - its result will come back as its own note.")
 
     @tool("revise_enhancement", "Rewrite an existing Enhancements-list item's words by its #id - "
           "when the user wants a filed ticket corrected or expanded rather than duplicated. The "
@@ -188,7 +196,8 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
         foreman.consider(str(args["name"]).strip(), str(args["question"]))
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item, update_persona,
+    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
+             run_errand, update_persona,
              remember, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 

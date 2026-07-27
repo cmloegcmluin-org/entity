@@ -59,6 +59,11 @@ PROMPTS = {
         "its inbox for the user:\n{report}\n\nPass on what matters in your own one or two short "
         "sentences: what it needs, or what is ready.]"
     ),
+    "errand": (
+        "[Agent event, from the app - not the user speaking. The quiet errand hand finished a "
+        "small local chore and reported: {report}\n\nTell the user in ONE short sentence that "
+        "it's done, or exactly what stopped it - no internals, no tool talk.]"
+    ),
     "quiet": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} has {report} - "
         "it may be hung. Use ask_foreman to have the senior model read its log and prod it, and "

@@ -69,8 +69,10 @@ CONDUCT_NOTICE = (
     "[Standing conduct, every turn: act first - never say what you are about to do with a tool; "
     "call it, then say ONCE what you did, and never restate the same fact in different words in "
     "one reply. Never open with 'You're absolutely right' or any agreement reflex. Speak only of "
-    "what happened THIS turn - no running totals that mix in old work. And no internal vocabulary "
-    "to them, ever: tool names, stage words, routing words - plain words or nothing.]\n\n"
+    "what happened THIS turn - no running totals that mix in old work. No internal vocabulary "
+    "to them, ever: tool names, stage words, routing words - plain words or nothing. And when "
+    "you do not KNOW, say you don't know - never guess: a guess in knowledge's voice sends them "
+    "chasing a fiction.]\n\n"
 )
 
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels

@@ -210,7 +210,9 @@ body.page .topbar {
 .said.left { align-self: flex-start; align-items: flex-start; }
 .said + .said { margin-top: 8px; }
 
-.who { font-size: .72rem; color: var(--dim); padding: 0 2px 3px; }
+/* Selectable like the words under it: "the 'Entity 21:14:27' text bit should be selectable and
+   copyable too" - he pastes these headers back as pointers to exact messages. */
+.who { font-size: .72rem; color: var(--dim); padding: 0 2px 3px; user-select: text; cursor: text; }
 
 .box {
   padding: 7px 11px;
@@ -347,3 +349,28 @@ body.page .topbar {
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+
+/* The mic button is glyphs for ACTIONS, never a state to decode: "buttons which state the
+   current state and click them to change it are inherently confusing." Recording pulses so the
+   live mic is visible from across the room. */
+#mic.recording { color: #ff5b5b; border-color: #ff5b5b; animation: mic-pulse 1.6s ease-in-out infinite; }
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 91, 91, .45); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 91, 91, 0); }
+}
+#mic.speaking { color: var(--fg); }
+
+/* The second copy button: a LINK to the message - its header line, the pointer he pastes back
+   at Entity ("as you can see per Entity · 10:12:59...") - riding just under the copy button. */
+.copylink { margin-top: 2px; }
+
+/* The draft box's own right-click menu. The embedded browser offers no paste menu of its own
+   here, and dictation is not always how words arrive. One item, torn down on any click away. */
+#paste-menu { position: fixed; z-index: 30; background: var(--panel, #222); color: var(--fg);
+              border: 1px solid var(--line); border-radius: 8px; padding: 4px;
+              box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+#paste-menu button { display: block; width: 100%; text-align: left; background: none;
+                     border: none; color: inherit; font: inherit; padding: 6px 14px;
+                     border-radius: 6px; cursor: pointer; }
+#paste-menu button:hover { background: rgba(127, 255, 0, .12); }

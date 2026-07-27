@@ -16,6 +16,13 @@
       <svg class="mark-copy" viewBox="0 0 16 16" aria-hidden="true"><use href="#copy-icon"></use></svg>
       <svg class="mark-done" viewBox="0 0 16 16" aria-hidden="true"><use href="#done-icon"></use></svg>
     </button>
+    {#- And its sibling: copy a LINK to the message - the header line he pastes back at Entity to
+        point it at an exact moment of its own conversation. -#}
+    <button type="button" id="copylink" class="copy copylink" hidden aria-label="Copy a link to this message"
+            title="Copy a link to this message">
+      <svg class="mark-copy" viewBox="0 0 16 16" aria-hidden="true"><use href="#link-icon"></use></svg>
+      <svg class="mark-done" viewBox="0 0 16 16" aria-hidden="true"><use href="#done-icon"></use></svg>
+    </button>
   </main>
 
   <div class="column">
@@ -49,6 +56,12 @@
     <symbol id="done-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 8.5l3.5 3.5L13 4.5"></path>
+    </symbol>
+    <symbol id="link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.5 9.5l3-3"></path>
+      <path d="M7.5 4.5l1.2-1.2a2.4 2.4 0 0 1 3.4 3.4L10.9 7.9"></path>
+      <path d="M8.5 11.5l-1.2 1.2a2.4 2.4 0 0 1-3.4-3.4L5.1 8.1"></path>
     </symbol>
   </svg>
 {% endblock %}

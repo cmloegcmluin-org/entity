@@ -9,6 +9,8 @@ const hearing = document.getElementById("hearing");
 const mic = document.getElementById("mic");
 const level = document.getElementById("level");
 
+const linker = document.getElementById("copylink");
+
 let drawn = 0;          // how many entries are already on the page
 let offers = null;      // what the copy button would copy, and the element it belongs to
 
@@ -43,10 +45,13 @@ function listSessions(found) {
 /* ---- the copy button ---------------------------------------------------------------------- */
 
 function offer(node, entries) {
-  offers = { node, text: whatToCopy(node, entries) };
+  offers = { node, text: whatToCopy(node, entries), ref: referenceTo(node, entries) };
   copier.hidden = false;
   copier.classList.remove("done");
   copier.classList.add("showing");
+  linker.hidden = !offers.ref;
+  linker.classList.remove("done");
+  linker.classList.add("showing");
   // Beside what is drawn: a message's box, or a break's mark - never the full-width row a
   // break sits in, which would put the button out at the far edge of an empty stretch.
   // Placed against the THREAD, since that is what it hangs inside: viewport coordinates would
@@ -60,6 +65,16 @@ function offer(node, entries) {
   copier.style.left = node.classList.contains("right")
     ? `${left - copier.offsetWidth - 8}px`
     : `${left + spot.width + 8}px`;
+  linker.style.top = `${parseFloat(copier.style.top) + copier.offsetHeight + 4}px`;
+  linker.style.left = copier.style.left;
+}
+
+/* A LINK to a message is its header line - "Entity · 21:14:27" - the pointer he pastes back at
+   Entity to name an exact moment of its own conversation. Only messages have one; a break is a
+   place, not a moment. */
+function referenceTo(node, entries) {
+  const entry = entries[Number(node.dataset.at)];
+  return entry && entry.bubble ? `${entry.name} · ${entry.stamp}` : "";
 }
 
 copier.addEventListener("click", async () => {
@@ -69,12 +84,22 @@ copier.addEventListener("click", async () => {
   setTimeout(() => copier.classList.remove("done"), 1100);
 });
 
+linker.addEventListener("click", async () => {
+  if (!offers || !offers.ref) return;
+  await navigator.clipboard.writeText(offers.ref);
+  linker.classList.add("done");
+  setTimeout(() => linker.classList.remove("done"), 1100);
+});
+
 thread.addEventListener("mouseover", (event) => {
-  if (copier.contains(event.target)) return;  // reaching for it must not move it out from under
+  if (copier.contains(event.target) || linker.contains(event.target)) return;
   const node = event.target.closest(".said, .day, .session");
   if (node && node.dataset.at !== undefined) offer(node, latest);
 });
-thread.addEventListener("mouseleave", () => copier.classList.remove("showing"));
+thread.addEventListener("mouseleave", () => {
+  copier.classList.remove("showing");
+  linker.classList.remove("showing");
+});
 
 /* ---- talking ------------------------------------------------------------------------------ */
 
@@ -171,7 +196,10 @@ const LEVEL_FULL = 0.06;  // the meter tops out around loud speech, so ordinary 
 
 function showState(state, loudness) {
   mic.className = `btn ${state === "muted" ? "" : state}`;
-  mic.textContent = { recording: "● listening", muted: "○ mic off", speaking: "◼ stop" }[state];
+  // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
+  mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
+  mic.title = { recording: "Stop recording", muted: "Start recording",
+                speaking: "Stop it talking" }[state];
   level.style.width = state === "recording"
     ? `${Math.min(1, loudness / LEVEL_FULL) * 100}%`
     : "0";
@@ -204,3 +232,42 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 400);
+
+
+/* ---- the draft's right-click menu --------------------------------------------------------- */
+
+/* The embedded browser offers no paste menu of its own in this box, and words don't only arrive
+   by voice. The clipboard is read by the app itself (the server runs on this same machine), so
+   no browser permission stands between the click and the paste. */
+const pasteMenu = document.createElement("div");
+pasteMenu.id = "paste-menu";
+pasteMenu.hidden = true;
+const pasteItem = document.createElement("button");
+pasteItem.type = "button";
+pasteItem.append("Paste");
+pasteMenu.append(pasteItem);
+document.body.append(pasteMenu);
+
+draft.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  pasteMenu.style.left = `${Math.min(event.clientX, innerWidth - 120)}px`;
+  pasteMenu.style.top = `${Math.min(event.clientY, innerHeight - 48)}px`;
+  pasteMenu.hidden = false;
+});
+
+pasteItem.addEventListener("click", async () => {
+  pasteMenu.hidden = true;
+  const response = await fetch("/clipboard");
+  const { text } = await response.json();
+  if (!text) return;
+  draft.focus();
+  draft.setRangeText(text, draft.selectionStart, draft.selectionEnd, "end");
+  draft.dispatchEvent(new Event("input"));  // the kept-draft store must see the paste too
+});
+
+addEventListener("pointerdown", (event) => {
+  if (!pasteMenu.contains(event.target)) pasteMenu.hidden = true;
+});
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape") pasteMenu.hidden = true;
+});

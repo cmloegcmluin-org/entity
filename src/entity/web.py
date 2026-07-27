@@ -156,8 +156,19 @@ class Agents:
         return model.entries
 
 
+def _windows_clipboard():
+    """The machine's clipboard, read by the app itself. The embedded browser gives the draft box
+    no paste menu of its own, and reading the clipboard IN the page needs a browser permission
+    nobody is there to grant - while this server already runs on the same machine as the text."""
+    from entity.worktrees import run_hidden
+
+    done = run_hidden(["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+                      capture_output=True, text=True)
+    return done.stdout.rstrip("\r\n") if done.returncode == 0 else ""
+
+
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
-               opener=open_link, mirror=None,
+               opener=open_link, mirror=None, clipboard=_windows_clipboard,
                profile_path=None, learned_path=None, translations_path=None, terms=(), persona="",
                persona_additions_path=None, agent_logs_dir=None, clock=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
@@ -225,6 +236,11 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         if on_auto_listen is not None:
             on_auto_listen(request.form["on"] == "true")
         return ("", 204)
+
+    @app.get("/clipboard")
+    def clipboard_text():
+        """What the clipboard holds, for the draft's own right-click Paste (see window.js)."""
+        return {"text": clipboard() if clipboard is not None else ""}
 
     @app.post("/open")
     def open_what_was_clicked():

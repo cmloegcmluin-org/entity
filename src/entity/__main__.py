@@ -363,17 +363,6 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         announce("(muted: replies are shown, not spoken)")
     announce()
 
-    if not text_mode and not muted:
-        # Guarded, because the mic is already live: unguarded, the greeting went out of their
-        # speakers, back into the mic, and opened their draft box with "I do for you".
-        if dictation is not None:
-            dictation.begin_speaking()
-        try:
-            tts.speak("I'm ready. What can I do for you?")  # say out loud that startup finished
-        finally:
-            if dictation is not None:
-                dictation.end_speaking()
-
     had_conversation = []
     farewelled = []
 
@@ -398,6 +387,22 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                           messages=lambda role, text: feed.push("message", (role, text)))
     else:
         console = Console(voice=not text_mode, record=session_record.write)
+
+    if not text_mode and not muted:
+        # Spoken lines render as bubbles - "'I'm ready, what can I do for you?'... don't render
+        # in the conversation view, but they should, because Entity says them aloud." Through the
+        # console AFTER it exists, so the greeting is a message like any other. Still guarded,
+        # because the mic is already live: unguarded, the greeting went out of their speakers,
+        # back into the mic, and opened their draft box with "I do for you".
+        greeting = "I'm ready. What can I do for you?"
+        console.reply(greeting)
+        if dictation is not None:
+            dictation.begin_speaking()
+        try:
+            tts.speak(greeting)  # say out loud that startup finished
+        finally:
+            if dictation is not None:
+                dictation.end_speaking()
 
     def converse():
         try:
@@ -425,12 +430,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             inbox_watcher.stop()
             desk.close()
             if not farewelled:  # one goodbye: a spoken farewell already said it; only cover Ctrl-C/stop here
+                console.reply("Be seeing you.")  # a spoken line renders as its bubble, and is recorded
                 if not text_mode and not muted:
                     try:
                         tts.speak("Be seeing you.")
                     except Exception:
                         pass
-                announce("Be seeing you.")
             if had_conversation:  # remember what it learned - bounded so a slow model can't hang the exit
                 try:
                     append_learned(consolidate(brain))

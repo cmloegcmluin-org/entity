@@ -510,3 +510,25 @@ def test_the_poll_carries_the_reply_being_composed():
     shown = client.get("/messages?since=0").get_json()
 
     assert shown["composing"] == "First half"
+
+
+def test_saving_the_enhancements_hands_back_each_rows_number():
+    # "when I'm inputting new tickets here the ID doesn't appear at first" - the page needs the
+    # number the save assigned, so a fresh row shows its id the moment it first saves.
+    import tempfile
+    from pathlib import Path
+
+    profile = Path(tempfile.mkdtemp()) / "profile.md"
+    profile.write_text("# P\n\n## Enhancements he wants for you (roadmap, not now)\n- [ ] #7 old one\n",
+                       encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/profile", json={
+        "heading": "Enhancements he wants for you (roadmap, not now)",
+        "items": [{"id": 7, "done": False, "text": "old one"},
+                  {"id": None, "done": False, "text": "a brand new ask"}],
+        "drawn": ["old one"],
+    }).get_json()
+
+    assert answer == {"ids": [7, 8]}
+    assert "- [ ] #8 a brand new ask" in profile.read_text(encoding="utf-8")

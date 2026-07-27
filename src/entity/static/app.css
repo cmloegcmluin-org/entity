@@ -377,3 +377,20 @@ body.page .topbar {
 /* The reply being written right now: the same bubble shape, slightly translucent until the
    finished message replaces it in the same breath. */
 .said.composing .box { opacity: .85; }
+
+/* The section heading carries both counts - open leads, since open is what he acts on. */
+h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-left: 10px; }
+
+/* A new row reserves its number's spot at once - typing used to start in the space where the id
+   belongs - and the placeholder becomes the real number the moment the first save assigns it. */
+.checklist .tag.pending { opacity: .5; }
+
+/* The page's own Ctrl+F: the embedded browser has no find bar of its own. */
+#finder { position: fixed; top: 10px; right: 14px; z-index: 40; display: flex; gap: 6px;
+          background: var(--panel, #222); border: 1px solid var(--line); border-radius: 8px;
+          padding: 6px 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+#finder input { font: inherit; background: transparent; color: var(--fg); border: none;
+                outline: none; width: 180px; }
+#finder .count { font-size: .75rem; color: var(--dim); align-self: center; }
+.checklist li.found { outline: 2px solid rgba(127, 255, 0, .55); border-radius: 6px; }
+.checklist li.found-here { outline-color: var(--accent, #7fff00); background: rgba(127, 255, 0, .08); }

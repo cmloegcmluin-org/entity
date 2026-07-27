@@ -412,7 +412,10 @@ class Dictation:
         if _is_invented(text, self._terminator, deliberate=deliberate):
             return  # Parakeet's hallucinated filler on near-silence, not them
         text = _spoken_formatting(text)
-        if text.strip():
+        # A chunk that IS a formatting command comes out as pure whitespace - his natural way to
+        # say "paragraph break" is as its own utterance, with a pause either side, and dropping
+        # the whitespace-only chunk made exactly that case do nothing at all.
+        if text.strip() or "\n" in text:
             self._on_draft(text)
 
     def _retract_what_he_took_back(self, spoken):

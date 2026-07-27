@@ -29,7 +29,11 @@
 <main id="content" class="reading">
   {% for section in sections %}
   <section class="section" data-heading="{{ section.heading }}">
-    <h2>{{ section.title }}</h2>
+    {#- Both counts, at a glance: "don't just show a count of done, also show a count of the
+        yet-to-do". The open count is the one he acts on, so it leads. -#}
+    <h2>{{ section.title }}
+      <span class="counts">{{ section["active"] | length }} open{% if section["done"] %} · {{ section["done"] | length }} done{% endif %}</span>
+    </h2>
     {#- An item that gets done is ticked, never removed: a done item is the only record that a
         complaint was heard and acted on. Dimmed rather than struck through, so it stays legible
         - "that makes it impossible to read; simply dim the text when it has been checked". -#}

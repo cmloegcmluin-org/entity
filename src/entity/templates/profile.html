@@ -8,8 +8,10 @@
 
     No <label> around it. A label makes a click anywhere inside it tick the box, and these are rows
     they type into: the caret would never land where they aimed it. -#}
+{#- The `#id`, when an item has one, rides on the row as `data-id` so a save sends it back and the
+    same item keeps the same number - and is shown beside the box so he can refer to it. -#}
 {% macro row(item={}) -%}
-<li class="{{ 'done' if item.done }}"><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}><span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
 {%- endmacro %}
 
 {% block content %}

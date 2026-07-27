@@ -1,3 +1,4 @@
+from entity.memory import profile_sections
 from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
 from entity.web import create_app, persona_paragraphs
 
@@ -124,18 +125,53 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
     assert page.count("<input type=\"checkbox\"") == 3
     assert page.count('<li class="done">') == 1
 
-    # Ticking one writes the whole list back as markdown, which is the form the brain reads.
+    # Ticking one writes the whole list back as markdown, which is the form the brain reads. Saving
+    # the enhancements list also numbers it, so every item comes back with a stable id.
     client.post("/profile", json={
         "heading": "Enhancements they want for you (roadmap, not now)",
         "drawn": ["hear only their voice", "live captions", "plain line"],
-        "items": [{"done": True, "text": "hear only their voice"},
-                  {"done": True, "text": "live captions"},
-                  {"done": False, "text": "plain line"}],
+        "items": [{"id": None, "done": True, "text": "hear only their voice"},
+                  {"id": None, "done": True, "text": "live captions"},
+                  {"id": None, "done": False, "text": "plain line"}],
     })
 
     saved = profile.read_text(encoding="utf-8")
-    assert "- [x] live captions" in saved  # ticked, not removed - the record that it was done
-    assert "- [ ] plain line" in saved     # and a plain line joined the list it was meant to
+    assert "- [x] #2 live captions" in saved  # ticked, not removed - the record that it was done
+    assert "- [ ] #3 plain line" in saved      # and a plain line joined the list it was meant to
+
+
+def test_the_enhancements_page_shows_each_items_id(tmp_path):
+    # "Add IDs to all of the enhancements so I can refer to them by ID." The number is drawn beside
+    # the item and carried on the row, so a save sends it back and the same item keeps the same id.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements they want (roadmap, not now)\n"
+                       "- [ ] #4 better voice\n- [x] #2 older idea\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/profile").get_data(as_text=True)
+    assert 'data-id="4"' in page and "#4" in page
+    assert 'data-id="2"' in page and "#2" in page
+
+
+def test_saving_the_enhancements_page_numbers_a_new_row_but_leaves_goals_plain(tmp_path):
+    # Only the enhancements list is numbered - that is the one he refers to by id. A new row he adds
+    # to it is handed the next number; the other panes stay the plain lists they were.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements they want (roadmap, not now)\n- [ ] #1 better voice\n\n"
+                       "## Goals\n- swim\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    client.post("/profile", json={
+        "heading": "Enhancements they want (roadmap, not now)",
+        "drawn": ["better voice"],
+        "items": [{"id": 1, "done": False, "text": "better voice"},
+                  {"id": None, "done": False, "text": "dark mode"}]})
+    client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
+                                  "items": [{"id": None, "done": False, "text": "swim, thrice"}]})
+
+    saved = profile.read_text(encoding="utf-8")
+    assert "- [ ] #1 better voice" in saved and "- [ ] #2 dark mode" in saved
+    assert "- [ ] swim, thrice" in saved and "#" not in profile_sections(saved)["Goals"]
 
 
 def test_every_translation_in_force_is_on_the_page_and_a_users_own_save_back(tmp_path):

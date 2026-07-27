@@ -17,6 +17,7 @@ from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from entity.console import Console
 from entity.conversation import Conversation
+from entity.errands import ErrandRunner
 from entity.foreman import Foreman
 from entity.inbox_watcher import InboxWatcher, QuietMonitor
 from entity.mirror import TranscriptFeed
@@ -37,6 +38,7 @@ from entity.memory import (
     user_name,
 )
 from entity.outbox import Outbox
+from entity.polish import Polisher
 from entity.relay import notice
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
@@ -268,6 +270,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Entity is waking up...")
+    # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks
+    # in a submitted draft, inside a hard deadline, changing no words (see entity.polish).
+    polisher = Polisher()
+    polisher.warmup()
     # The desk holds each agent as a live session on its own thread; the brain drives it through
     # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
     # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
@@ -285,7 +291,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.
     foreman = Foreman(desk, outbox)
-    actions_server, _ = fleet_actions(desk, foreman)
+    # The quiet errand hand: small local chores with no agent tab - "one agent per actual major
+    # task", not one per little thing. Its outcomes take the news road like everything else.
+    errands = ErrandRunner(RUNTIME_DIR, agent_events)
+    actions_server, _ = fleet_actions(desk, foreman, errands)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
@@ -317,6 +326,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
             hearing=hearing,
+            polish=polisher.polish,  # pause-chopped punctuation repaired on the way to the brain
             muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
@@ -417,6 +427,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             for closer in (
                 brain.close,
                 foreman.close,
+                errands.close,
+                polisher.close,
                 mic.close if mic is not None else None,
                 recorder.close if recorder is not None else None,
                 hearing.close if hearing is not None else None,

@@ -95,6 +95,7 @@ class Dictation:
         recorder=None,
         hearing=None,
         clock=time.monotonic,
+        polish=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -127,6 +128,7 @@ class Dictation:
         self._tail_pending = False  # end_speaking happened; the pump owes a grace window for the tail
         self._clock = clock
         self._last_worded = None  # when words last landed in the draft: the mid-thought clock
+        self._polish = polish  # repairs a submitted draft's pause-chopped punctuation, bounded
 
     # ---- the Conversation-facing half ----------------------------------------------------------
 
@@ -149,8 +151,15 @@ class Dictation:
         And the mic goes down with it, exactly as a spoken "over" puts it down: the turn is
         handed over, the composing is finished. Leaving it armed made every reply end with the
         ear already open, which read as auto-listen firing while unchecked - auto-listening
-        (and only it) reopens the mic when the reply ends."""
-        self._submitted.put(text.strip())
+        (and only it) reopens the mic when the reply ends.
+
+        The draft's pause-chopped punctuation is repaired on the way through (`polish`) - his
+        call: the brain "will be able to make more sense of what I'm saying if the fix is done
+        before submitting". The polisher is bounded and word-safe on its own account."""
+        text = text.strip()
+        if self._polish is not None and text:
+            text = self._polish(text)
+        self._submitted.put(text)
         self._last_worded = None  # the thought was handed over; he is not mid-anything now
         if self._armed:
             self.set_recording(False)

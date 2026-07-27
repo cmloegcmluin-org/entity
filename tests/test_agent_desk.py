@@ -956,3 +956,25 @@ def test_the_standing_rule_tells_the_agent_to_stop_at_presenting_and_wait_for_si
     assert "signed off" in task
     assert "do NOT push" in task
     desk.close()
+
+
+def test_a_landing_agents_silence_clock_keeps_running():
+    # "Entity must proactively monitor agent progress and alert the user when progress stalls."
+    # The overnight failure: agents told to land went idle, their merge-watchers fired into ended
+    # turns, and nobody was counting their silence - so a stall was invisible until he asked. An
+    # agent still owing a merge report is still ON the clock; only its retirement stops it.
+    monitor = SpyMonitor()
+    desk, outbox, _ = _desk(monitor=monitor)
+    desk.start("lander", "/wt/lander", "build the thing")
+    assert _wait_for(lambda: monitor.finished == ["lander"])
+    outbox.drain()
+
+    desk.present("lander", "1. open the page")
+    desk.verdict("lander", approved=True)  # dispatches the landing; stage is now "landing"
+    assert _wait_for(lambda: bool(outbox))
+
+    # It finished its landing TURN but has not merged: the clock must still be running.
+    assert monitor.finished == ["lander"]  # done() was NOT called a second time
+    assert desk.retire("lander")
+    assert monitor.finished == ["lander", "lander"]  # retirement is what stops the clock
+    desk.close()

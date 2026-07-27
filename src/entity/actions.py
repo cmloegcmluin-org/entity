@@ -20,7 +20,8 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from entity.delivery import DeliveryError
-from entity.memory import append_enhancement, append_learned, append_persona_addition
+from entity.memory import (append_enhancement, append_learned, append_persona_addition,
+                           revise_enhancement)
 from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
@@ -30,7 +31,7 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "update_persona", "remember",
+                                "file_improvement", "revise_enhancement", "update_persona", "remember",
                                 "close_agent_tab", "mark_ready",
                                 "record_verdict", "ask_foreman"))
 
@@ -57,7 +58,8 @@ def _resolve(target):
 
 
 def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
-                  add_persona=append_persona_addition, remember_fact=append_learned,
+                  revise=revise_enhancement, add_persona=append_persona_addition,
+                  remember_fact=append_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
                   clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
@@ -111,6 +113,14 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
         if not file_enhancement(str(args["item"]), stamp=clock("%Y-%m-%d %H:%M")):
             return _say("That one is already on the list, still open - not filing a second copy.")
         return _say("Filed.")
+
+    @tool("revise_enhancement", "Rewrite an existing Enhancements-list item's words by its #id - "
+          "when the user wants a filed ticket corrected or expanded rather than duplicated. The "
+          "item keeps its number and its done state.", {"id": int, "text": str})
+    async def revise_item(args):
+        if not revise(int(args["id"]), str(args["text"])):
+            return _say(f"No item carries #{args['id']} - check the number on the tab.")
+        return _say(f"Rewrote #{args['id']}.")
 
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
           "about how you talk or act - when the user tells you to work differently from now on (not "
@@ -178,7 +188,7 @@ def fleet_actions(desk, foreman, *, file_enhancement=append_enhancement,
         foreman.consider(str(args["name"]).strip(), str(args["question"]))
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, update_persona,
+    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item, update_persona,
              remember, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 

@@ -624,3 +624,32 @@ def test_the_same_words_already_ticked_do_file_anew(tmp_path):
 
     assert filed is True
     assert "- [ ] fix the auto-listen bug" in path.read_text(encoding="utf-8")
+
+
+def test_an_enhancement_can_be_rewritten_in_place_by_its_id(tmp_path):
+    # "Entity needs the ability to edit existing enhancement items after filing them" - the #id
+    # is how he names one, and the rewrite keeps both the number and the tick.
+    from entity.memory import revise_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn me when low on credits" + chr(10) + "- [x] #8 the finished one" + chr(10),
+                    encoding="utf-8")
+
+    revised = revise_enhancement(7, "warn me when credits drop under ten dollars", path)
+
+    assert revised is True
+    text = path.read_text(encoding="utf-8")
+    assert "- [ ] #7 warn me when credits drop under ten dollars" in text
+    assert "low on credits" not in text
+    assert "- [x] #8 the finished one" in text  # neighbors untouched, ticks kept
+
+
+def test_rewriting_an_id_nobody_has_says_so(tmp_path):
+    from entity.memory import revise_enhancement
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 an item" + chr(10),
+                    encoding="utf-8")
+
+    assert revise_enhancement(99, "different words", path) is False
+    assert "#7 an item" in path.read_text(encoding="utf-8")

@@ -653,3 +653,27 @@ def test_rewriting_an_id_nobody_has_says_so(tmp_path):
 
     assert revise_enhancement(99, "different words", path) is False
     assert "#7 an item" in path.read_text(encoding="utf-8")
+
+
+def test_the_open_enhancements_read_out_as_lines_the_brain_can_carry(tmp_path):
+    # "It still believes it lacks the ability to see its own Enhancements list!" The boot-time
+    # persona copy both goes stale and gets disbelieved; this is the live rendering the loop
+    # injects every turn, where nothing has ever faded. Open items only - the done ones are
+    # history, not standing asks - with their #ids, so he and the brain name the same item.
+    from entity.memory import open_enhancements
+
+    path = tmp_path / "profile.md"
+    path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn about credits" + chr(10) + "- [x] #8 already done" + chr(10) + "- [ ] #9 (persona) never fragment messages" + chr(10),
+                    encoding="utf-8")
+
+    listed = open_enhancements(path)
+
+    assert "#7 warn about credits" in listed
+    assert "#9 (persona) never fragment messages" in listed
+    assert "already done" not in listed
+
+
+def test_a_missing_profile_reads_as_no_open_enhancements(tmp_path):
+    from entity.memory import open_enhancements
+
+    assert open_enhancements(tmp_path / "absent.md") == ""

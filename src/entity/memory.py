@@ -460,6 +460,21 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
     return True
 
 
+def open_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
+    """The still-open Enhancements as plain "#id words" lines - the live rendering the loop puts
+    in front of the brain every turn. The boot-time persona already carries the whole profile, and
+    the brain both let that copy go stale and flatly disbelieved it ("I can't see the Enhancements
+    list - I have no tool to read your local files"). What rides in the per-turn notes has never
+    faded or been denied; this is the list, there, fresh from the file each turn."""
+    path = Path(path)
+    resolved = find_heading(profile_sections(_read(path)), heading)
+    items = checklist_items(profile_sections(_read(path)).get(resolved, ""))
+    return "\n".join(
+        (f"#{item['id']} " if item.get("id") is not None else "") + item["text"]
+        for item in items if not item["done"]
+    )
+
+
 def revise_enhancement(item_id, text, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """Rewrite the words of enhancement #id in place, keeping its number and its tick. False when
     no item carries that id. "Entity needs the ability to edit existing enhancement items after

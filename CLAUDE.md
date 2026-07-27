@@ -93,7 +93,7 @@ Every session leaves artifacts. Use them before forming any theory:
 |---|---|---|
 | What was on screen | `runtime/transcripts/session-*.log` | every printed and spoken line, timestamped |
 | What the mic actually heard | `runtime/audio/session-*.wav` | whether a word reached the machine at all |
-| What an agent said, as it said it | `runtime/agent-logs/<name>.log` | whether an agent is working or dead |
+| What an agent said, as it said it | `runtime/agent-logs/<name>.log` (retired ones move to `runtime/agent-logs-archive/`) | whether an agent is working or dead |
 | Who is running right now | `runtime/active-agents.txt` | the roster, with last-heard times |
 | What Entity knows about its user | `runtime/profile.md`, `runtime/learned.md` | standing context; both gitignored |
 
@@ -194,8 +194,14 @@ holding the view) rather than a browser tab. `links.py` decides what a message n
 opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets), streams the whole exchange into its log, records the fleet in
 `runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught
-mid-task told to pick back up — and `retire()` wraps a finished agent up whole: log archived to
-closed/, session closed, worktree removed. Every task the desk hands out carries the standing
+mid-task told to pick back up — and `retire()` wraps a finished agent up whole: its log moved to
+the fleet's one archive (`runtime/agent-logs-archive/`, a SIBLING of the live folder so an archived
+log is outside what the roster globs and can never come back as a tab — `tailing.archive_dir` names
+it in one place, shared with the window's own close button), the Enhancements item it was completing
+ticked off the user's list, its session closed, its worktree removed. That item rides with the
+agent from `start` (the brain passes it to `start_agent` when the work is one off the list) and is
+ticked only for a cleanly finished agent, never a died one, because a wrong tick would corrupt the
+list's record of ask and answer. Every task the desk hands out carries the standing
 rules (rebase before presenting, present for the user's EYES, the engineering law in brief) and a
 pointer to the machine-wide engineering law file when one exists (`law_path`, home-relative in
 `__main__` so nothing personal enters the source); agents load their repo's checked-in CLAUDE.md

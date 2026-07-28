@@ -149,11 +149,19 @@ class Controls:
             self.keep_position()
             return True
         self.keep_position()
+        # The ask goes to the page OFF this thread. This handler runs on the GUI thread, and
+        # evaluate_js waits for the page's answer - plumbing that itself needs the GUI thread,
+        # so asking inline deadlocked the X press on itself: press, freeze, Windows' hang
+        # reporter, four times across one night. Fired from a worker, the dialog appears a beat
+        # later and this handler has already returned False (window stays) either way.
+        threading.Thread(target=self._ask_the_page, daemon=True).start()
+        return False
+
+    def _ask_the_page(self):
         try:
             self._window.evaluate_js("askToClose && askToClose()")
         except Exception:
-            return True  # a page that cannot ask must never trap the window open
-        return False
+            pass  # a page that cannot ask leaves the window open; the X still works next press
 
     def quit(self):
         """Actually close - the page's dialog said so, or a restart is tearing down.

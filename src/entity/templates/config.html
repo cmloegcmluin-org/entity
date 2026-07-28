@@ -94,26 +94,20 @@
   <section class="section" id="card-translations">
     <h2>Translations</h2>
     {#- One styled list, editable in place. The old Vocabulary card lives HERE now, as rows whose
-        left side is "(paraphone)" - his coinage brief made word: para (beside) + phone (sound) -
-        anything SOUNDING close enough to the right side is corrected to it. Those rows read and
+        left side is "(circasonant)" - the coinage brief made word: circa (approximately) + sonant
+        (sounding) - anything sounding close enough to the right side is corrected to it. Those rows read and
         write his lexicon; the ones his project folders contribute are shown the same way and
         simply pass through a save untouched, since a folder's name is not this page's to
         remove. -#}
-    <p class="note">Fixes for common mishearings of domain terms. A left side of (paraphone)
-      catches anything that merely sounds close enough to the right side. Applies immediately.</p>
+    <p class="note">Fixes for common mishearings of domain terms, sorted by what they fix. A left
+      side of (circasonant) catches anything that merely sounds close enough to the right side.
+      Applies immediately.</p>
     <ul class="swaps" id="swaps">
       {% for swap in swaps %}
       <li data-heard="{{ swap.heard }}" data-stock="{{ swap.stock }}">
         <span class="heard" contenteditable="plaintext-only">{{ swap.heard }}</span>
         <span class="arrow" aria-hidden="true">→</span>
         <span class="said" contenteditable="plaintext-only">{{ swap.said }}</span>
-      </li>
-      {% endfor %}
-      {% for term in paraphones %}
-      <li data-heard="(paraphone)" data-stock="">
-        <span class="heard" contenteditable="plaintext-only">(paraphone)</span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="said" contenteditable="plaintext-only">{{ term }}</span>
       </li>
       {% endfor %}
     </ul>

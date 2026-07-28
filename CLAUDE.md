@@ -184,7 +184,16 @@ model is in. `actions.py` is everything the brain can DO: thirteen typed in-proc
 the desk — among them update_persona and remember, its levers to edit its own persona overlay
 (`runtime/persona.md`) and memory the way it files an enhancement — its speech carries no control
 phrases and its options carry no built-in tools.
-`polish.py` is the punctuation repairman: one warm Haiku session that fixes pause-chopped sentence breaks in a submitted draft inside a hard deadline, word-safe by code (a repair that changes any word is refused wholesale). `errands.py` is the quiet errand hand: small local chores - move a file, tidy a folder - run in one helper session with file tools, no agent tab, its outcome narrated like any other news. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
+`polish.py` is the punctuation repairman: one Haiku session, every exchange on one asker thread
+of its own, repairing the draft IN THE BACKGROUND as it grows (`precook`, re-handed the draft at
+every pause) so the submit mostly stitches a finished repair plus a short bounded tail. Word-safe
+by CODE via sequence alignment: respellings ("Maine"->"main") and joins ("Notes nook"->
+"Notesnook") pass, anything eaten or invented refuses the repair whole - the old same-count rule
+refused every join, which silently meant NO long dictation was ever repaired. Its prompt carries
+his vocabulary (the model cannot fix "ideas" to Highdeas without knowing the name) and a worked
+example, because the session learns from its own history: a warmup that needed no repair taught
+it to echo, and it echoed his seventy-word request back untouched. Known residuals: the model
+still sometimes declines name fixes, and a cold session's first repair can go through raw. `errands.py` is the quiet errand hand: small local chores - move a file, tidy a folder - run in one helper session with file tools, no agent tab, its outcome narrated like any other news. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
 brain's ask_foreman tool, one persistent Opus-high session that reads a stuck agent's task,
 situation and log tail, settles technical snags itself through its one tell_agent tool (answering
 "handled", which is swallowed), and escalates to the user only what is genuinely theirs — its
@@ -208,11 +217,15 @@ force immediately — translations swap into the running ear on save, instructio
 per-turn notes — and Agents),
 and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
 holding the view) rather than a browser tab — reopening where it was last closed unless that
-monitor is gone, its X answered by the page's own styled dialog (the native confirm was a
+monitor is gone, its X answered by the page's own styled dialog (asked OFF the GUI thread: evaluate_js inside the
+closing event waits on plumbing that needs that same thread, and the inline ask froze the X press
+itself) (the native confirm was a
 light-mode box in a dark app; only the dialog's Close, through `Controls.quit`, actually closes),
 and its bar carrying a Restart-to-upgrade button that appears only when the checkout on disk has
-moved past the booted commit (worktrees.head_commit, polled by the page) and whose winddown
-relaunches a fresh process on the current code; window teardown answers the /quit request before
+moved past the booted commit (worktrees.head_commit, polled by the page) - the relaunch is a
+DETACHED helper (`relauncher.py`) spawned at the moment of the request, which waits for the old
+pid to die however it dies and then starts the new app, because relaunching as the old process's
+last act meant no relaunch at all when teardown misbehaved; window teardown answers the /quit request before
 destroying, and waves its OWN destroy through the closing event (destroy fires that same event,
 and answering it with the dialog question against a dying page hung the GUI thread — twice), and
 the main thread waits the session worker out so native audio is never torn down under a live

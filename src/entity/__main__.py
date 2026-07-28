@@ -49,8 +49,23 @@ from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
-# The token line the credit warning fires from - his number, set on the Config page.
-USAGE_BUDGET = RUNTIME_DIR / "usage-budget.txt"
+# His weekly credit line, in tokens - the number the spoken usage warnings are measured against.
+USAGE_WEEKLY_LIMIT = RUNTIME_DIR / "usage-weekly-limit.txt"
+
+
+def _live_instructions():
+    """His standing instructions, read from the file THIS turn - an edit on the Config page is in
+    force for the very next thing said, not the next launch. They are also composed into the boot
+    persona; carrying them here too is what makes the edit immediate."""
+    from entity.memory import DEFAULT_PERSONA_ADDITIONS_PATH
+
+    try:
+        told = DEFAULT_PERSONA_ADDITIONS_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    if not told:
+        return ""
+    return "\n\nHis standing instructions, live from the file - already in force:\n" + told
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
 AGENT_STATE = RUNTIME_DIR / "agents.json"  # the fleet's survival record: what a restart revives from
@@ -116,10 +131,11 @@ def _vocab_terms():
     """The terms Parakeet is biased toward, so a coined name like "Notecraft" stops coming back as
     "note craft". Two sources: project folder names (scanned off every project root), and the
     hand-kept lexicon - coined names and domain vocabulary alike, the same file the brain carries
-    as standing context, so a term added in one place fixes both."""
+    as standing context, so a term added in one place fixes both. The app's own name rides along,
+    because "hey Excephalon" only wakes the mic if the transcriber can produce the word."""
     from entity.vocabulary import scan_terms
 
-    return scan_terms(_project_roots()) | set(lexicon_terms(load_lexicon()))
+    return scan_terms(_project_roots()) | set(lexicon_terms(load_lexicon())) | {"Excephalon"}
 
 
 def _agent_inbox_note(inbox):
@@ -241,7 +257,8 @@ def _build_ears(text_mode, stop, interrupt, announce=print):
     return stt, mic, recorder
 
 
-def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, attach=None):
+def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, attach=None,
+             hooks=None):
     """Build everything and run the conversation to its end.
 
     Windowed, this runs on a worker while Tk owns the main thread - so the window is on screen
@@ -272,15 +289,15 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor, events=agent_events)
     inbox_watcher.start()
 
-    # "warn Douglas when he is low on credits": the five-hour spending, measured from the
-    # machine's own records every few minutes, spoken once when it crosses the line he set on the
-    # Config page. No line set, no warnings (see entity.usage).
+    # "I only care about my weekly limit": the rolling seven days' spending, measured from the
+    # machine's own records, spoken once at each of his chosen shares - 50, 80, 90, 95, 98, 99
+    # percent of runtime/usage-weekly-limit.txt. No line set, no warnings (see entity.usage).
     from entity.usage import UsageWatch
 
-    usage_watch = UsageWatch(outbox, USAGE_BUDGET)
+    usage_watch = UsageWatch(outbox, USAGE_WEEKLY_LIMIT)
     threading.Thread(target=usage_watch.run, kwargs={"stop": stop}, daemon=True).start()
 
-    announce("Entity is waking up...")
+    announce("Excephalon is waking up...")
     # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks
     # in a submitted draft, inside a hard deadline, changing no words (see entity.polish).
     polisher = Polisher()
@@ -329,6 +346,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         from entity.hearing import Hearing
 
         transcriber, mic, recorder = _open_ears(announce)
+        if hooks is not None:
+            # The page's translation edits reach the running ear the moment they save.
+            hooks["retune"] = getattr(transcriber, "retune", lambda **_: None)
         # Watch-only voice measuring: once he has recorded his minute (Learn my voice.bat), every
         # worded chunk is scored against his voiceprint into runtime/voice/scores-*.log. Nothing
         # reads the score at runtime - the log is evidence for choosing a threshold later, since
@@ -370,12 +390,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         threading.Thread(target=watch_keys, daemon=True).start()
 
     if text_mode:
-        announce("Entity is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
+        announce("Excephalon is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
     elif gui:
-        announce("Entity is here. Turn the mic on when you want to talk, or say 'hey Entity'.")
+        announce("Excephalon is here. Turn the mic on when you want to talk, or say 'hey Excephalon'.")
         announce("That same button stops it while it's speaking. Close the window to quit.")
     else:
-        announce("Entity is here. Speak, and say 'over' when you finish each turn.")
+        announce("Excephalon is here. Speak, and say 'over' when you finish each turn.")
         announce("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
     if muted:
         announce("(muted: replies are shown, not spoken)")
@@ -440,6 +460,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                     "check_off_enhancement the moment its ask is finished, and agents you start "
                     "on an item tick it off themselves when their work lands:\n"
                     + (open_enhancements() or "(nothing open)")
+                    + _live_instructions()
                 ),
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
         except KeyboardInterrupt:
@@ -520,6 +541,7 @@ def main(argv=None):
 
     from entity.chord import ChordListener, SubmitChord, foreground_is_ours
     from entity.desktop import open_window
+    from entity.worktrees import head_commit
     from entity.memory import (
         DEFAULT_LEARNED_PATH,
         DEFAULT_PERSONA_ADDITIONS_PATH,
@@ -542,8 +564,11 @@ def main(argv=None):
     # The window is up before the model has loaded, so the mic does not exist yet; whatever is
     # pressed in that gap is dropped rather than raising at a page that cannot know.
     mic = {}
-
-    from entity.usage import block_tokens, budget_line, save_budget
+    # What the session hands back for the page to drive live - today the transcriber's retune,
+    # so a saved translation is in force for the very next chunk.
+    hooks = running["hooks"] = {}
+    _REPO = Path(__file__).resolve().parents[2]
+    booted_from = head_commit(_REPO)
 
     # The window, as the page may drive it: the styled close dialog's Close, and the Restart
     # button. Filled in once the window exists (hand_controls below); clicks before then no-op.
@@ -573,8 +598,12 @@ def main(argv=None):
         terms=_vocab_terms(),
         agent_logs_dir=AGENT_LOGS,
         on_quit=ask_quit, on_restart=ask_restart,
-        usage_status=lambda: {"tokens": block_tokens(), "budget": budget_line(USAGE_BUDGET)},
-        save_usage_budget=lambda tokens: save_budget(USAGE_BUDGET, tokens),
+        # The Restart button shows only when there is genuinely something to restart INTO: the
+        # checkout on disk has moved past the commit this process booted from.
+        upgrade_ready=lambda: head_commit(_REPO) not in ("", booted_from),
+        # His Config edits take effect NOW, not at the next launch: new translations are swapped
+        # into the running transcriber the moment they save.
+        on_translations_saved=lambda own: hooks.get("retune", lambda **_: None)(translations=own),
     )
     # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
     # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
@@ -603,12 +632,14 @@ def main(argv=None):
         hand_controls=lambda given: window.update(controls=given),
     )
     stop.set()  # the window was closed: ask the loop to wind down, as closing the Tk one did
+    # Wait the wind-down out on EVERY close, not only a restart: the process used to exit while
+    # the worker was still mid-goodbye, tearing native audio down under a live thread - and a
+    # close that hangs or crashes is exactly what he reported from the new dialog.
+    session.join(timeout=30)
     if controls is not None and controls.restart_asked:
-        # The Restart button: wait for this session to wind all the way down - goodbye said, the
-        # fleet recorded for revival - then bring up a fresh process on the current code. Spawned
-        # only after the wind-down, or the new instance would revive from a fleet record the old
-        # one was still writing.
-        session.join(timeout=60)
+        # The Restart button: the fleet is recorded by now, so a fresh process on the current
+        # code revives it. Spawned only after the wind-down, or the new instance would revive
+        # from a fleet record the old one was still writing.
         import subprocess
 
         subprocess.Popen(

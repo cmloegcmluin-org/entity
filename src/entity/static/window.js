@@ -204,7 +204,7 @@ function showState(state, loudness) {
       // The server is up but the mic isn't: its models are still loading. Stay dimmed and
       // unclickable - enabling here is what let clicks die silently for the first seconds.
       mic.disabled = true;
-      mic.title = "Entity is still waking up";
+      mic.title = "Excephalon is still waking up";
     } else {
       mic.disabled = false;  // the pump's first report proves the mic exists
       mic.className = `btn ${state === "muted" ? "" : state}`;

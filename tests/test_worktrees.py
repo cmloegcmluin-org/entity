@@ -73,3 +73,25 @@ def test_no_workspace_means_no_projects(tmp_path):
     from entity.worktrees import projects
 
     assert projects(tmp_path / "nowhere") == []
+
+
+def test_head_commit_reads_the_checkout_without_a_subprocess(tmp_path):
+    # The Restart button compares the disk's commit against the booted one on a poll, so this
+    # has to be file reads - and a repo it cannot read answers "", which callers treat as
+    # "don't know", never as "changed".
+    from entity.worktrees import head_commit
+
+    git = tmp_path / ".git"
+    (git / "refs" / "heads").mkdir(parents=True)
+    (git / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (git / "refs" / "heads" / "main").write_text("abc123\n", encoding="utf-8")
+    assert head_commit(tmp_path) == "abc123"
+
+    (git / "refs" / "heads" / "main").unlink()
+    (git / "packed-refs").write_text("# pack-refs\nabc999 refs/heads/main\n", encoding="utf-8")
+    assert head_commit(tmp_path) == "abc999"
+
+    (git / "HEAD").write_text("deadbeef\n", encoding="utf-8")  # detached
+    assert head_commit(tmp_path) == "deadbeef"
+
+    assert head_commit(tmp_path / "nowhere") == ""

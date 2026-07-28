@@ -192,18 +192,28 @@ web app: `mirror.py` is the conversation as a window shows it — the message mo
 the thread-safe feed everything crosses on, and where each session starts — with no window in it,
 so all of it is tested without a display; `web.py` serves it, `templates/` and `static/` are the
 pages (three: the conversation, Config — one page holding what were the Profile, Memory, Persona
-and Translations tabs, with a contents rail, the old tab paths redirecting into it — and Agents),
+and Translations tabs, with a contents rail, the old tab paths redirecting into it; Life context
+and Memory are bullet lists, not checklists, and his translation and instruction edits are in
+force immediately — translations swap into the running ear on save, instructions ride the
+per-turn notes — and Agents),
 and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
 holding the view) rather than a browser tab — reopening where it was last closed unless that
 monitor is gone, its X answered by the page's own styled dialog (the native confirm was a
 light-mode box in a dark app; only the dialog's Close, through `Controls.quit`, actually closes),
-and its bar carrying a Restart button whose winddown relaunches a fresh process on the current
-code. `usage.py` is the credit warning: the last five hours' tokens summed from the machine's own
-session records, spoken once when they cross the line he set on the Config page — no line, no
-warnings, because a guessed default fires wrong in both directions. The app presents as
-"Excephalon" (title, icon, launcher `Excephalon.bat`); the repo, the module, and the persona's
-name in conversation stay Entity — "hey entity" is trained into the wake phrases and his ear,
-and renaming the code identity would break every runtime path for a word nobody hears. `links.py` decides what a message names that can be
+and its bar carrying a Restart-to-upgrade button that appears only when the checkout on disk has
+moved past the booted commit (worktrees.head_commit, polled by the page) and whose winddown
+relaunches a fresh process on the current code; window teardown answers the /quit request before
+destroying (destroying inside the request deadlocked the app — Windows logged it HUNG), and the
+main thread waits the session worker out so native audio is never torn down under a live thread. `usage.py` is the credit warning: the rolling week's tokens summed from the machine's own session
+records, spoken once at each of his chosen shares (50/80/90/95/98/99%) of
+`runtime/usage-weekly-limit.txt` — no line on file, no warnings, because a guessed limit fires
+wrong in both directions. The app presents as
+"Excephalon" everywhere he sees or hears it — title, icon (the Chaosphere: a brain in a spiked
+wire cage), launcher `Excephalon.bat`, the persona's own name, and the wake phrase ("hey
+excephalon", with "hey entity" kept working because the transcriber only sometimes lands the
+coined word — it is in the vocabulary to help) — while the repo, the module, the transcript
+line format and every internal role key stay `entity`: renaming those breaks parsers of past
+transcripts for a word nobody hears. `links.py` decides what a message names that can be
 opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets), streams the whole exchange into its log, records the fleet in
 `runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught

@@ -1,13 +1,13 @@
-"""How much of the plan the last five hours have burned, and the warning he asked for.
+"""The credit warning: how much of the week the plan has burned, spoken at the moments he chose.
 
-"warn Douglas when he is low on credits." There is no meter to read the plan's true remaining
-balance from, but every Claude session on this machine writes its token usage into the local
-records under ~/.claude/projects - so what CAN be known is how many tokens the last five hours
-(the shape of the plan's usage window) have consumed, summed across everything: Entity's own
-brain, its agents, and any terminal sessions. That estimate is compared against a line HE sets
-- runtime/usage-budget.txt, a single number of tokens - and Entity says something when the
-spending crosses 80% of it, and again at the line itself. No file, no line, no warnings: a
-guessed default would fire wrong in both directions.
+"I only care about my weekly limit. I just want Excephalon to say something aloud to me when I
+hit 50% of my weekly limit, also 80%, 90%, 95%, 98%, and 99%." There is no meter on this machine
+that reads Anthropic's true weekly balance, but every Claude session here writes its token usage
+into the local records under ~/.claude/projects - so the rolling seven days are summed from
+those and compared against the one number he provides: runtime/usage-weekly-limit.txt, his
+weekly line in tokens. No file, no warnings - a guessed limit would fire wrong in both
+directions. Each threshold speaks exactly once per week of spending; the count re-arms when the
+rolling week falls back under 40% (a new week of work, not the same crossing twice).
 """
 
 import json
@@ -15,7 +15,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-FIVE_HOURS = timedelta(hours=5)
+WEEK = timedelta(days=7)
+
+# The moments he asked to hear about, in his own numbers.
+THRESHOLDS = (0.50, 0.80, 0.90, 0.95, 0.98, 0.99)
 
 # The token kinds that spend the plan. Cache reads are billed near-free and would swamp the sum
 # with numbers that cost nothing, so they are left out of the estimate.
@@ -31,14 +34,13 @@ def _within_window(stamp, horizon):
         return False
 
 
-def block_tokens(records=DEFAULT_RECORDS, *, now=None):
-    """Tokens spent in the last five hours, summed from the machine's local session records.
-
-    An estimate: it counts what the records say was sent and produced, which tracks the plan's
-    own accounting closely enough to warn from, and nothing finer. Files untouched for five
-    hours cannot hold anything in the window, so they are skipped unread."""
+def week_tokens(records=DEFAULT_RECORDS, *, now=None):
+    """Tokens spent in the rolling last seven days, summed from the machine's local session
+    records - an estimate that tracks the plan's own accounting closely enough to warn from.
+    Files untouched for seven days cannot hold anything in the window, so they are skipped
+    unread."""
     now = now or datetime.now(timezone.utc)
-    horizon = now - FIVE_HOURS
+    horizon = now - WEEK
     total = 0
     if not Path(records).exists():
         return 0
@@ -63,50 +65,48 @@ def block_tokens(records=DEFAULT_RECORDS, *, now=None):
     return total
 
 
-def budget_line(path):
-    """The warning line he set, in tokens - or None when he has not set one."""
+def weekly_limit(path):
+    """His weekly line, in tokens - or None when he has not set one."""
     try:
         return int(Path(path).read_text(encoding="utf-8").strip().replace(",", "").replace("_", ""))
     except (OSError, ValueError):
         return None
 
 
-def save_budget(path, tokens):
+def save_weekly_limit(path, tokens):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(f"{int(tokens)}\n", encoding="utf-8")
 
 
 class UsageWatch:
-    """Says something when the five-hour spending crosses his line - once per crossing.
+    """Speaks once at each of his chosen shares of the weekly line - 50, 80, 90, 95, 98, 99
+    percent - and never twice for the same crossing: a watch that repeated itself every poll
+    would be the nagging he had every stock phrase deleted over. The rolling week falling back
+    under 40% re-arms the whole ladder."""
 
-    80% is the warning that leaves room to wind down; the line itself is the second and last.
-    Each level speaks once: a watch that repeated itself every poll would be the nagging he had
-    every stock phrase deleted over. Spending falling back under half the line re-arms both,
-    because that is a new block of work, not the same crossing twice."""
-
-    def __init__(self, outbox, budget_path, *, measure=block_tokens):
+    def __init__(self, outbox, limit_path, *, measure=week_tokens):
         self._outbox = outbox
-        self._budget_path = budget_path
+        self._limit_path = limit_path
         self._measure = measure
         self._warned = 0.0
 
     def poll_once(self):
-        line = budget_line(self._budget_path)
+        line = weekly_limit(self._limit_path)
         if line is None or line <= 0:
             return
         tokens = self._measure()
-        if tokens < line / 2:
+        if tokens < 0.4 * line:
             self._warned = 0.0
-        level = 1.0 if tokens >= line else 0.8 if tokens >= 0.8 * line else 0.0
-        if level > self._warned:
-            self._warned = level
+        crossed = max((t for t in THRESHOLDS if tokens >= t * line), default=0.0)
+        if crossed > self._warned:
+            self._warned = crossed
             share = round(100 * tokens / line)
             self._outbox.push(
-                f"About your credits: roughly {tokens:,} tokens have gone out in the last five "
-                f"hours - {share}% of the {line:,} you set as your warning line."
+                f"About your credits: the last seven days have used roughly {tokens:,} tokens - "
+                f"{share}% of your weekly line of {line:,}."
             )
 
-    def run(self, *, stop, every=300, sleep=time.sleep):
+    def run(self, *, stop, every=600, sleep=time.sleep):
         while not stop.is_set():
             try:
                 self.poll_once()

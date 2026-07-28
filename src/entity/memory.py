@@ -312,7 +312,7 @@ def checklist_items(body):
     return items
 
 
-def checklist_markdown(items):
+def checklist_markdown(items, *, boxes=True):
     """The items back as markdown - the form the file keeps and the brain reads.
 
     Not quite the inverse of `checklist_items`: a bullet written before the boxes existed comes
@@ -327,10 +327,13 @@ def checklist_markdown(items):
     Stored whole it would be one bullet with newlines inside it, and those lines come back as
     items that have lost their place in the list. Its `#id`, if it has one, stays on the first of
     those lines: the rest are fresh items and are numbered on the next pass, never handed a copy of
-    an id already in use."""
+    an id already in use.
+
+    `boxes=False` writes plain bullets instead: Life context is background, not work, and a box
+    beside a life fact miscounts it as something left to do."""
     out = []
     for item in items:
-        box = TICKED if item["done"] else UNTICKED
+        box = (TICKED if item["done"] else UNTICKED) if boxes else "- "
         tag = f"#{item['id']} " if item.get("id") is not None else ""
         for line in _lines(item["text"]):
             out.append(box + tag + line)
@@ -386,7 +389,7 @@ def number_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING)
     save_section(path, resolved, checklist_markdown(_assign_ids(items)))
 
 
-def save_checklist(path, heading, items, *, drawn, number=False):
+def save_checklist(path, heading, items, *, drawn, number=False, boxes=True):
     """Write one section's list back, as the markdown the file keeps and the brain reads.
 
     `drawn` is what the page believes the file holds - the words of every item it was drawn with,
@@ -410,7 +413,7 @@ def save_checklist(path, heading, items, *, drawn, number=False):
     merged = items + gained
     if number:
         _assign_ids(merged)
-    save_section(path, heading, checklist_markdown(merged))
+    save_section(path, heading, checklist_markdown(merged, boxes=boxes))
 
 
 def _same_ask(one, another):

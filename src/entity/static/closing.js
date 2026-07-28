@@ -27,6 +27,21 @@ document.getElementById("really-close").addEventListener("click", () => {
 
 /* One click from a landed fix to running it. The process winds down exactly as a close does -
    goodbye, agents recorded - and its last act is to start a fresh one on the current code. */
-document.getElementById("restart").addEventListener("click", () => {
+const restart = document.getElementById("restart");
+restart.addEventListener("click", () => {
   fetch("/restart", { method: "POST" });
 });
+
+/* The button appears only when there is something to restart INTO: the checkout on disk has
+   moved past the commit this process booted from. Checked on load and then once a minute -
+   fixes land on the scale of minutes, and a button that is always there cries wolf. */
+async function upgradeReady() {
+  try {
+    const { ready } = await (await fetch("/upgrade")).json();
+    restart.hidden = !ready;
+  } catch {
+    /* an unreachable server means the window is going down; the button matters no more */
+  }
+}
+upgradeReady();
+setInterval(upgradeReady, 60000);

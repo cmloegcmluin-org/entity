@@ -313,6 +313,10 @@ body.page .topbar {
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.send { color: var(--accent); border-color: rgba(127, 255, 0, .35); }
 .btn.send:hover { background: rgba(127, 255, 0, .12); }
+/* Disabled must LOOK disabled. The attribute alone changed not one pixel and left the hover
+   invitation up, so a button that could not be clicked yet read as a button that was broken. */
+.btn[disabled] { opacity: .35; cursor: default; }
+.btn[disabled]:hover { border-color: var(--line); color: var(--fg); }
 
 
 /* The meter spans the column, because it is the column's width that says what full is. */

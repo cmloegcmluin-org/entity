@@ -105,7 +105,11 @@ class Mirror:
     def __init__(self, feed, *, clock=None):
         self.model = TranscriptModel(clock=clock) if clock else TranscriptModel()
         self._feed = feed
-        self.state = "muted"  # the mic starts off; nothing is heard until it is turned on
+        # Not "muted": at birth the mic doesn't exist YET - the models it needs are still loading.
+        # The pump's first report (pushed the moment it starts) is what proves there is a mic, and
+        # only that flips this. Born "muted", the window enabled its record button on the first
+        # poll, seconds before a click could do anything.
+        self.state = "waking"
         self.level = 0.0
         # The sentence they are still in the middle of. A state, not a hand-off: it stands on screen
         # until it grows or is taken down, so every poll carries it.

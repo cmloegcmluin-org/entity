@@ -8,13 +8,17 @@ startup and kept warm, repairs ONLY the punctuation of the submitted draft, and 
 it briefly - never long, and never at the cost of his words:
 
 - Bounded: past the deadline the raw text goes through as typed. A slow model may not stall a turn.
-- Word-safe by CODE, not by trust: if the repaired text's letters and digits are not exactly the
-  raw text's letters and digits, the repair is thrown away. The model is ASKED to change only
-  punctuation; this is what makes it unable to eat a word no matter what it answers.
+- Word-safe by CODE, not by trust: every word of the repair must be the raw word in its place -
+  identical once punctuation is stripped, or so close a respelling that it can only be the same
+  word misheard ("on Maine" for "on main"; he dictates software work, not travel plans). A repair
+  that adds, drops, reorders, or outright replaces a word is thrown away whole. The model is ASKED
+  to fix only punctuation and plain mishearings; this is what makes it unable to eat a word no
+  matter what it answers.
 """
 
 import re
 import threading
+from difflib import SequenceMatcher
 
 from claude_agent_sdk import ClaudeAgentOptions
 
@@ -32,9 +36,11 @@ PROMPT = (
     "Dictated text follows. Its speaker pauses mid-sentence, and transcription turned those "
     "pauses into sentence breaks - periods and capital letters in the middle of what is really "
     "one sentence. Repair ONLY the punctuation, sentence boundaries, and the capitalization that "
-    "follows from them, so it reads as the sentences actually meant. Change no words: do not "
-    "add, remove, or reorder a single word. Reply with the repaired text alone - no preamble, "
-    "no quotes.\n\n{text}"
+    "follows from them, so it reads as the sentences actually meant. Change no words - with one "
+    "exception: the speaker is dictating software work, and a word that is plainly the "
+    "transcriber mishearing a technical term ('on Maine' for 'on main', 'Jason' for 'JSON') "
+    "becomes the word actually said. When in doubt, leave the word alone. Never add, remove, or "
+    "reorder a word. Reply with the repaired text alone - no preamble, no quotes.\n\n{text}"
 )
 
 
@@ -47,11 +53,24 @@ def _polish_options():
     )
 
 
-def same_words(one, another):
-    """Whether two texts carry exactly the same letters and digits in the same order - the
-    invariant a punctuation-only repair cannot break."""
-    strip = lambda text: re.sub(r"[^a-z0-9]", "", text.casefold())
-    return strip(one) == strip(another)
+def _words(text):
+    """The text as bare words: split on whitespace, punctuation and case stripped away."""
+    stripped = (re.sub(r"[^a-z0-9]", "", token.casefold()) for token in text.split())
+    return [word for word in stripped if word]
+
+
+def word_safe(raw, repaired):
+    """Whether every word of the repair is recognizably the raw word in its place: identical, or
+    so close a respelling that it can only be the same word misheard ("Maine" for "main").
+    Adding, dropping, reordering, or outright replacing a word fails - a repair may fix his
+    words, never take them."""
+    ours, its = _words(raw), _words(repaired)
+    if len(ours) != len(its):
+        return False
+    return all(
+        mine == theirs or SequenceMatcher(None, mine, theirs).ratio() >= 0.6
+        for mine, theirs in zip(ours, its)
+    )
 
 
 class Polisher:
@@ -93,7 +112,7 @@ class Polisher:
         if not done.wait(self._deadline):
             return text  # late: his words go through as typed rather than holding the turn
         said = (outcome.get("said") or "").strip()
-        if not said or not same_words(said, text):
+        if not said or not word_safe(text, said):
             return text  # the repair ate or added a word; the code refuses it wholesale
         return said
 

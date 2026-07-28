@@ -33,7 +33,6 @@
   <button type="button" data-goes="card-memory">Memory</button>
   <button type="button" data-goes="card-instructions">Instructions</button>
   <button type="button" data-goes="card-translations">Translations</button>
-  <button type="button" data-goes="card-vocabulary">Vocabulary</button>
 </aside>
 
 <main id="content" class="reading">
@@ -81,17 +80,27 @@
     </ul>
   </section>
 
-  <section class="section" id="card-instructions">
+  <section class="section" id="card-instructions" data-kind="instructions">
     <h2>Instructions</h2>
     <p class="note">How you've told it to behave, plus anything it files here itself. One per
-      line; applies immediately.</p>
-    <textarea class="writing grows" data-persona="true"
-              aria-label="Instructions">{{ additions }}</textarea>
+      row; applies immediately.</p>
+    <ul class="checklist" id="instructions">
+      {% for line in instructions %}{{ row({"text": line}, "bullets") }}
+      {% else %}{{ row({}, "bullets") }}
+      {% endfor %}
+    </ul>
   </section>
 
   <section class="section" id="card-translations">
     <h2>Translations</h2>
-    <p class="note">Fixes for common mishearings of domain terms. Applies immediately.</p>
+    {#- One styled list, editable in place. The old Vocabulary card lives HERE now, as rows whose
+        left side is "(paraphone)" - his coinage brief made word: para (beside) + phone (sound) -
+        anything SOUNDING close enough to the right side is corrected to it. Those rows read and
+        write his lexicon; the ones his project folders contribute are shown the same way and
+        simply pass through a save untouched, since a folder's name is not this page's to
+        remove. -#}
+    <p class="note">Fixes for common mishearings of domain terms. A left side of (paraphone)
+      catches anything that merely sounds close enough to the right side. Applies immediately.</p>
     <ul class="swaps" id="swaps">
       {% for swap in swaps %}
       <li data-heard="{{ swap.heard }}" data-stock="{{ swap.stock }}">
@@ -100,18 +109,15 @@
         <span class="said" contenteditable="plaintext-only">{{ swap.said }}</span>
       </li>
       {% endfor %}
+      {% for term in paraphones %}
+      <li data-heard="(paraphone)" data-stock="">
+        <span class="heard" contenteditable="plaintext-only">(paraphone)</span>
+        <span class="arrow" aria-hidden="true">→</span>
+        <span class="said" contenteditable="plaintext-only">{{ term }}</span>
+      </li>
+      {% endfor %}
     </ul>
     <button type="button" class="btn add-swap" id="add-swap" title="Add a translation">+</button>
-  </section>
-
-  <section class="section" id="card-vocabulary">
-    <h2>Vocabulary</h2>
-    <p class="note">Anything close enough to one of these is corrected to it. Your project folders
-      and your lexicon, as they were when this session started.</p>
-    <ul class="terms">
-      {% for term in terms %}<li>{{ term }}</li>
-      {% else %}<li class="empty">No vocabulary was loaded.</li>{% endfor %}
-    </ul>
   </section>
 </main>
 {% endblock %}

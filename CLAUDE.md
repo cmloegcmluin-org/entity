@@ -107,6 +107,16 @@ that answered 43 seconds later, and a freeze blamed on a phrase rather than the 
 caused it. If you cannot observe something, say so and ask for the one observation that would settle
 it. A plausible reconciliation is worse than an admitted gap, because it gets acted on.
 
+**Your repro is not his machine, and a fix he has not run is not fixed.** The close-dialog hang was
+"fixed" twice on the strength of a repro that passed here, and it hung on his desk both times -
+the repro lacked the live app's audio stack, worker threads and keyboard hook, and nothing said so.
+Before asserting the cause of anything he experienced, align your story with HIS incident's
+artifacts (timestamps, event log, transcripts) - not with a rebuilt approximation of it - and when
+the evidence is a repro, SAY it was a repro. Report a landed change as "landed; unverified in your
+hands" until he has exercised it. And when a failure can recur, make the app write its own evidence
+at the moment of failure (the close stall dumps every thread to `runtime/close-stall.log`), so the
+next diagnosis starts from fact instead of belief.
+
 ## The rules Entity lives by
 
 These are user requirements, learned through failures somebody had to sit through. Persona text
@@ -206,7 +216,14 @@ relaunches a fresh process on the current code; window teardown answers the /qui
 destroying, and waves its OWN destroy through the closing event (destroy fires that same event,
 and answering it with the dialog question against a dying page hung the GUI thread — twice), and
 the main thread waits the session worker out so native audio is never torn down under a live
-thread. The credit warning was tried and DROPPED
+thread. The memory store is an INBOX he works to zero:
+`review.py` raises one remembered fact for his verdict in genuine downtime (fleet idle, the
+transcript quiet a few minutes - its mtime is the clock), each fact once per session, never two
+nudges close together; the brain words it (narrator "memory") and settles the verdict with
+forget_memory / update_persona. The old Vocabulary card is gone: vocabulary IS translation, shown
+as rows whose left side is "(paraphone)" (para + phone: anything sounding close enough), reading
+and writing the lexicon (`reconcile_lexicon` - folder-scanned terms pass through untouched) and
+retuning the running ear on save. The credit warning was tried and DROPPED
 by his call: the local records count tokens, Anthropic's real weekly meter is percentages it does
 not expose locally, and a warning measured against a guessed denominator fires wrong in both
 directions — do not rebuild it without a sanctioned usage source. The app presents as

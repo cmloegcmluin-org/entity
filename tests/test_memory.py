@@ -706,3 +706,35 @@ def test_checking_off_an_id_nobody_has_says_so(tmp_path):
 
     assert complete_enhancement_by_id(99, path) is False
     assert "- [ ] #7 an item" in path.read_text(encoding="utf-8")
+
+
+def test_forget_learned_drops_the_closest_line_and_says_when_nothing_matches(tmp_path):
+    # The memory inbox's delete: the brain's paraphrase still lands on the line he meant.
+    learned = tmp_path / "learned.md"
+    learned.write_text("- prefers metric units\n- keeps a light CRM in a sheet\n", encoding="utf-8")
+    from entity.memory import forget_learned
+
+    assert forget_learned("prefers metric units", path=learned) is True
+    assert "metric" not in learned.read_text(encoding="utf-8")
+    assert "CRM" in learned.read_text(encoding="utf-8")
+    assert forget_learned("something never remembered", path=learned) is False
+
+
+def test_reconcile_lexicon_adds_and_removes_his_terms_but_never_scanned_ones(tmp_path):
+    # The (paraphone) rows written back: his lexicon changes, the folder-scanned terms and the
+    # file's own glosses and prose pass through untouched.
+    lexicon = tmp_path / "lexicon.md"
+    lexicon.write_text("# his working vocabulary\n- Notecraft - the notes app\n- Sagittal\n",
+                       encoding="utf-8")
+    from entity.memory import lexicon_terms, reconcile_lexicon
+
+    reconcile_lexicon(["Notecraft", "Excephalon", "highdeas"],
+                      scanned={"highdeas"}, path=lexicon)
+
+    kept = lexicon.read_text(encoding="utf-8")
+    assert "Notecraft - the notes app" in kept   # kept, gloss intact
+    assert "Sagittal" not in kept                # removed on the page, removed here
+    assert "Excephalon" in kept                  # added on the page, added here
+    assert "highdeas" not in kept                # scanned, never the lexicon's to hold
+    assert "# his working vocabulary" in kept
+    assert set(lexicon_terms(kept)) == {"Notecraft", "Excephalon"}

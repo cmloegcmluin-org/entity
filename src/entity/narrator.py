@@ -81,6 +81,16 @@ PROMPTS = {
         "tell the user in one short sentence what you've set in motion - or, if you already "
         "know it needs THEM, say that instead.]"
     ),
+    # The memory inbox: raised only in downtime (see review.MemoryNudger), one fact at a time,
+    # because he wants the store worked to zero - "this list is an inbox, and I'm an inbox-0
+    # kind of guy" - without ever being interrupted for it.
+    "memory": (
+        "[Quiet-moment housekeeping, from the app - not the user speaking. One memory from your "
+        "store awaits his review:\n{report}\n\nRead it back in your own short sentence and ask "
+        "what he wants done with it - kept, dropped (forget_memory), or made a standing "
+        "instruction (update_persona, then forget_memory so it leaves the inbox). One memory, "
+        "one short question, never a list.]"
+    ),
 }
 
 

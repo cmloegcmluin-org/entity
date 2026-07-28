@@ -145,9 +145,14 @@ class Controls:
         return False
 
     def quit(self):
-        """Actually close - the page's dialog said so, or a restart is tearing down."""
+        """Actually close - the page's dialog said so, or a restart is tearing down.
+
+        The destroy is deferred to its own thread rather than run inline, because this is called
+        from inside a request handler of the very server the window is showing: destroying the
+        window while its page still awaits the response deadlocked the whole app on his first
+        try (Windows logged pythonw as HUNG). Answer the request first; close a beat later."""
         self.keep_position()
-        self._window.destroy()
+        threading.Timer(0.2, self._window.destroy).start()
 
     def restart(self):
         """Close, marked so the winddown relaunches a fresh process - the reload button's whole

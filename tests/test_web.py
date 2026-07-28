@@ -32,7 +32,7 @@ def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
 
     assert [entry["role"] for entry in shown["entries"]] == ["day", "you", "entity"]
     assert shown["entries"][1]["name"] == "You"  # who said it, resolved once, on the server
-    assert shown["entries"][2]["name"] == "Entity"
+    assert shown["entries"][2]["name"] == "Excephalon"  # the display name; the role key stays "entity"
     assert shown["sessions"] == [{"label": "2026-07-18 02:41", "at": 0}]
 
 
@@ -231,18 +231,18 @@ def test_every_translation_in_force_is_an_editable_row_with_no_labels_and_no_sec
     assert "hi deas -> Notecraft" in translations.read_text(encoding="utf-8")
 
 
-def test_the_config_page_has_a_contents_column_and_a_credits_card(tmp_path):
+def test_the_config_page_has_a_contents_column_and_one_word_card_titles(tmp_path):
     profile = tmp_path / "profile.md"
     profile.write_text("## Goals\n- swim\n", encoding="utf-8")
-    client = _client(profile_path=profile,
-                     usage_status=lambda: {"tokens": 123456, "budget": 500000})
+    client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
 
-    assert 'id="toc"' in page                    # each card is one click away
-    assert 'id="card-credits"' in page
-    assert "123,456" in page                     # the five-hour estimate, readable
-    assert 'value="500000"' in page              # the line he set, where he set it
+    assert 'id="toc"' in page                     # each card is one click away
+    assert ">Instructions</h2>" in page           # "Standing Instructions" went one-word
+    assert 'id="card-credits"' not in page        # the credits card is gone; the warning speaks
+    assert "Fixes for common mishearings of domain terms." in page
+    assert "applies immediately" in page.lower()  # no more "picked up when it next starts"
 
 
 def test_the_close_dialog_and_its_wiring_reach_every_page():
@@ -264,14 +264,52 @@ def test_quit_and_restart_reach_the_window_they_serve_under():
     assert ways == ["quit", "restart"]
 
 
-def test_the_usage_budget_is_saved_only_when_it_is_a_number(tmp_path):
-    kept = []
-    client = _client(save_usage_budget=kept.append)
+def test_the_restart_button_ships_hidden_and_upgrade_says_when_to_show_it():
+    # "It should only appear when there are new changes to pick up" - the page asks /upgrade,
+    # which is true exactly when the checkout on disk has moved past the running commit.
+    ready = [False]
+    client = _client(upgrade_ready=lambda: ready[0])
 
-    client.post("/usage-budget", data={"tokens": "500,000"})
-    client.post("/usage-budget", data={"tokens": "half a million"})
+    page = client.get("/").get_data(as_text=True)
+    button = page.split('id="restart"')[1].split(">")[0]
+    assert "hidden" in button                   # born invisible; /upgrade is what reveals it
+    assert "Restart to upgrade" in page
+    assert client.get("/upgrade").get_json() == {"ready": False}
+    ready[0] = True
+    assert client.get("/upgrade").get_json() == {"ready": True}
 
-    assert kept == [500000]
+
+def test_life_context_renders_as_bullets_and_saves_back_plain(tmp_path):
+    # "Context shouldn't be checkboxes; they should be bullets" - background, not work, so no
+    # boxes on the page, no open count on the card, and plain bullets back in the file.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Life context\n- [ ] lives alone\n\n## Goals\n- [ ] swim\n",
+                       encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/config").get_data(as_text=True)
+    context = page.split('data-heading="Life context"')[1].split("</section>")[0]
+    assert 'type="checkbox"' not in context
+    assert "open</span>" not in context.split("</h2>")[0]
+
+    client.post("/profile", json={"heading": "Life context", "drawn": ["lives alone"],
+                                  "items": [{"done": False, "text": "lives alone"}]})
+
+    saved = profile.read_text(encoding="utf-8")
+    assert "- lives alone" in saved and "- [ ] lives alone" not in saved
+    assert "- [ ] swim" in saved  # the checklists beside it keep their boxes
+
+
+def test_the_memory_card_hides_the_files_heading_and_saves_rows_back(tmp_path):
+    # The "# Learned..." line is bookkeeping, not a memory - shown, it read as one.
+    learned = tmp_path / "learned.md"
+    learned.write_text("# Learned from Douglas\n- prefers metric units\n", encoding="utf-8")
+    client = _client(learned_path=learned)
+
+    page = client.get("/config").get_data(as_text=True)
+    memory = page.split('id="card-memory"')[1].split("</section>")[0]
+    assert "prefers metric units" in memory
+    assert "Learned from Douglas" not in memory
 
 
 def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
@@ -284,8 +322,9 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
 
     page = client.get("/config").get_data(as_text=True)
 
-    assert page.count('<ul class="checklist"') == 4  # every section, not just the one
-    assert page.count('<input type="checkbox"') == 4
+    # Enhancements, Goals and Projects keep boxes; Life context and Memory are bullets now -
+    # background, not work.
+    assert page.count('<input type="checkbox"') == 3
 
     # And a tick in any of them still writes markdown back, which is what the brain reads.
     client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
@@ -303,8 +342,9 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
 
     page = _client(profile_path=profile).get("/config").get_data(as_text=True)
 
-    # The words of an item are the item - one editable span per row, no raw-markdown box.
-    assert page.count('class="item" contenteditable="plaintext-only"') == 2
+    # The words of an item are the item - one editable span per row (Goals and Projects here,
+    # plus the Memory card's one empty row), no raw-markdown box.
+    assert page.count('class="item" contenteditable="plaintext-only"') == 3
     assert "Edit as text" not in page
 
 
@@ -350,7 +390,7 @@ def test_an_agents_exchange_reads_as_a_conversation_with_the_speakers_swapped(tm
     # In an agent's thread the Entity is the one asking and the agent answers - the speakers are
     # swapped, so neither reads as the user talking to themselves.
     assert [(entry["name"], entry["text"]) for entry in shown["entries"]] == [
-        ("Entity", "fix the drive link"), ("fixer", "Found it - repointed."),
+        ("Excephalon", "fix the drive link"), ("fixer", "Found it - repointed."),
     ]
 
 

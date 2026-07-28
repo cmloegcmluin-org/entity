@@ -14,6 +14,31 @@ from pathlib import Path
 run_hidden = functools.partial(subprocess.run, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
+def head_commit(repo):
+    """The commit the checkout at `repo` stands on, read straight off .git files - no subprocess,
+    so it is cheap enough for a page to poll. The Restart button compares this against the commit
+    the process booted from: different means a fix has landed on disk and a restart would pick it
+    up. Empty string when it cannot be read - which callers must treat as "don't know", never as
+    "changed"."""
+    try:
+        git = Path(repo) / ".git"
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head  # detached: HEAD is the commit itself
+        ref = head[len("ref: "):]
+        direct = git / ref
+        if direct.exists():
+            return direct.read_text(encoding="utf-8").strip()
+        packed = git / "packed-refs"
+        if packed.exists():
+            for line in packed.read_text(encoding="utf-8").splitlines():
+                if line.endswith(" " + ref):
+                    return line.split(" ", 1)[0]
+    except OSError:
+        pass
+    return ""
+
+
 def is_worktree(path):
     """A directory with a .git inside - a file in a linked worktree, a directory in a main checkout."""
     return (Path(path).expanduser() / ".git").exists()

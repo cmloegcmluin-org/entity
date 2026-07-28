@@ -111,14 +111,22 @@ def test_closing_the_window_asks_first_in_the_apps_own_styling(tmp_path):
     assert json.loads(spot.read_text(encoding="utf-8"))["x"] == 120
 
 
-def test_the_dialogs_close_is_what_actually_closes(tmp_path):
+def test_the_dialogs_close_answers_the_request_first_then_closes(tmp_path):
+    # Destroying the window from inside a request handler of the very server it is showing
+    # deadlocked the whole app on his first close (Windows logged pythonw as HUNG) - so the
+    # destroy is deferred a beat, and the /quit response gets out before the window goes.
     window = _Shown()
     controls = Controls(window, tmp_path / "spot.json")
 
     controls.quit()
 
-    assert window.destroyed
+    assert not window.destroyed  # not yet - the request must be answered first
     assert json.loads((tmp_path / "spot.json").read_text(encoding="utf-8"))["width"] == 980
+    for _ in range(100):
+        if window.destroyed:
+            break
+        threading.Event().wait(0.01)
+    assert window.destroyed
 
 
 def test_restart_closes_marked_so_the_winddown_relaunches():
@@ -127,8 +135,12 @@ def test_restart_closes_marked_so_the_winddown_relaunches():
 
     controls.restart()
 
-    assert window.destroyed
     assert controls.restart_asked is True
+    for _ in range(100):
+        if window.destroyed:
+            break
+        threading.Event().wait(0.01)
+    assert window.destroyed
 
 
 class _Screen:

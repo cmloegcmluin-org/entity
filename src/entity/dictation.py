@@ -67,7 +67,9 @@ SPEAK_TAIL_FRAMES = 10
 DICTATION_LULL = 12.0
 
 DEFAULT_MUTE_PHRASES = ("stop listening", "suspend")
-DEFAULT_WAKE_PHRASES = ("hey entity", "resume")
+# "hey entity" stays alongside the new name: the transcriber knows the plain word cold, and a
+# wake phrase that only sometimes transcribes is a mic that only sometimes answers.
+DEFAULT_WAKE_PHRASES = ("hey excephalon", "hey entity", "resume")
 # Rewind and say it again. Both are stock dictation idioms rather than anything they say about code,
 # and both are already what a person says when taking a sentence back mid-thought ("the blue one,
 # scratch that, the red one") - so the usage that would be a false alarm IS the one it is for.

@@ -31,13 +31,25 @@ from entity.mirror import SIDES, TranscriptModel, sessions
 from entity.tailing import LogTail, archive_dir, discover
 from entity.vocabulary import translations_in_force
 
-SPEAKERS = {"you": "You", "entity": "Entity", "heads-up": "Entity · heads-up"}
+# The role keys are the transcript's own line format and never change; the NAMES are what the
+# window shows, and the window shows Excephalon now.
+SPEAKERS = {"you": "You", "entity": "Excephalon", "heads-up": "Excephalon · heads-up"}
 
-# The profile's own categories, in its own numbering, minus the one the conversation itself is.
-# Each names only the stem of its heading, because a profile glosses its headings however it likes
-# ("Enhancements they want for you (roadmap, not now)").
-SECTIONS = (("Enhancements", "Enhancements"), ("Context", "Life context"),
-            ("Goals", "Goals"), ("Projects", "Projects"))
+# The profile's own categories - each names only the stem of its heading, because a profile
+# glosses its headings however it likes ("Enhancements they want for you (roadmap, not now)").
+# Context reads last ("Context should be moved below Enhancements, Goals, and Projects") and as
+# plain bullets: it is standing background, not a list of things to do, so boxes and an open
+# count would miscount it as work. `subtitle` is the one-line explanation under each card's
+# title, which every card carries now.
+SECTIONS = (
+    ("Enhancements", "Enhancements", "checklist",
+     "Improvements you want made. File one here and an agent can be put on it; done items keep "
+     "their record in the fold below."),
+    ("Goals", "Goals", "checklist", "What you're working toward - ticked when reached."),
+    ("Projects", "Projects", "checklist", "Long-term undertakings, held as standing context."),
+    ("Context", "Life context", "bullets",
+     "Background it should always hold about your life - facts, not tasks."),
+)
 
 
 def _said(entry, label="", speakers=SPEAKERS):
@@ -135,7 +147,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                opener=open_link, mirror=None, clipboard=_windows_clipboard,
                profile_path=None, learned_path=None, translations_path=None, terms=(),
                persona_additions_path=None, agent_logs_dir=None, clock=None,
-               on_quit=None, on_restart=None, usage_status=None, save_usage_budget=None):
+               on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
@@ -236,20 +248,26 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         a collapsible section at its foot, so what he still has to act on is what he sees."""
         found = _profile_text()
 
-        def section(title, heading):
+        def section(title, heading, kind, subtitle):
             items = checklist_items(found[heading])
-            return {"title": title, "heading": heading,
+            return {"title": title, "heading": heading, "kind": kind, "subtitle": subtitle,
                     "active": [item for item in items if not item["done"]],
                     "done": [item for item in items if item["done"]]}
 
-        sections = [section(title, heading)
-                    for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
+        sections = [section(title, heading, kind, subtitle)
+                    for title, heading, kind, subtitle in
+                    ((title, _heading(found, stem), kind, subtitle)
+                     for title, stem, kind, subtitle in SECTIONS)
                     if heading is not None]
         own = translation_pairs(_own_translations())
         stock = translations_in_force({})
         in_force = translations_in_force(own)
         learned = learned_path.read_text(encoding="utf-8") if (
             learned_path is not None and learned_path.exists()) else ""
+        # The file's own "# Learned..." heading is bookkeeping, not a memory - and shown, it read
+        # as one. The rows are the memories; the heading is re-derived on save.
+        memories = [line.lstrip("-* ").strip() for line in learned.splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")]
         return render_template(
             "config.html", here="/config", sections=sections,
             # Each row remembers what the stock rule for its "heard" says, so a save can tell an
@@ -259,9 +277,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             swaps=[{"heard": heard, "said": in_force[heard], "stock": stock.get(heard, "")}
                    for heard in sorted(in_force)],
             terms=sorted(terms, key=str.lower),
-            learned=learned,
+            memories=memories,
             additions=_persona_additions(),
-            usage=usage_status() if usage_status is not None else None,
         )
 
     # The tabs this page replaced still answer, so a window standing open across the update lands
@@ -282,8 +299,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             # Only the enhancements list carries ids - the one he refers to by number - so only it
             # numbers a new row on the way in. The other panes stay the plain lists they were.
             numbered = sent["heading"].lower().startswith(ENHANCEMENTS_HEADING.lower())
+            # A bullets section (Life context) writes plain bullets back: it is background, not
+            # work, and boxes in the file would draw boxes on the page again.
+            plain = any(sent["heading"].lower().startswith(stem.lower())
+                        for _, stem, kind, _ in SECTIONS if kind == "bullets")
             save_checklist(profile_path, sent["heading"], sent["items"], drawn=sent["drawn"],
-                           number=numbered)
+                           number=numbered, boxes=not plain)
             # The numbering mutates the sent items in place, so this is each row's id in the order
             # the page sent them - what lets a new row show its number the moment it first saves.
             return {"ids": [item.get("id") for item in sent["items"]]}
@@ -309,22 +330,15 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     def write_translations():
         if translations_path is not None:
             save_translations(request.form["body"], translations_path)
+            if on_translations_saved is not None:
+                # In force NOW: the running ear swaps to the saved rules for the very next chunk.
+                on_translations_saved(translation_pairs(request.form["body"]))
         return ("", 204)
 
     @app.post("/memory")
     def write_memory():
         if learned_path is not None:
             save_learned(request.form["body"], learned_path)
-        return ("", 204)
-
-    @app.post("/usage-budget")
-    def write_usage_budget():
-        """The token line the credit warning fires from - his number, set where he can see the
-        spending it is measured against."""
-        if save_usage_budget is not None:
-            spent = request.form["tokens"].strip()
-            if spent.replace(",", "").replace("_", "").isdigit():
-                save_usage_budget(int(spent.replace(",", "").replace("_", "")))
         return ("", 204)
 
     # ---- the window itself --------------------------------------------------------------------
@@ -335,6 +349,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         if on_quit is not None:
             on_quit()
         return ("", 204)
+
+    @app.get("/upgrade")
+    def upgrade():
+        """Whether a restart has anything to restart INTO: the checkout on disk has moved past
+        the commit this process booted from. The bar's Restart button shows only then."""
+        return {"ready": bool(upgrade_ready()) if upgrade_ready is not None else False}
 
     @app.post("/restart")
     def restart():
@@ -354,7 +374,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             return ({"entries": [], "at": 0, "total": 0, "sessions": []}, 404)
         # In an agent's thread the Entity is the one asking and the agent answers.
         return _thread(agents.entries(name), request.args.get("since", 0, type=int),
-                       {"you": "Entity", "entity": name, "heads-up": "Entity · heads-up"})
+                       {"you": "Excephalon", "entity": name, "heads-up": "Excephalon · heads-up"})
 
     @app.post("/agents/<name>/close")
     def close_agent(name):

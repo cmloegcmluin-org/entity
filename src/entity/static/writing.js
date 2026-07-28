@@ -141,10 +141,11 @@ for (const goes of document.querySelectorAll("#toc button")) {
 const rowsOf = (list) => [...list.querySelectorAll("li")];
 const wordsOf = (row) => row.querySelector(".item");
 /* The row carries its stable id as `data-id`, so a save sends it back and the same item keeps the
-   same number. A row he has just made has none yet; the server hands it the next one. */
+   same number. A row he has just made has none yet; the server hands it the next one. A bullet
+   row (Life context, Memory) has no box at all - background is never "done". */
 const itemsOf = (list) => rowsOf(list).map((row) => ({
   id: row.dataset.id ? Number(row.dataset.id) : null,
-  done: row.querySelector("input").checked,
+  done: row.querySelector("input")?.checked ?? false,
   text: wordsOf(row).textContent,
 }));
 
@@ -154,19 +155,21 @@ const itemsOf = (list) => rowsOf(list).map((row) => ({
 function freshRow(like) {
   const row = like.cloneNode(true);
   row.className = "";
-  row.querySelector("input").checked = false;
   row.removeAttribute("data-id");
+  wordsOf(row).textContent = "";
+  const box = row.querySelector("input");
+  if (!box) return row;  // a bullet row: the dot came along in the clone, and that is all of it
+  box.checked = false;
   // The number's spot is reserved from the first keystroke - typing used to start in the space
   // where the id belongs - and the placeholder becomes the real number when the save assigns it.
   let tag = row.querySelector(".tag");
   if (!tag) {
     tag = document.createElement("span");
     tag.className = "tag";
-    row.querySelector("input").after(tag);
+    box.after(tag);
   }
   tag.classList.add("pending");
   tag.textContent = "#·";
-  wordsOf(row).textContent = "";
   return row;
 }
 
@@ -216,7 +219,7 @@ function caretIn(words) {
 /* A section is one list, whether it is drawn as one or as an open list with a folded Done one
    beneath it. So the unit here is the <section>, not a <ul>: a save gathers every row under it,
    and an edit in either list writes the whole thing back. */
-for (const section of document.querySelectorAll(".section")) {
+for (const section of document.querySelectorAll(".section[data-heading], .section[data-kind='memory']")) {
   /* What the page believes the file holds, so a save can tell their own edit from an item Entity
      filed into the same section while the window sat open. It is what was last SENT rather than
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
@@ -224,6 +227,13 @@ for (const section of document.querySelectorAll(".section")) {
   let drawn = itemsOf(section).map((item) => item.text);
   const save = async (leaving) => {
     const items = itemsOf(section);
+    /* The Memory card is the learned file, not a profile section: its rows go back as the plain
+       bullet lines the file keeps, and the whole file is those rows. */
+    if (section.dataset.kind === "memory") {
+      const body = items.map((item) => item.text.trim()).filter(Boolean)
+        .map((fact) => `- ${fact}`).join("\n");
+      return post("/memory", asForm({ body }), leaving);
+    }
     const was = drawn;
     drawn = items.map((item) => item.text);
     if (leaving) {

@@ -60,5 +60,13 @@ class CorrectingTranscriber:
         return correct_terms(self._transcriber.transcribe(audio), self._terms,
                              translations=self.translations, **self._kwargs)
 
+    def retune(self, *, translations=None, terms=None):
+        """Swap what is in force NOW: an edit on the Config page corrects the very next chunk,
+        instead of waiting for the next launch."""
+        if translations is not None:
+            self.translations = translations_in_force(translations)
+        if terms is not None:
+            self._terms = list(terms)
+
     def warmup(self):
         self._transcriber.warmup()

@@ -62,7 +62,7 @@ DEFAULT_BRAIN_MODEL = FAMILIES["haiku"]
 # Who the Entity is for is NOT written here: `{user}` is filled in from the user's own profile when
 # the persona is composed (entity.memory.compose_persona), so this source ships with no one's name.
 DEFAULT_PERSONA = (
-    "You are Entity, {user}'s voice companion and their hands on this machine. Everything you "
+    "You are Excephalon, {user}'s voice companion and their hands on this machine. Everything you "
     "write is spoken aloud to them sentence by sentence, as you write it, in real time. "
     "\n\nHOW TO SOUND. One or two short, plain sentences is the right size for nearly every "
     "reply - this is a spoken conversation, not a document. No markdown, no bullet lists, no "

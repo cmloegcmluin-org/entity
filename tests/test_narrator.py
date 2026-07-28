@@ -226,6 +226,34 @@ def test_handled_with_punctuation_is_still_swallowed_whole():
     assert not outbox
 
 
+def test_news_survives_a_brain_that_hangs():
+    # After 04:43 one morning, everything that needed the brain simply never reached the screen:
+    # one narration hanging inside a wedged session holds the lock, and every later one - the
+    # agent's merge report, the twenty-minute quiet warning - queues behind it until the app
+    # closes and all of it dies unspoken. The wait is bounded now: past the deadline the plain
+    # notice carries the news.
+    release = threading.Event()
+
+    class WedgedBrain:
+        def respond(self, utterance, *, remember=True, on_text=None):
+            release.wait(2.0)
+            return "A late answer."
+
+    outbox = Outbox()
+    Narrator(WedgedBrain(), outbox, deadline=0.05).tell("finished", "fixer", "It merged. Details.")
+
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert "It merged." in str(news)
+    assert news.composed is False  # app-authored: the ledger must read it back to the brain
+
+    # The brain's answer, when it finally comes, is dropped - the news must not be told twice.
+    release.set()
+    settled = threading.Event()
+    settled.wait(0.2)
+    assert not outbox
+
+
 def test_an_errands_outcome_is_worded_like_any_other_news():
     brain, outbox = FakeBrain("Done - that old log is tucked into the archive."), Outbox()
     Narrator(brain, outbox).tell("errand", "errands", "Moved the log into the archive.")

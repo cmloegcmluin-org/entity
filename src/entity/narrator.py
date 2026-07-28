@@ -19,6 +19,13 @@ from entity.relay import notice
 # Alone it means silence; leading real news it is stripped, because it is protocol, never speech.
 _HANDLED_LEAD = re.compile(r"(?i)^handled\b[\s\-–—:,.!]*")
 
+# How long one narration may sit inside the brain before the plain notice ships instead. The brain
+# serializes its turns, so this must cover a few queued narrations - but not much more: the night
+# everything after 04:43 went unspoken, one hung narration held the lock and the agent's merge
+# report and the quiet warning both queued behind it until the app closed and they died. News must
+# never die with a wedged session - that is this module's whole reason to exist.
+NARRATE_DEADLINE = 120.0
+
 # What the brain is asked, by kind of event. Each is a system-originated turn: the brain answers
 # it the way it answers anything - and because it composed the words, it remembers saying them.
 PROMPTS = {
@@ -80,9 +87,10 @@ PROMPTS = {
 class Narrator:
     """Turns one agent event into one brain-composed interjection, off-thread, never lost."""
 
-    def __init__(self, brain, outbox, stage_of=None):
+    def __init__(self, brain, outbox, stage_of=None, deadline=NARRATE_DEADLINE):
         self._brain = brain
         self._outbox = outbox
+        self._deadline = deadline
         # Where the agent's work stands in the delivery loop (the desk's delivery_stage) - the
         # same finished turn is presentation news while building, wrap-up news while landing.
         self._stage_of = stage_of or (lambda agent: None)
@@ -98,18 +106,46 @@ class Narrator:
         if kind == "finished" and self._stage_of(agent) == "landing":
             kind = "landing"
         prompt = PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
-        try:
-            said = self._brain.respond(prompt, remember=True)
-        except Exception:
-            said = ""
-        else:
-            stripped = _HANDLED_LEAD.sub("", said.strip())
-            if said.strip() and not stripped:
-                return  # the brain kicked the agent onward itself; there is no news to deliver
-            said = stripped
-        if said.strip():
-            self._outbox.push(said.strip(), about=agent, composed=True)
-        else:
-            # The brain could not answer; the capped plain notice still carries the news, marked
-            # app-authored so the unwritten-lines ledger reads it back to the brain next turn.
+        # One claim on delivering this event: whichever of the two threads takes it speaks, the
+        # other stays silent. Without it, a reply landing just as the deadline runs out would be
+        # spoken AND covered by the notice - the same news twice.
+        claim = threading.Lock()
+        claimed = []
+        composed = threading.Event()
+
+        def take():
+            with claim:
+                if claimed:
+                    return False
+                claimed.append(True)
+                return True
+
+        def compose():
+            try:
+                said = self._brain.respond(prompt, remember=True)
+            except Exception:
+                said = ""
+            else:
+                stripped = _HANDLED_LEAD.sub("", said.strip())
+                if said.strip() and not stripped:
+                    # The brain kicked the agent onward itself; there is no news to deliver.
+                    # Claimed, so a timed-out waiter doesn't ship a notice about it either way -
+                    # composing finished in time or it didn't, and the brain chose silence.
+                    take()
+                    composed.set()
+                    return
+                said = stripped
+            if take():
+                if said.strip():
+                    self._outbox.push(said.strip(), about=agent, composed=True)
+                else:
+                    # The brain could not answer; the capped plain notice still carries the news,
+                    # marked app-authored so the ledger reads it back to the brain next turn.
+                    self._outbox.push(notice(agent, report), about=agent)
+            composed.set()
+
+        threading.Thread(target=compose, daemon=True).start()
+        if not composed.wait(self._deadline) and take():
+            # The brain has sat on this past the deadline - wedged, or buried under a queue that
+            # will outlive the user's patience. The notice ships now; the late answer is dropped.
             self._outbox.push(notice(agent, report), about=agent)

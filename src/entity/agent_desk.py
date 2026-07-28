@@ -104,12 +104,28 @@ CONTINUE_AFTER_RESTART = (
     "report where things stand."
 )
 
+# A revived agent recorded mid-landing owes exactly one thing: the outcome. Left "idle" in
+# peace, one sat on a merge that had landed within a minute while its tab stayed open all day.
+RESUME_LANDING = (
+    "Entity restarted while you were landing approved work. Check the PR's real state right now "
+    "- gh pr view --json state,mergedAt - and make this reply the outcome: merged, or exactly "
+    "what stands in the way. Still queued? Watch it in the foreground of this same turn until "
+    "it lands or fails; never hand the watch to a background task and end your turn."
+)
+
 # Sent by the desk itself the moment a verdict is recorded - after the user has spoken, what
-# remains is mechanical, and mechanical steps are not left to anyone's memory.
+# remains is mechanical, and mechanical steps are not left to anyone's memory. The watch is
+# commanded in the FOREGROUND because a landing agent once handed it to a background task and
+# ended its turn: the merge landed one minute later, nothing re-engages an idle agent when a
+# background task finishes, and the "it merged" the user was owed never existed - its tab sat
+# open as a ghost all day.
 APPROVED_LAND_IT = (
     "The user looked at what you presented and signed off. Land it now: push your branch, open "
-    "the PR, enqueue it on the merge queue, and see it through - then report that it merged, or "
-    "exactly what stopped it."
+    "the PR, enqueue it on the merge queue, and watch it in the FOREGROUND of this same turn - "
+    "one command that polls until the PR is merged or fails, however long that takes. Never hand "
+    "the watch to a background task and end your turn: nothing re-engages you when a background "
+    "watcher fires, and the merge report is the one thing still owed. Your reply is the outcome: "
+    "it merged, or exactly what stopped it."
 )
 REJECTED_TRY_AGAIN = (
     "The user looked at what you presented and rejected it: {feedback}\n"
@@ -231,7 +247,9 @@ class AgentDesk:
                 desked.state = "idle"
                 self._desked[name] = desked
             revived.append(name)
-            if entry.get("state") in ("starting", "working"):
+            if entry.get("delivery") == "landing":
+                self._dispatch(name, RESUME_LANDING)
+            elif entry.get("state") in ("starting", "working"):
                 self._dispatch(name, CONTINUE_AFTER_RESTART)
         self._persist()
         return revived
@@ -330,7 +348,23 @@ class AgentDesk:
                 + (f" - last said: {_one_line(entry.last_word)}" if entry.last_word else "")
                 for name, entry in self._desked.items()
             ]
-        return "\n".join(lines) or "No agents running."
+        fleet = "\n".join(lines) or "No agents running."
+        orphans = self._orphan_tabs()
+        if orphans:
+            fleet += ("\nTabs still open from agents no longer at the desk - close_agent_tab "
+                      "closes one: " + ", ".join(orphans))
+        return fleet
+
+    def _orphan_tabs(self):
+        """Log files still in the live folder with no agent behind them: tabs the user can see
+        that the fleet lines would never mention. The window draws a tab per log file, the desk
+        knows only its agents - and when the two views split, he asked for a leftover tab to be
+        closed and the brain, briefed from the desk alone, could not even see its name."""
+        if self._log_dir is None or not self._log_dir.exists():
+            return []
+        with self._lock:
+            known = set(self._desked)
+        return sorted(path.stem for path in self._log_dir.glob("*.log") if path.stem not in known)
 
     def retire(self, name):
         """Wrap a finished agent up in one gesture: close its tab (the log moves into the archive),

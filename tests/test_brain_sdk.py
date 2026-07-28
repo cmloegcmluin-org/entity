@@ -447,3 +447,90 @@ def test_a_compacted_session_does_not_immediately_compact_again():
     # session1 grows 20k,40k,60k over turns 4-6, compact again at turn7 -> session2. Two compactions.
     assert len(sessions) == 3
     assert sessions[1].closed
+
+
+def test_a_hung_ask_is_shed_within_the_deadline_and_the_next_turn_gets_a_fresh_session():
+    # The silent wedge: an ask that never raises and never returns. One froze a whole evening -
+    # the landing narration hung at 21:24 holding the one session, his 21:46 question sat at
+    # "(thinking…)" forever, and every submission after that was never even read. Bounded now:
+    # past the deadline the dead session is closed and the turn fails fast, and the turn after
+    # that runs on a fresh session.
+    import threading
+
+    sessions = []
+
+    class SessionThatHangsOnceThenAnswers:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+            self.released = threading.Event()
+            self.closed = False
+            sessions.append(self)
+
+        def ask(self, message, on_text=None):
+            if len(sessions) == 1:  # only the first session is the dead one
+                self.released.wait(5.0)
+                raise RuntimeError("stream torn down")
+            return f"reply to {message}"
+
+        def close(self):
+            self.closed = True
+            self.released.set()  # closing the dead session is what makes its ask finally raise
+
+        def interrupt(self):
+            pass
+
+    brain = SdkBrain(session_factory=SessionThatHangsOnceThenAnswers)
+
+    # The wedge is healed INSIDE the turn: the dead session is shed at the deadline and the
+    # existing retry-once path answers on a fresh one - so the user gets their reply, not an
+    # error, and only a wedge that survives the retry too surfaces at all.
+    assert brain.respond("are you there", deadline=0.2) == "reply to are you there"
+
+    assert sessions[0].closed  # the wedged session was shed, not kept
+    assert len(sessions) == 2  # ...and the answer came from its replacement
+
+
+def test_a_turn_stuck_behind_a_wedged_ask_frees_the_lock_by_shedding_the_session():
+    # The lock half of the same failure: the hung ask HOLDS the brain's one-at-a-time lock, so
+    # every later turn blocked before any recovery could run. A turn that cannot even acquire
+    # the lock within its deadline closes the session out from under the zombie - whose ask then
+    # raises and releases the lock - and proceeds.
+    import threading
+
+    sessions = []
+
+    class SessionThatHangsUntilClosed:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+            self.released = threading.Event()
+            sessions.append(self)
+
+        def ask(self, message, on_text=None):
+            if len(sessions) == 1 and message == "the one that hangs":
+                self.released.wait(5.0)
+                raise RuntimeError("stream torn down")
+            return f"reply to {message}"
+
+        def close(self):
+            self.released.set()
+
+        def interrupt(self):
+            pass
+
+    brain = SdkBrain(session_factory=SessionThatHangsUntilClosed)
+
+    def swallow():
+        try:
+            brain.respond("the one that hangs")
+        except Exception:
+            pass
+
+    stuck = threading.Thread(target=swallow, daemon=True)
+    stuck.start()
+    for _ in range(200):  # wait until the zombie actually holds the lock
+        if sessions and not sessions[0].released.is_set() and brain._respond_lock.locked():
+            break
+        threading.Event().wait(0.01)
+
+    assert brain.respond("hello?", deadline=0.3) == "reply to hello?"
+    stuck.join(timeout=2.0)

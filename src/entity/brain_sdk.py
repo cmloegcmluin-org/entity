@@ -39,6 +39,18 @@ from entity.models import FAMILIES
 from entity.sdk_session import SdkSession
 
 
+# How long one ask may sit unanswered before the session is declared dead and shed. Generous -
+# real turns think for under half a minute - because a false positive throws away a working
+# session mid-answer, while the failure this bounds is a stream that has ALREADY died without
+# raising: one such hang held the brain's lock from 21:24 one evening, and everything after -
+# the merged report, a direct question at 21:46, every later submission - waited on it forever.
+RESPOND_DEADLINE = 180.0
+
+
+class _AskWedged(Exception):
+    """An ask outlived the deadline without answering or raising - the silent dead stream."""
+
+
 class BrainInterrupted(Exception):
     """Raised by `respond` when the user barges in mid-thought: the in-flight call was cancelled, so
     there's no reply to speak and nothing to remember - the caller just returns to listening."""
@@ -198,16 +210,27 @@ class SdkBrain:
         if self._session is not None:
             self._session.interrupt()
 
-    def respond(self, utterance, *, remember=True, on_text=None):
+    def respond(self, utterance, *, remember=True, on_text=None, deadline=RESPOND_DEADLINE):
         """Ask the brain. `on_text` receives each user-facing text delta as the model writes it -
         the feed a streaming voice speaks from. `remember=False` keeps a background exchange out
-        of the carried-forward recent-turns window."""
-        with self._respond_lock:  # everything shares the one session, so serialize onto it
+        of the carried-forward recent-turns window.
+
+        Bounded twice over, because a stream can die without ever raising and one that did held
+        the whole evening hostage: a turn that cannot even ACQUIRE the one-session lock within
+        `deadline` closes the session out from under the stuck ask - which makes that ask raise
+        in its own thread and free the lock - and a turn whose own ask answers nothing within
+        `deadline` sheds the session the same way and fails fast, so the loop lives to speak an
+        error instead of sitting at "(thinking…)" forever."""
+        if not self._respond_lock.acquire(timeout=deadline):
+            self._shed()  # the zombie's ask raises when its session dies; the lock comes free
+            if not self._respond_lock.acquire(timeout=10.0):
+                raise _AskWedged("the brain's session is wedged and shedding it did not free it")
+        try:
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
                 self._compact()
             try:
-                reply = self._live_session().ask(utterance, on_text=on_text)
+                reply = self._bounded_ask(utterance, on_text, deadline)
             except Exception:
                 # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
                 # retry - re-asking would re-run the very work we just cancelled.
@@ -216,7 +239,7 @@ class SdkBrain:
                 # Otherwise the session may be wedged (a dropped connection strands every later turn
                 # as a "glitch"). Rebuild it and try once more; only give up if that also fails.
                 self._reconnect()
-                reply = self._live_session().ask(utterance, on_text=on_text)
+                reply = self._bounded_ask(utterance, on_text, deadline)
             if self._interrupting.is_set():
                 raise BrainInterrupted  # a reply may have landed, but it was cut off - drop it unspoken
             if _is_usage_limit(reply):
@@ -224,11 +247,49 @@ class SdkBrain:
                 # try once more: a fresh session recovers the moment usage is back, instead of
                 # parroting the notice forever. If still gone, the retry says so once - not in a loop.
                 self._reconnect()
-                reply = self._live_session().ask(utterance, on_text=on_text)
+                reply = self._bounded_ask(utterance, on_text, deadline)
             self._observe(self._session.last_context_tokens)
             if remember:
                 self._recent.append((utterance, reply))
             return reply
+        finally:
+            self._respond_lock.release()
+
+    def _bounded_ask(self, utterance, on_text, deadline):
+        """One ask that cannot hang: past the deadline the session is closed - the stranded ask
+        raises inside its worker and is dropped - and the caller sees the wedge as an exception,
+        which its own retry-once path already knows how to handle."""
+        session = self._live_session()
+        outcome = {}
+        answered = threading.Event()
+
+        def work():
+            try:
+                outcome["reply"] = session.ask(utterance, on_text=on_text)
+            except BaseException as exc:
+                outcome["raised"] = exc
+            finally:
+                answered.set()
+
+        threading.Thread(target=work, daemon=True).start()
+        if not answered.wait(deadline):
+            self._shed(session)
+            raise _AskWedged(f"no answer in {deadline:.0f}s - the session was shed")
+        if "raised" in outcome:
+            raise outcome["raised"]
+        return outcome["reply"]
+
+    def _shed(self, session=None):
+        """Close a dead session so anything still blocked inside it raises and moves on. The next
+        turn builds a fresh one, seeded with the recent turns, through `_live_session`."""
+        dead = session if session is not None else self._session
+        if dead is self._session:
+            self._session = None
+        try:
+            if dead is not None:
+                dead.close()
+        except Exception:
+            pass
 
     def _observe(self, context_tokens):
         """Remember where each fresh session started, so growth is measured from its own floor."""

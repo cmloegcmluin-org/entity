@@ -1,3 +1,5 @@
+<img src="assets/excephalon.png" alt="the Chaosphere: a brain in a spiked wire cage" width="128" align="right">
+
 # The Entity
 
 A local, voice-in/voice-out, memory-persistent partner you *pair* with on your life. You talk;

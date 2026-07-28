@@ -117,6 +117,24 @@ class Agents:
     def names(self):
         return sorted(discover(self._directory)) if self._directory else []
 
+    def archived_names(self):
+        """Every retired agent's log, still readable. Closing a tab moves the log here rather
+        than deleting it - but with no way back in, "archived" read as "thrown away" the day a
+        stranded task's only record went to the archive unverified."""
+        return sorted(discover(self._archive)) if self._archive else []
+
+    def archived_entries(self, name):
+        # Keyed apart from the live reads: a fresh agent may reuse a retired one's name, and the
+        # two logs are different files telling different stories.
+        key = ("archived", name)
+        if key not in self._read:
+            self._read[key] = (LogTail(self._archive / f"{name}.log"),
+                               TranscriptModel(clock=self._clock))
+        tail, model = self._read[key]
+        for line in tail.poll().splitlines():
+            model.apply("history", line)
+        return model.entries
+
     def close(self, name):
         """Take an agent away and archive its log, so it stays closed. Moving the log aside is
         what makes that stick - the roster is the folder, so a log still in it comes straight
@@ -392,7 +410,17 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.get("/agents")
     def show_agents():
-        return render_template("agents.html", here="/agents", names=agents.names())
+        return render_template("agents.html", here="/agents", names=agents.names(),
+                               archived=agents.archived_names())
+
+    @app.get("/agents/archived/<name>")
+    def archived_agent_thread(name):
+        # The static /archived/ segment outranks the live route's converter, so an archived log
+        # is reachable even while a live agent holds the same name.
+        if name not in agents.archived_names():  # never read a path that did not come from the archive
+            return ({"entries": [], "at": 0, "total": 0, "sessions": []}, 404)
+        return _thread(agents.archived_entries(name), request.args.get("since", 0, type=int),
+                       {"you": "Excephalon", "entity": name, "heads-up": "Excephalon · heads-up"})
 
     @app.get("/agents/<name>")
     def agent_thread(name):

@@ -250,7 +250,10 @@ def test_the_config_page_has_a_contents_column_and_one_word_card_titles(tmp_path
     assert ">Instructions</h2>" in page           # "Standing Instructions" went one-word
     assert 'id="card-credits"' not in page        # the credits card is gone; the warning speaks
     assert "Fixes for common mishearings of domain terms, sorted by what they fix." in page
-    assert "applies immediately" in page.lower()  # no more "picked up when it next starts"
+    # The immediacy is the mechanism's job, not the copy's: neither the old staleness warning nor
+    # the reassurance that replaced it belongs in a subtitle.
+    assert "picked up when it next starts" not in page.lower()
+    assert "applies immediately" not in page.lower()
 
 
 def test_the_close_dialog_and_its_wiring_reach_every_page():
@@ -556,8 +559,31 @@ def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):
 
     assert not (logs / "fixer.log").exists()
     assert (tmp_path / "agent-logs-archive" / "fixer.log").exists()
-    assert 'data-agent="fixer"' not in client.get("/agents").get_data(as_text=True)
+    page = client.get("/agents").get_data(as_text=True)
+    assert '<div class="agent thread" data-agent="fixer">' not in page  # the live tab is gone
+    assert '<details class="archived" data-agent="fixer">' in page      # but the exchange is not
     assert client.post("/agents/fixer/close").status_code == 404  # and it is not a path to touch
+
+
+def test_an_archived_agents_exchange_can_be_read_back(tmp_path):
+    # Closing a tab archives the log rather than deleting it - but with no way back in,
+    # "archived" read as "thrown away" the day a stranded task's only record went there unread.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "settler.log").write_text("[10:00:00] ENTITY> settle the merge\n"
+                                         "[10:00:31] AGENT> Merged.\n", encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    assert '<details class="archived" data-agent="settler">' in client.get(
+        "/agents").get_data(as_text=True)
+    shown = client.get("/agents/archived/settler").get_json()
+    assert [(entry["name"], entry["text"]) for entry in shown["entries"]] == [
+        ("Excephalon", "settle the merge"), ("settler", "Merged."),
+    ]
+    # Only names straight out of the archive folder are paths to read.
+    assert client.get("/agents/archived/elsewhere").status_code == 404
 
 
 def test_the_win_enter_chord_reaches_the_page_as_one_send():

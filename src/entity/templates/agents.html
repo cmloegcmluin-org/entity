@@ -19,6 +19,20 @@
   {% else %}
   <p class="empty">No agent is running. When Entity starts one, its work appears here.</p>
   {% endfor %}
+  {% if archived %}
+  {#- Closing a tab archives its log rather than deleting it - and with no way back in, the
+      archive read as a black hole the day a stranded task's only record went there unread. -#}
+  <section class="section" id="archive">
+    <h2>Archive</h2>
+    <p class="note">Every closed agent's exchange, kept. Open one to read it back.</p>
+    {% for name in archived %}
+    <details class="archived" data-agent="{{ name }}">
+      <summary>{{ name }}</summary>
+      <div class="agent-archive thread"></div>
+    </details>
+    {% endfor %}
+  </section>
+  {% endif %}
 </main>
 {% endblock %}
 

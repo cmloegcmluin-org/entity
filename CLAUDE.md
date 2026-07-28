@@ -239,12 +239,22 @@ and the keyboard hook run on workers, and the page's own poll is what drains the
 Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hearing only the user's
 voice.
 
-**Hearing only the user.** Nothing is built. Loopback gating WAS built and was taken back out the
-same day, because it went deaf to the user — the meter moved with their voice and not a word reached
-the draft. That is the whole lesson, and it cost an hour of a broken app: a false negative here is
-far worse than a false positive, and the threshold that produced it had been fitted to a single
-four-minute sample. Read `git log` for `playback.py` before rebuilding it. What was measured and
-still holds:
+**Hearing only the user.** The measuring half now exists: `voiceprint.py` learns the user's voice
+from one minute of them reading (`Learn my voice.bat` at the repo root records it, keeps the raw
+wav in `runtime/voice/` for future re-learning, saves the averaged speaker embedding) and scores
+any audio against it — sherpa-onnx CAM++ (`runtime/voice/wespeaker_en_voxceleb_CAM++.onnx`, 28 MB;
+torch stacks don't install on this Python). Measured on real session audio: the model separates
+voices (Entity against its own print ~0.55–0.95; a mostly-him session against Entity's print
+median 0.18, and the high outliers in that set were literally Entity's replies leaking through the
+speakers into the armed mic) — but a print scraped from UNLABELED session audio matches everything
+a little, so enrollment is the clean recording, never scraped bootstrapping. No score DECIDES
+anything yet: `score()` yields None without a print, callers keep the words, and the dropping
+threshold gets chosen only from scores logged across real sessions. Loopback gating WAS built once
+and was taken back out the same day, because it went deaf to the user — the meter moved with their
+voice and not a word reached the draft. That is the whole lesson, and it cost an hour of a broken
+app: a false negative here is far worse than a false positive, and the threshold that produced it
+had been fitted to a single four-minute sample. Read `git log` for `playback.py` before rebuilding
+it. What was measured and still holds:
 
 - WASAPI loopback capture works, but not through `sounddevice` — its PortAudio build (19.7.0-devel)
   has no loopback flag and enumerates no loopback devices. `soundcard` does it.

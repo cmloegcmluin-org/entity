@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %} · Config{% endblock %}
+{% block shape %}config{% endblock %}
+
+{#- One row of a list, written once here: Enter makes the next one by cloning the row it was
+    pressed in, so there is no second definition of a row's shape in the script to drift from this
+    one. Which is why a list is never empty - an empty section still draws one row, and that row
+    is both where they type and what the next one is made from.
+
+    No <label> around it. A label makes a click anywhere inside it tick the box, and these are rows
+    they type into: the caret would never land where they aimed it. -#}
+{#- The `#id`, when an item has one, rides on the row as `data-id` so a save sends it back and the
+    same item keeps the same number - and is shown beside the box so he can refer to it. -#}
+{% macro row(item={}) -%}
+<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+{%- endmacro %}
+
+{% block content %}
+{#- Everything he tunes, down one page: what were the Profile, Memory, Persona and Translations
+    tabs ("consolidate in all the contents"), with a contents column beside it so each card is one
+    click away. The composed-persona dump is deliberately absent - it duplicated, worse, what this
+    page already shows. -#}
+<aside id="toc" aria-label="Cards">
+  {%- for section in sections %}
+  <button type="button" data-goes="card-{{ section.title | lower | replace(' ', '-') }}">{{ section.title }}</button>
+  {%- endfor %}
+  <button type="button" data-goes="card-memory">Memory</button>
+  <button type="button" data-goes="card-standing">Standing instructions</button>
+  <button type="button" data-goes="card-translations">Translations</button>
+  <button type="button" data-goes="card-vocabulary">Vocabulary</button>
+  <button type="button" data-goes="card-credits">Credits</button>
+</aside>
+
+<main id="content" class="reading">
+  {% for section in sections %}
+  <section class="section" id="card-{{ section.title | lower | replace(' ', '-') }}" data-heading="{{ section.heading }}">
+    {#- The open count, at a glance: "don't just show a count of done, also show a count of the
+        yet-to-do". Done keeps its one count at the fold below - he asked for no second copy. -#}
+    <h2>{{ section.title }}
+      <span class="counts">{{ section["active"] | length }} open</span>
+    </h2>
+    {#- An item that gets done is ticked, never removed: a done item is the only record that a
+        complaint was heard and acted on. Dimmed rather than struck through, so it stays legible. -#}
+    <ul class="checklist">
+      {% for item in section["active"] %}{{ row(item) }}
+      {% else %}{{ row() }}{# somewhere to type when nothing is open; Enter grows it from there #}
+      {% endfor %}
+    </ul>
+    {% if section["done"] %}
+    <details class="done-fold">
+      <summary>Done · {{ section["done"] | length }}</summary>
+      <ul class="checklist done-list">
+        {% for item in section["done"] %}{{ row(item) }}{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </section>
+  {% else %}
+  <p class="empty">No profile is loaded, so there is nothing here to edit.</p>
+  {% endfor %}
+
+  <section class="section" id="card-memory">
+    <h2>Memory</h2>
+    <textarea class="writing grows" data-learned="true" aria-label="Memory">{{ learned }}</textarea>
+  </section>
+
+  <section class="section" id="card-standing">
+    <h2>Standing instructions</h2>
+    <p class="note">How you've told it to behave, plus anything it files here itself. One per
+      line; picked up when it next starts.</p>
+    <textarea class="writing grows" data-persona="true"
+              aria-label="Standing instructions">{{ additions }}</textarea>
+  </section>
+
+  <section class="section" id="card-translations">
+    <h2>Translations</h2>
+    {#- What it is quietly rewriting, written out - a correction he cannot see is one he cannot
+        argue with. One styled list, editable in place: no "built in" labels, no second plain-text
+        copy of his own rules, and + makes a fresh row ("click a + button at the bottom and then a
+        new row appears with the green arrow and you can just fill in the text on either side").
+        Each row keeps the stock rule for its words in data-stock, so a save writes exactly the
+        rows that differ from what ships - the page never labels which is which. -#}
+    <p class="note">What it heard, and what you actually said. Changes are picked up when it next
+      starts.</p>
+    <ul class="swaps" id="swaps">
+      {% for swap in swaps %}
+      <li data-heard="{{ swap.heard }}" data-stock="{{ swap.stock }}">
+        <span class="heard" contenteditable="plaintext-only">{{ swap.heard }}</span>
+        <span class="arrow" aria-hidden="true">→</span>
+        <span class="said" contenteditable="plaintext-only">{{ swap.said }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <button type="button" class="btn add-swap" id="add-swap" title="Add a translation">+</button>
+  </section>
+
+  <section class="section" id="card-vocabulary">
+    <h2>Vocabulary</h2>
+    <p class="note">Anything close enough to one of these is corrected to it. Your project folders
+      and your lexicon, as they were when this session started.</p>
+    <ul class="terms">
+      {% for term in terms %}<li>{{ term }}</li>
+      {% else %}<li class="empty">No vocabulary was loaded.</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="section" id="card-credits">
+    <h2>Credits</h2>
+    {%- if usage %}
+    <p class="note">Roughly <b>{{ "{:,}".format(usage.tokens) }}</b> tokens have gone out in the
+      last five hours, estimated from this machine's own records - everything on the plan, not
+      just this app.</p>
+    {%- endif %}
+    <p class="note">It says something when that spending crosses 80% of the line below, and again
+      at the line. No number, no warnings.</p>
+    <input class="writing budget" data-budget="true" inputmode="numeric"
+           value="{{ usage.budget if usage and usage.budget else '' }}"
+           placeholder="tokens per five hours, e.g. 500000" aria-label="Credit warning line">
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='writing.js') }}"></script>
+{% endblock %}

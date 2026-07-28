@@ -66,14 +66,74 @@ const flushAll = () => { for (const what of [...waiting.keys()]) flush(what, tru
 addEventListener("pagehide", flushAll);
 document.addEventListener("visibilitychange", () => { if (document.hidden) flushAll(); });
 
-/* ---- the boxes of text: what Entity has learned, and the words it swaps ---------------------- */
+/* ---- the boxes of text: memory, and the standing instructions ------------------------------- */
 
-for (const box of document.querySelectorAll(".writing")) {
-  // Which page this box belongs to, and so where it writes itself back to.
-  const where = box.dataset.persona ? "/persona" : box.dataset.learned ? "/memory" : "/translations";
+for (const box of document.querySelectorAll(".writing[data-persona], .writing[data-learned]")) {
+  // Which card this box is, and so where it writes itself back to.
+  const where = box.dataset.persona ? "/persona" : "/memory";
   const save = (leaving) => post(where, asForm({ body: box.value }), leaving);
   box.addEventListener("input", () => soon(box, save));
   box.addEventListener("blur", () => flush(box));
+}
+
+/* The credit line the warning fires from - a number, saved like any other box. */
+const budget = document.querySelector("[data-budget]");
+if (budget) {
+  const save = (leaving) => post("/usage-budget", asForm({ tokens: budget.value }), leaving);
+  budget.addEventListener("input", () => soon(budget, save));
+  budget.addEventListener("blur", () => flush(budget));
+}
+
+/* ---- the words it swaps: styled rows, edited in place --------------------------------------- */
+
+/* One list, no labels, no second plain-text copy: each row is typed straight into, + makes the
+   next. A save writes exactly the rows that differ from what ships (each row carries the stock
+   rule for its words in data-heard/data-stock), so an untouched built-in is never copied into
+   his file and an emptied row simply stops being written - which is how one is removed. */
+const swaps = document.getElementById("swaps");
+if (swaps) {
+  const rules = () => [...swaps.querySelectorAll("li")]
+    .map((row) => ({
+      heard: row.querySelector(".heard").textContent.trim(),
+      said: row.querySelector(".said").textContent.trim(),
+      was: row.dataset.heard ?? "",
+      stock: row.dataset.stock ?? "",
+    }))
+    .filter((rule) => rule.heard && rule.said
+                      && (rule.heard !== rule.was || rule.said !== rule.stock))
+    .map((rule) => `${rule.heard} -> ${rule.said}`)
+    .join("\n");
+  const save = (leaving) => post("/translations", asForm({ body: rules() }), leaving);
+  swaps.addEventListener("input", () => soon(swaps, save));
+  swaps.addEventListener("focusout", () => flush(swaps));
+  document.getElementById("add-swap")?.addEventListener("click", () => {
+    const row = document.createElement("li");
+    row.dataset.heard = "";
+    row.dataset.stock = "";
+    for (const part of ["heard", "arrow", "said"]) {
+      const span = document.createElement("span");
+      span.className = part;
+      if (part === "arrow") {
+        span.textContent = "→";
+        span.setAttribute("aria-hidden", "true");
+      } else {
+        span.contentEditable = "plaintext-only";
+      }
+      row.append(span);
+    }
+    swaps.append(row);
+    row.querySelector(".heard").focus();
+  });
+}
+
+/* ---- the config page's contents column ------------------------------------------------------ */
+
+for (const goes of document.querySelectorAll("#toc button")) {
+  goes.addEventListener("click", () => {
+    document.getElementById(goes.dataset.goes)?.scrollIntoView({ block: "start" });
+    for (const other of goes.parentElement.children) other.removeAttribute("aria-current");
+    goes.setAttribute("aria-current", "true");
+  });
 }
 
 /* ---- the profile's lists: a box to tick, and the words beside it ----------------------------- */

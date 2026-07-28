@@ -1,11 +1,14 @@
+import json
 import socket
 import threading
 
 from entity.desktop import (
     WINDOW,
+    Controls,
     free_port,
     open_window,
     restore_context_menus,
+    restored_geometry,
     serve,
     set_app_id,
 )
@@ -25,6 +28,31 @@ class _App:
         self.ran.set()
 
 
+class _Hook:
+    def __init__(self):
+        self.handlers = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+
+class _Shown:
+    """A window as pywebview hands one back: events to hook, a spot on screen, a destroy."""
+
+    def __init__(self):
+        self.events = type("events", (), {"closing": _Hook(), "loaded": _Hook()})()
+        self.x, self.y, self.width, self.height = 120, 80, 980, 760
+        self.evaluated = []
+        self.destroyed = False
+
+    def evaluate_js(self, script):
+        self.evaluated.append(script)
+
+    def destroy(self):
+        self.destroyed = True
+
+
 class _Webview:
     """Stands in for pywebview, so the wiring can be checked without opening a window.
 
@@ -35,10 +63,12 @@ class _Webview:
         self.made = []
         self.started = []
         self.order = []
+        self.window = _Shown()
 
     def create_window(self, title, url, **how):
         self.made.append((title, url, how))
         self.order.append("window")
+        return self.window
 
     def start(self, **how):
         self.started.append(how)
@@ -64,14 +94,60 @@ def test_the_window_is_pointed_at_the_app_on_loopback_only():
     assert webview.started == [{}]
 
 
-def test_closing_the_window_asks_first():
+def test_closing_the_window_asks_first_in_the_apps_own_styling(tmp_path):
     # "Godddamnit, I accidentally closed this app. There should definitely be an 'are you sure'
     # confirmation dialog!!" - and behind that X are a live conversation, a mic and running agents.
+    # The asking is the page's own dialog now (the native confirm was a light-mode system box in
+    # a dark app): the X saves where the window stands, hands the page the question, and keeps
+    # the window - only the dialog's Close, through Controls.quit, actually closes.
     webview = _Webview()
+    spot = tmp_path / "window-position.json"
 
-    open_window(_App(), webview=webview, port=8123)
+    open_window(_App(), webview=webview, port=8123, position_path=spot)
+    [asked] = webview.window.events.closing.handlers
 
-    assert webview.made[0][2]["confirm_close"] is True
+    assert asked() is False                       # the native close is cancelled...
+    assert "askToClose" in webview.window.evaluated[0]  # ...and the page asks instead
+    assert json.loads(spot.read_text(encoding="utf-8"))["x"] == 120
+
+
+def test_the_dialogs_close_is_what_actually_closes(tmp_path):
+    window = _Shown()
+    controls = Controls(window, tmp_path / "spot.json")
+
+    controls.quit()
+
+    assert window.destroyed
+    assert json.loads((tmp_path / "spot.json").read_text(encoding="utf-8"))["width"] == 980
+
+
+def test_restart_closes_marked_so_the_winddown_relaunches():
+    window = _Shown()
+    controls = Controls(window)
+
+    controls.restart()
+
+    assert window.destroyed
+    assert controls.restart_asked is True
+
+
+class _Screen:
+    def __init__(self, x, y, width, height):
+        self.x, self.y, self.width, self.height = x, y, width, height
+
+
+def test_the_window_reopens_where_it_was_closed_unless_that_screen_is_gone():
+    # "Entity window should remember where it was on the screen when it was most recently closed,
+    # and reopen there" - but a spot on an unplugged monitor would reopen it off-screen, which
+    # reads as an app that vanished.
+    saved = {"x": 2000, "y": 100, "width": 800, "height": 600}
+    two_screens = [_Screen(0, 0, 1920, 1080), _Screen(1920, 0, 1920, 1080)]
+
+    assert restored_geometry(saved, two_screens) == saved      # its monitor is there
+    assert restored_geometry(saved, two_screens[:1]) == {}     # its monitor is gone: defaults
+    assert restored_geometry(saved, None) == saved             # nothing known: trust the record
+    assert restored_geometry({}, two_screens) == {}            # nothing saved: defaults
+    assert restored_geometry({"x": 5}, two_screens) == {}      # a torn record: defaults
 
 
 def test_the_taskbar_identity_is_claimed_before_the_window_exists(monkeypatch):

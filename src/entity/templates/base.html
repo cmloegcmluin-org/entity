@@ -5,20 +5,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entity{% block title %}{% endblock %}</title>
+<title>Excephalon{% block title %}{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body class="{% block shape %}page{% endblock %}">
   <nav class="topbar">
-    {%- for path, name in [("/", "Conversation"), ("/profile", "Profile"),
-                           ("/persona", "Persona"), ("/memory", "Memory"),
-                           ("/translations", "Translations"), ("/agents", "Agents")] %}
+    {%- for path, name in [("/", "Conversation"), ("/config", "Config"), ("/agents", "Agents")] %}
     <a class="btn topbtn{{ ' here' if here == path }}" href="{{ path }}">{{ name }}</a>
     {%- endfor %}
     <span class="saved" id="saved" aria-live="polite"></span>
+    {#- One click from a landed fix to running it: winds this process down and brings up a fresh
+        one on the current code, agents reattaching as they do across any restart. -#}
+    <button type="button" id="restart" class="btn topbtn restart"
+            title="Restart to pick up landed fixes">⟳ Restart</button>
   </nav>
 
   {% block content %}{% endblock %}
+
+  {#- The X asks first - in the app's own styling, since the native confirm turned up light-mode
+      in a dark app. The window's closing event calls askToClose() (closing.js) instead of
+      closing; only this dialog's Close actually does. -#}
+  <div id="veil" hidden>
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="closing-title">
+      <h3 id="closing-title">Close Excephalon?</h3>
+      <p>Behind this window are the conversation, the mic, and any agents still working.</p>
+      <div class="choices">
+        <button type="button" class="btn" id="keep-open">Keep it open</button>
+        <button type="button" class="btn leave" id="really-close">Close</button>
+      </div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='closing.js') }}"></script>
 
   {% block scripts %}{% endblock %}
 </body>

@@ -142,8 +142,16 @@ const wordsOf = (row) => row.querySelector(".item");
 const itemsOf = (list) => rowsOf(list).map((row) => ({
   id: row.dataset.id ? Number(row.dataset.id) : null,
   done: row.querySelector("input")?.checked ?? false,
-  text: wordsOf(row).textContent,
+  text: storedText(row),
 }));
+
+/* What the file stores for this row: the words he edits, with its filing stamp put back on the
+   end so the round-trip keeps the exact "(filed …)" the file had. The stamp shows as a link beside
+   the words, never inside them, so no keystroke can edit or lose it. */
+function storedText(row) {
+  const words = wordsOf(row).textContent;
+  return row.dataset.filed ? `${words} (filed ${row.dataset.filed})` : words;
+}
 
 /* A fresh, empty row shaped like an existing one. A new item carries none of the id the row it was
    cloned from has, so the server numbers it anew rather than two rows claiming one number. The page
@@ -152,6 +160,9 @@ function freshRow(like) {
   const row = like.cloneNode(true);
   row.className = "";
   row.removeAttribute("data-id");
+  // A new row is not filed - drop the cloned stamp and its link, so it saves as plain words.
+  row.removeAttribute("data-filed");
+  row.querySelector(".filed")?.remove();
   wordsOf(row).textContent = "";
   const box = row.querySelector("input");
   if (!box) return row;  // a bullet row: the dot came along in the clone, and that is all of it

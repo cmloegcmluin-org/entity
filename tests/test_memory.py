@@ -595,6 +595,22 @@ def test_a_filed_enhancement_carries_its_filing_time(tmp_path):
     assert "- [ ] speak slower (filed 2026-07-27 00:12)" in path.read_text(encoding="utf-8")
 
 
+def test_a_filed_stamp_is_split_off_so_the_page_can_link_it_instead_of_showing_text():
+    # The "(filed …)" stamp is not something he edits or wants to read as text - what he wants is
+    # to jump to that point in the conversation. So the page shows it as a link beside the words,
+    # and this is where the words and the moment are told apart. Only a real date-and-time is a
+    # filing stamp; an older free-text note has no moment to point at and stays part of the words.
+    from entity.memory import split_filed
+
+    assert split_filed("warn about credits (filed 2026-07-28 02:23)") == (
+        "warn about credits", "2026-07-28 02:23")
+    assert split_filed("with seconds (filed 2026-07-28 02:23:41)") == (
+        "with seconds", "2026-07-28 02:23:41")
+    assert split_filed("plain item, no stamp") == ("plain item, no stamp", None)
+    assert split_filed("old one (filed 2026-07-27 by Claude directly, from the conversation)") == (
+        "old one (filed 2026-07-27 by Claude directly, from the conversation)", None)
+
+
 def test_refiling_the_same_words_does_not_pile_up_a_duplicate(tmp_path):
     # Five separate tickets in his list are one bug, refiled - and this session's drive filed the
     # auto-listen bug twice and the grammar layer twice in one evening. The same words, still

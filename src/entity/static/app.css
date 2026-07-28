@@ -114,6 +114,13 @@ body.page .topbar, body.config .topbar {
 .checklist .tag { flex: none; min-width: 4ch; color: var(--dim);
                   font-family: ui-monospace, "Cascadia Code", monospace;
                   font-size: .78rem; user-select: none; }
+/* The filing stamp, as a link to that moment in the conversation rather than dead text in the
+   words he edits. Quiet like the #id tag beside it, but it answers the pointer because it goes
+   somewhere; it never takes the caret, so editing the item cannot touch it. */
+.checklist .filed { flex: none; color: var(--dim); text-decoration: none;
+                    font-size: .72rem; white-space: nowrap; user-select: none; }
+.checklist .filed:hover { color: var(--accent); text-decoration: underline; }
+
 /* Done tasks fold away at the foot of their list so what he still has to act on is what he sees.
    The summary is the same quiet label as the section headings, with a caret that turns when it
    opens - and it starts shut, since the point is to get them out of the way. */
@@ -266,6 +273,10 @@ body.page .topbar, body.config .topbar {
    in both directions, and what it grew over was the message it had just copied. */
 .copy {
   position: absolute;
+  /* Above the thread's rows. The buttons are the thread's first children and every entry is
+     appended after them; .day/.session/.said are all position:relative, so an equal z-index let
+     the later full-width break row paint over the button and swallow the click on it. */
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -367,15 +378,15 @@ body.page .topbar, body.config .topbar {
    at Entity ("as you can see per Entity · 10:12:59...") - riding just under the copy button. */
 .copylink { margin-top: 2px; }
 
-/* The draft box's own right-click menu. The embedded browser offers no paste menu of its own
-   here, and dictation is not always how words arrive. One item, torn down on any click away. */
-#paste-menu { position: fixed; z-index: 30; background: var(--panel, #222); color: var(--fg);
-              border: 1px solid var(--line); border-radius: 8px; padding: 4px;
-              box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
-#paste-menu button { display: block; width: 100%; text-align: left; background: none;
-                     border: none; color: inherit; font: inherit; padding: 6px 14px;
-                     border-radius: 6px; cursor: pointer; }
-#paste-menu button:hover { background: rgba(127, 255, 0, .12); }
+/* The right-click menus - the draft box's (Paste, Copy) and a message header's (Copy). One shape
+   for both, since the embedded browser offers no menu of its own here. Torn down on any click away. */
+.popmenu { position: fixed; z-index: 30; background: var(--panel, #222); color: var(--fg);
+           border: 1px solid var(--line); border-radius: 8px; padding: 4px;
+           box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+.popmenu button { display: block; width: 100%; text-align: left; background: none;
+                  border: none; color: inherit; font: inherit; padding: 6px 14px;
+                  border-radius: 6px; cursor: pointer; }
+.popmenu button:hover { background: rgba(127, 255, 0, .12); }
 
 /* The section heading carries the open count - what he acts on; done is counted at its fold. */
 h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-left: 10px; }

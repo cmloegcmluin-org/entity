@@ -477,6 +477,22 @@ def _same_ask(one, another):
     return fold(one) == fold(another)
 
 
+# A filed item carries "(filed 2026-07-28 02:23)" - the moment it was filed. The page shows that
+# as a link to that point in the conversation, not as text in what he edits, so it is split off
+# here. Narrower than the dedup strip above on purpose: only a real date-and-time is a moment to
+# point at, so an older free-text note ("(filed 2026-07-27 by Claude directly...)") stays part of
+# the words rather than becoming a dead link.
+_FILED_STAMP = re.compile(r"\s*\(filed (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)\)\s*$")
+
+
+def split_filed(text):
+    """An enhancement item as (the words he edits, the filing moment or None)."""
+    match = _FILED_STAMP.search(text)
+    if not match:
+        return text, None
+    return text[:match.start()].rstrip(), match.group(1)
+
+
 def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING, *, stamp=None):
     """File one enhancement bullet INSIDE its section, so the window's tab (which re-reads this
     file) shows it the moment it lands - not at the end of the file under some other heading.

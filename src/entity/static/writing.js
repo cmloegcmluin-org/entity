@@ -92,18 +92,32 @@ if (budget) {
    his file and an emptied row simply stops being written - which is how one is removed. */
 const swaps = document.getElementById("swaps");
 if (swaps) {
-  const rules = () => [...swaps.querySelectorAll("li")]
-    .map((row) => ({
+  /* A left side of (circasonant) - circa + sonant, anything sounding close enough - marks a
+     lexicon row: those write back to his lexicon, the word-for-word rules to his translations. */
+  const CIRCASONANT = "(circasonant)";
+  const parts = () => {
+    const rows = [...swaps.querySelectorAll("li")].map((row) => ({
       heard: row.querySelector(".heard").textContent.trim(),
       said: row.querySelector(".said").textContent.trim(),
       was: row.dataset.heard ?? "",
       stock: row.dataset.stock ?? "",
-    }))
-    .filter((rule) => rule.heard && rule.said
-                      && (rule.heard !== rule.was || rule.said !== rule.stock))
-    .map((rule) => `${rule.heard} -> ${rule.said}`)
-    .join("\n");
-  const save = (leaving) => post("/translations", asForm({ body: rules() }), leaving);
+    }));
+    return {
+      rules: rows
+        .filter((rule) => rule.heard && rule.heard !== CIRCASONANT && rule.said
+                          && (rule.heard !== rule.was || rule.said !== rule.stock))
+        .map((rule) => `${rule.heard} -> ${rule.said}`).join("\n"),
+      /* Every term still on the page - the server reconciles his lexicon against this, and
+         folder-scanned terms pass through untouched. */
+      terms: rows.filter((rule) => rule.heard === CIRCASONANT && rule.said)
+        .map((rule) => rule.said).join("\n"),
+    };
+  };
+  const save = (leaving) => {
+    const { rules, terms } = parts();
+    post("/translations", asForm({ body: rules }), leaving);
+    post("/lexicon", asForm({ terms }), leaving);
+  };
   swaps.addEventListener("input", () => soon(swaps, save));
   swaps.addEventListener("focusout", () => flush(swaps));
   document.getElementById("add-swap")?.addEventListener("click", () => {

@@ -114,6 +114,7 @@ class Dictation:
         hearing=None,
         clock=time.monotonic,
         polish=None,
+        precook=None,
         scorekeeper=None,
     ):
         self._transcriber = transcriber
@@ -148,6 +149,13 @@ class Dictation:
         self._clock = clock
         self._last_worded = None  # when words last landed in the draft: the mid-thought clock
         self._polish = polish  # repairs a submitted draft's pause-chopped punctuation, bounded
+        # The repair starts WHILE he talks: each chunk re-hands the draft-so-far to the polisher's
+        # background pass - "ideally something is already working in the background while I'm
+        # speaking" - so the submit finds most of the repair already done. The mirror of what was
+        # sent to the box uses the page's own joining rule, so the submit text usually matches a
+        # repaired prefix exactly; a manual edit just falls back to the bounded repair.
+        self._precook = precook
+        self._draft_mirror = ""
         # Watch-only voice measuring (see voiceprint.Scorekeeper): every worded chunk is scored
         # against the learned voice on the keeper's own worker. Measured, never acted on - the
         # threshold that will one day act is chosen from these logs, not fitted blind.
@@ -183,6 +191,7 @@ class Dictation:
         if self._polish is not None and text:
             text = self._polish(text)
         self._submitted.put(text)
+        self._draft_mirror = ""  # the box empties with the turn; the next draft starts fresh
         self._last_worded = None  # the thought was handed over; he is not mid-anything now
         if self._armed:
             self.set_recording(False)
@@ -426,6 +435,17 @@ class Dictation:
         # the whitespace-only chunk made exactly that case do nothing at all.
         if text.strip() or "\n" in text:
             self._on_draft(text)
+            self._grow_mirror(text)
+
+    def _grow_mirror(self, chunk):
+        """Track what the box holds, joined by the page's own rule, and hand the draft-so-far to
+        the background repair after every chunk - the fix already underway while he speaks."""
+        joined = self._draft_mirror
+        if joined and not (joined.endswith(" ") or joined.endswith("\n")):
+            joined += " "
+        self._draft_mirror = joined + chunk
+        if self._precook is not None:
+            self._precook(self._draft_mirror)
 
     def _retract_what_he_took_back(self, spoken):
         """"Scratch that" - rewind, and say it again. True if this chunk was them doing that.

@@ -109,3 +109,70 @@ def test_word_safe_allows_a_respelling_and_nothing_looser():
     assert word_safe("push it to Maine", "push to Maine") is False          # a word eaten
     assert word_safe("push it to Maine", "push it up to Maine") is False    # a word invented
     assert word_safe("push it to Maine", "to Maine push it") is False       # reordered
+
+
+def test_the_background_repair_makes_the_submit_instant():
+    # "ideally something is already working in the background while I'm speaking" - each pause
+    # hands the draft-so-far to the polisher, so by submit the repair is usually already done
+    # and the turn does not wait out a model call at all.
+    import time
+
+    raw = "I think we should. Rename the button"
+    repaired = "I think we should rename the button"
+    polisher, session = _polisher(reply=repaired)
+
+    polisher.precook(raw)
+    for _ in range(100):
+        if polisher._precooked:
+            break
+        time.sleep(0.01)
+
+    start = time.monotonic()
+    assert polisher.polish(raw) == repaired
+    assert time.monotonic() - start < 0.2  # served from the finished background repair
+    assert raw in session.asked[0]
+
+
+def test_a_tail_spoken_after_the_background_repair_still_lands():
+    # He keeps talking after the last background pass: the cached head is used as repaired and
+    # only the new tail goes to the model, bounded.
+    import time
+
+    head_raw = "I think we should. Rename the button"
+    head_repaired = "I think we should rename the button"
+
+    class TwoAnswers:
+        def __init__(self):
+            self.replies = [head_repaired, "and also the icon."]
+            self.asked = []
+
+        def ask(self, prompt, on_message=None, on_text=None):
+            self.asked.append(prompt)
+            return self.replies[min(len(self.asked) - 1, 1)]
+
+    session = TwoAnswers()
+    polisher = Polisher(session_factory=lambda options: session, deadline=1.0)
+    polisher.precook(head_raw)
+    for _ in range(100):
+        if polisher._precooked:
+            break
+        time.sleep(0.01)
+
+    out = polisher.polish(head_raw + " and also the Icon.")
+
+    assert out == f"{head_repaired} and also the icon."
+
+
+def test_an_edited_draft_falls_back_to_the_whole_bounded_repair():
+    import time
+
+    polisher, session = _polisher(reply="entirely different words here")
+    polisher.precook("what was. Dictated first")
+    for _ in range(100):
+        if polisher._precooked:
+            break
+        time.sleep(0.01)
+
+    out = polisher.polish("he rewrote the whole box by hand")
+
+    assert out == "he rewrote the whole box by hand"  # refused repair -> his words as typed

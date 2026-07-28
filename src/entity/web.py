@@ -51,7 +51,7 @@ SECTIONS = (
     ("Goals", "Goals", "checklist",
      "The life-goal work you're pairing on - ticked when reached."),
     ("Projects", "Projects", "checklist",
-     "The long undertakings of that life, held so the thread isn't lost across days or months."),
+     "Things to accomplish."),
     ("Context", "Life context", "bullets",
      "Background it should always hold about your life - facts, not tasks."),
 )
@@ -282,11 +282,16 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             # override worth writing from a built-in left exactly as it was - without the page
             # ever LABELLING which is which ("it doesn't matter whether a translation is
             # 'built-in' or not; don't display that").
-            swaps=[{"heard": heard, "said": in_force[heard], "stock": stock.get(heard, "")}
-                   for heard in sorted(in_force)],
-            # The old Vocabulary card, as (paraphone) rows: the live lexicon plus what the
-            # project folders contribute, shown as one alphabet.
-            paraphones=sorted(set(scanned_terms) | set(lexicon_now), key=str.lower),
+            # One list, sorted by the RIGHT side: "for a given destination word, all the
+            # existing translations into it" at a glance - nobody rallies around a mishearing.
+            # The (circasonant) rows are the old Vocabulary card: the live lexicon plus what
+            # the project folders contribute.
+            swaps=sorted(
+                [{"heard": heard, "said": in_force[heard], "stock": stock.get(heard, "")}
+                 for heard in in_force]
+                + [{"heard": "(circasonant)", "said": term, "stock": ""}
+                   for term in set(scanned_terms) | set(lexicon_now)],
+                key=lambda swap: (swap["said"].casefold(), swap["heard"].casefold())),
             memories=memories,
             instructions=[line.lstrip("-* ").strip() for line in _persona_additions().splitlines()
                           if line.strip()],
@@ -348,7 +353,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.post("/lexicon")
     def write_lexicon():
-        """The (paraphone) rows written back: additions join his lexicon, removals leave it, and
+        """The (circasonant) rows written back: additions join his lexicon, removals leave it, and
         the folder-scanned terms pass through untouched - a folder's name is not this page's to
         delete. In force immediately, like every other row on the card."""
         if on_lexicon_saved is not None:

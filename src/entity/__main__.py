@@ -289,8 +289,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
 
     announce("Excephalon is waking up...")
     # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks
-    # in a submitted draft, inside a hard deadline, changing no words (see entity.polish).
-    polisher = Polisher()
+    # and mishearings of his own terms in a submitted draft, inside a scaled deadline (see
+    # entity.polish). It knows his vocabulary - "ideas" only becomes Highdeas if the name is in
+    # front of it - and the warmup queues without blocking the boot.
+    polisher = Polisher(terms=_vocab_terms)
     polisher.warmup()
     # The desk holds each agent as a live session on its own thread; the brain drives it through
     # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
@@ -355,6 +357,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
             hearing=hearing,
             polish=polisher.polish,  # pause-chopped punctuation repaired on the way to the brain
+            precook=polisher.precook,  # ...and already being repaired while he speaks
             muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
@@ -520,6 +523,16 @@ def main(argv=None):
     timings = "--no-timings" not in argv  # per-turn think/speak readout is on unless they opt out
     gui = "--gui" in argv and not text_mode  # a window instead of the terminal (voice runs only)
 
+    # A hard fault should leave a trail: every thread's python stack lands in runtime/faults.log
+    # the moment the interpreter dies of a real crash, so a vanished window comes with evidence.
+    try:
+        import faulthandler
+
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        faulthandler.enable(open(RUNTIME_DIR / "faults.log", "a", encoding="utf-8"))
+    except Exception:
+        pass  # the recorder must never be the thing that breaks the start
+
     # In a windowed run every startup line goes to the window's feed INSTEAD of stdout - launched
     # from the Start Menu there is no terminal at all, and launched from a command line they don't
     # want the window's contents spat out there too.
@@ -602,6 +615,20 @@ def main(argv=None):
     def ask_restart():
         control = window.get("controls")
         if control is not None:
+            # The relaunch is a DETACHED helper spawned now, at the request - not the old
+            # process's last act. It waits for this pid to die, however that goes (the one time
+            # it mattered, teardown misbehaved, the spawn line never ran, and he reopened by
+            # hand), then starts a fresh app on the current code.
+            import os
+            import subprocess
+
+            subprocess.Popen(
+                [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "entity.relauncher",
+                 str(os.getpid()), str(_REPO)],
+                cwd=str(_REPO),
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
             control.restart()
 
     app = create_app(
@@ -658,21 +685,10 @@ def main(argv=None):
     )
     stop.set()  # the window was closed: ask the loop to wind down, as closing the Tk one did
     # Wait the wind-down out on EVERY close, not only a restart: the process used to exit while
-    # the worker was still mid-goodbye, tearing native audio down under a live thread - and a
-    # close that hangs or crashes is exactly what he reported from the new dialog.
+    # the worker was still mid-goodbye, tearing native audio down under a live thread. The
+    # restart's relaunch needs nothing here - a detached helper (entity.relauncher) is already
+    # waiting for this pid to die, however the wind-down goes.
     session.join(timeout=30)
-    if controls is not None and controls.restart_asked:
-        # The Restart button: the fleet is recorded by now, so a fresh process on the current
-        # code revives it. Spawned only after the wind-down, or the new instance would revive
-        # from a fleet record the old one was still writing.
-        import subprocess
-
-        subprocess.Popen(
-            [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "entity", "--gui"],
-            cwd=str(Path(__file__).resolve().parents[2]),
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-            close_fds=True,
-        )
 
 
 if __name__ == "__main__":

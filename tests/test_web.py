@@ -228,8 +228,11 @@ def test_every_translation_in_force_is_an_editable_row_with_no_labels_and_no_sec
     # The old Vocabulary card lives here now, as rows whose left side is the coined word for
     # "anything close enough": scanned folder names and his lexicon, one alphabet.
     assert 'id="card-vocabulary"' not in page
-    assert page.count("(paraphone)") >= 2
+    assert page.count("(circasonant)") >= 2
     assert "Git Bash" in page
+    # Sorted by the RIGHT side, one alphabet: for a destination word, every rule into it sits
+    # together - the (circasonant) Notecraft row lands beside "notecraf -> Notecraft".
+    assert page.index("Git Bash") < page.index("notecraf")
 
     client.post("/translations", data={"body": "notecraf -> Notecraft\nhi deas -> Notecraft"})
 
@@ -246,7 +249,7 @@ def test_the_config_page_has_a_contents_column_and_one_word_card_titles(tmp_path
     assert 'id="toc"' in page                     # each card is one click away
     assert ">Instructions</h2>" in page           # "Standing Instructions" went one-word
     assert 'id="card-credits"' not in page        # the credits card is gone; the warning speaks
-    assert "Fixes for common mishearings of domain terms." in page
+    assert "Fixes for common mishearings of domain terms, sorted by what they fix." in page
     assert "applies immediately" in page.lower()  # no more "picked up when it next starts"
 
 

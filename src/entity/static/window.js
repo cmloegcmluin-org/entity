@@ -200,12 +200,19 @@ let shownState = null;  // the poll repeats the state four times a second, and r
 function showState(state, loudness) {
   if (state !== shownState) {
     shownState = state;
-    mic.disabled = false;  // the first state report proves the mic exists; until then clicks died silently
-    mic.className = `btn ${state === "muted" ? "" : state}`;
-    // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
-    mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
-    mic.title = { recording: "Stop recording", muted: "Start recording",
-                  speaking: "Stop it talking" }[state];
+    if (state === "waking") {
+      // The server is up but the mic isn't: its models are still loading. Stay dimmed and
+      // unclickable - enabling here is what let clicks die silently for the first seconds.
+      mic.disabled = true;
+      mic.title = "Entity is still waking up";
+    } else {
+      mic.disabled = false;  // the pump's first report proves the mic exists
+      mic.className = `btn ${state === "muted" ? "" : state}`;
+      // Glyph plus the ACTION a click takes - "click the words 'mic off' to record" was backwards.
+      mic.textContent = { recording: "■ stop", muted: "● record", speaking: "◼ stop" }[state];
+      mic.title = { recording: "Stop recording", muted: "Start recording",
+                    speaking: "Stop it talking" }[state];
+    }
   }
   level.style.width = state === "recording"
     ? `${Math.min(1, loudness / LEVEL_FULL) * 100}%`

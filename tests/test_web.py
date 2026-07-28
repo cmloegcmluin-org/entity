@@ -347,6 +347,20 @@ def test_the_poll_is_the_pump_and_carries_the_mic_and_what_dictation_typed():
     assert client.get("/messages?since=1").get_json()["dictated"] == []
 
 
+def test_the_mic_is_waking_until_the_pump_first_reports():
+    # Born "muted", the window enabled its record button on the first poll - seconds before the
+    # mic's models had loaded, so clicks died silently and the button read as broken.
+    feed = TranscriptFeed()
+    mirror = Mirror(feed, clock=lambda: "12:00:00")
+    client = _client(mirror.model, mirror=mirror)
+
+    assert client.get("/messages").get_json()["state"] == "waking"
+
+    feed.push("state", "muted")  # the pump's first act on starting: say how the mic stands
+
+    assert client.get("/messages").get_json()["state"] == "muted"
+
+
 def test_the_poll_carries_the_sentence_he_is_still_in_the_middle_of():
     feed = TranscriptFeed()
     mirror = Mirror(feed, clock=lambda: "12:00:00")

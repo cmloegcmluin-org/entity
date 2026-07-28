@@ -205,7 +205,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         since = min(request.args.get("since", 0, type=int), len(entries))
         retract, typed, send = mirror.dictated() if mirror is not None else (0, [], False)
         return _thread(entries, since) | {
-            "state": mirror.state if mirror is not None else "muted",
+            "state": mirror.state if mirror is not None else "waking",
             "level": mirror.level if mirror is not None else 0.0,
             "hearing": mirror.hearing if mirror is not None else "",
             "retract": retract,

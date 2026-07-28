@@ -1,7 +1,7 @@
 import threading
 import time
 
-from entity.polish import Polisher, same_words
+from entity.polish import Polisher, word_safe
 
 
 class FakeSession:
@@ -32,12 +32,22 @@ def test_a_choppy_draft_comes_back_as_the_sentences_he_meant():
     assert raw in session.asked[0]
 
 
-def test_a_repair_that_changes_any_word_is_refused_by_code():
-    # The model is ASKED to touch only punctuation; this is what makes it UNABLE to eat a word.
+def test_a_repair_that_eats_a_word_is_refused_by_code():
+    # The model may fix a mishearing, but whatever it answers it is UNABLE to eat a word.
     raw = "add the risque option. To the dropdown"
     polisher, _ = _polisher(reply="add an option to the dropdown")
 
     assert polisher.polish(raw) == raw
+
+
+def test_a_repair_may_fix_an_obvious_mishearing():
+    # "I'd like the repair layer to be able to correct things like 'Maine' which is obviously
+    # supposed to be `main` because we're doing software development, not tourism."
+    raw = "The way you said that previously. implied that it was already on Maine."
+    repaired = "The way you said that previously implied that it was already on main."
+    polisher, _ = _polisher(reply=repaired)
+
+    assert polisher.polish(raw) == repaired
 
 
 def test_a_late_repair_lets_the_raw_text_through():
@@ -86,6 +96,16 @@ def test_one_warm_session_serves_every_submit():
     assert len(made) == 1
 
 
-def test_same_words_sees_through_punctuation_but_not_through_words():
-    assert same_words("I think. We should go", "I think we should go!") is True
-    assert same_words("I think we should go", "I think we should stay") is False
+def test_word_safe_sees_through_punctuation_but_not_through_words():
+    assert word_safe("I think. We should go", "I think we should go!") is True
+    assert word_safe("I think we should go", "I think we should stay") is False
+
+
+def test_word_safe_allows_a_respelling_and_nothing_looser():
+    # A mishearing is the same word in different letters; anything further is a different word.
+    assert word_safe("push it to Maine", "push it to main") is True
+    assert word_safe("send the Jason file", "send the JSON file") is True
+    assert word_safe("push it to Maine", "push it to production") is False  # replaced outright
+    assert word_safe("push it to Maine", "push to Maine") is False          # a word eaten
+    assert word_safe("push it to Maine", "push it up to Maine") is False    # a word invented
+    assert word_safe("push it to Maine", "to Maine push it") is False       # reordered

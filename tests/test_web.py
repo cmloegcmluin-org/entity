@@ -376,6 +376,25 @@ def test_the_instructions_card_is_bullet_rows_that_save_back(tmp_path):
     assert "one line at night" in additions.read_text(encoding="utf-8")
 
 
+def test_memory_and_instructions_declare_where_their_rows_save(tmp_path):
+    # Both are whole-file bullet cards, not profile sections, and the in-place list editor wires
+    # any section that says where its rows save. Instructions lost exactly this once: its card was
+    # turned into bullet rows but nothing told the editor where they go, so Enter made no new bullet
+    # and edits never left the page. The marker the editor keys on is rendered here, so a template
+    # change can't silently un-wire either card again.
+    learned = tmp_path / "learned.md"
+    learned.write_text("- prefers metric units\n", encoding="utf-8")
+    additions = tmp_path / "persona.md"
+    additions.write_text("- never read a commit hash aloud\n", encoding="utf-8")
+    client = _client(learned_path=learned, persona_additions_path=additions)
+
+    page = client.get("/config").get_data(as_text=True)
+    memory = page.split('id="card-memory"')[1].split("</section>")[0]
+    instructions = page.split('id="card-instructions"')[1].split("</section>")[0]
+    assert 'data-save="/memory"' in memory
+    assert 'data-save="/persona"' in instructions
+
+
 def test_what_entity_has_learned_is_read_and_written_back(tmp_path):
     learned = tmp_path / "learned.md"
     learned.write_text("- prefers metric units\n", encoding="utf-8")

@@ -66,24 +66,6 @@ const flushAll = () => { for (const what of [...waiting.keys()]) flush(what, tru
 addEventListener("pagehide", flushAll);
 document.addEventListener("visibilitychange", () => { if (document.hidden) flushAll(); });
 
-/* ---- the boxes of text: memory, and the standing instructions ------------------------------- */
-
-for (const box of document.querySelectorAll(".writing[data-persona], .writing[data-learned]")) {
-  // Which card this box is, and so where it writes itself back to.
-  const where = box.dataset.persona ? "/persona" : "/memory";
-  const save = (leaving) => post(where, asForm({ body: box.value }), leaving);
-  box.addEventListener("input", () => soon(box, save));
-  box.addEventListener("blur", () => flush(box));
-}
-
-/* The credit line the warning fires from - a number, saved like any other box. */
-const budget = document.querySelector("[data-budget]");
-if (budget) {
-  const save = (leaving) => post("/usage-budget", asForm({ tokens: budget.value }), leaving);
-  budget.addEventListener("input", () => soon(budget, save));
-  budget.addEventListener("blur", () => flush(budget));
-}
-
 /* ---- the words it swaps: styled rows, edited in place --------------------------------------- */
 
 /* One list, no labels, no second plain-text copy: each row is typed straight into, + makes the
@@ -233,7 +215,7 @@ function caretIn(words) {
 /* A section is one list, whether it is drawn as one or as an open list with a folded Done one
    beneath it. So the unit here is the <section>, not a <ul>: a save gathers every row under it,
    and an edit in either list writes the whole thing back. */
-for (const section of document.querySelectorAll(".section[data-heading], .section[data-kind='memory']")) {
+for (const section of document.querySelectorAll(".section[data-heading], .section[data-save]")) {
   /* What the page believes the file holds, so a save can tell their own edit from an item Entity
      filed into the same section while the window sat open. It is what was last SENT rather than
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
@@ -241,12 +223,12 @@ for (const section of document.querySelectorAll(".section[data-heading], .sectio
   let drawn = itemsOf(section).map((item) => item.text);
   const save = async (leaving) => {
     const items = itemsOf(section);
-    /* The Memory card is the learned file, not a profile section: its rows go back as the plain
-       bullet lines the file keeps, and the whole file is those rows. */
-    if (section.dataset.kind === "memory") {
+    /* A card that names where it saves (Memory, Instructions) is a whole file of bullet lines,
+       not a profile section: its rows go back as the `- x` lines the file keeps. */
+    if (section.dataset.save) {
       const body = items.map((item) => item.text.trim()).filter(Boolean)
-        .map((fact) => `- ${fact}`).join("\n");
-      return post("/memory", asForm({ body }), leaving);
+        .map((line) => `- ${line}`).join("\n");
+      return post(section.dataset.save, asForm({ body }), leaving);
     }
     const was = drawn;
     drawn = items.map((item) => item.text);

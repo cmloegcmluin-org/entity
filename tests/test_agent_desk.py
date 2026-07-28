@@ -295,6 +295,28 @@ def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
         assert line.startswith("["), f"unstamped line: {line!r}"  # every line carries its time
 
 
+def test_an_agent_log_line_carries_its_full_date_so_a_tail_tells_fresh_from_stale(tmp_path):
+    # "still no timestamps" was answered with a clock time per line - but a time alone can't say
+    # which DAY it was written. A log is read from its TAIL (the foreman's recent_log, a human's
+    # `tail`, the window's newest lines), where the once-a-day date header sits far above and out of
+    # reach, so a line an agent wrote yesterday reads exactly like one it wrote a minute ago. The
+    # full date on every line is what lets a reader tell a working agent from a dead session at a
+    # glance - without it there is no telling stale from fresh.
+    import re
+
+    desk, outbox, _ = _desk(log_dir=tmp_path)
+    desk.start("fixer", "/tmp/wt", "fix the drive link")
+    assert _wait_for(lambda: bool(outbox))
+    desk.close()
+
+    stamped = [line for line in (tmp_path / "fixer.log").read_text(encoding="utf-8").splitlines()
+               if line.startswith("[")]
+    assert stamped, "no stamped lines to read"
+    for line in stamped:
+        assert re.match(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] ", line), \
+            f"line does not carry its date, so a tail can't date it: {line!r}"
+
+
 def test_closing_the_desk_shuts_its_agents_down():
     desk, outbox, made = _desk()
     desk.start("fixer", "/tmp/wt", "a task")

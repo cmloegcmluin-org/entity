@@ -433,7 +433,15 @@ class AgentDesk:
         return True if reason is None else reason
 
     def _open_log(self, name):
-        return Transcript(self._log_dir / f"{name}.log") if self._log_dir is not None else None
+        # A full date+time on every line, not just the clock time the conversation transcript uses.
+        # An agent log is read from its TAIL - the foreman's recent_log, a human's `tail`, the
+        # window's newest lines - where the once-a-day date header sits far above and out of reach,
+        # so a time-only stamp leaves a line the agent wrote yesterday reading exactly like one it
+        # wrote a minute ago. The date on each line is what lets a reader tell a working agent from a
+        # dead session at a glance.
+        if self._log_dir is None:
+            return None
+        return Transcript(self._log_dir / f"{name}.log", timefmt="%Y-%m-%d %H:%M:%S")
 
     def _dispatch(self, name, message):
         thread = threading.Thread(target=self._carry, args=(name, message), daemon=True)

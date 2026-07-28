@@ -69,12 +69,14 @@ function offer(node, entries) {
   linker.style.left = copier.style.left;
 }
 
-/* A LINK to a message is its header line - "Entity · 21:14:27" - the pointer he pastes back at
-   Entity to name an exact moment of its own conversation. Only messages have one; a break is a
-   place, not a moment. */
+/* A LINK to a message is its header line WITH the date - "Entity · 2026-07-18 21:14:27" - the
+   pointer he pastes back at Entity to name an exact moment of its own conversation. The date is
+   what a bare time lacked ("could be any fucking day"); it is worked out on the server (from the
+   break above the message) and handed over ready, so the page never has to date it from a header
+   that shows only the time. Only messages have one; a break is a place, not a moment. */
 function referenceTo(node, entries) {
   const entry = entries[Number(node.dataset.at)];
-  return entry && entry.bubble ? `${entry.name} · ${entry.stamp}` : "";
+  return (entry && entry.reference) || "";
 }
 
 copier.addEventListener("click", async () => {
@@ -244,44 +246,113 @@ async function refresh() {
   }
 }
 
-refresh();
+refresh().then(jumpToHash);   // once the thread is drawn, honour a #at= we were opened with
 setInterval(refresh, 400);
+addEventListener("hashchange", jumpToHash);
 
 
-/* ---- the draft's right-click menu --------------------------------------------------------- */
+/* ---- a link to a moment: #at=<date time> --------------------------------------------------- */
 
-/* The embedded browser offers no paste menu of its own in this box, and words don't only arrive
-   by voice. The clipboard is read by the app itself (the server runs on this same machine), so
-   no browser permission stands between the click and the paste. */
-const pasteMenu = document.createElement("div");
-pasteMenu.id = "paste-menu";
-pasteMenu.hidden = true;
-const pasteItem = document.createElement("button");
-pasteItem.type = "button";
-pasteItem.append("Paste");
-pasteMenu.append(pasteItem);
-document.body.append(pasteMenu);
+/* A "(filed …)" link from the Config page lands here as #at=2026-07-28 02:23, naming the moment an
+   item was filed. Once the thread is drawn, go to that turn and mark it the way the contents list
+   marks a session it sends us to - a break at the top edge is otherwise indistinguishable from not
+   having moved. */
+function jumpToHash() {
+  const at = new URLSearchParams(location.hash.slice(1)).get("at");
+  const target = at ? turnAt(at) : null;
+  const node = target === null ? null : thread.querySelector(`[data-at="${target}"]`);
+  if (!node) return;
+  thread.scrollTop = node.offsetTop - 16;
+  for (const was of thread.querySelectorAll(".landed")) was.classList.remove("landed");
+  void node.offsetWidth;          // restart the highlight if the same link is followed twice
+  node.classList.add("landed");
+}
 
-draft.addEventListener("contextmenu", (event) => {
+/* Which drawn entry a "date HH:MM(:SS)" pointer names: the first message on that day at that
+   minute. The filing stamp is minute-precision and messages carry seconds, so it is matched to the
+   minute; failing that it falls back to the day's own break, so he lands on the right day at least. */
+function turnAt(pointer) {
+  const [date, time = ""] = pointer.trim().split(" ");
+  const minute = time.slice(0, 5);
+  let day = "";
+  for (let at = 0; at < latest.length; at++) {
+    if (latest[at].role === "day") day = latest[at].stamp;
+    if (latest[at].bubble && day === date && latest[at].stamp.startsWith(minute)) return at;
+  }
+  for (let at = 0; at < latest.length; at++) {
+    if (latest[at].role === "day" && latest[at].stamp === date) return at;
+  }
+  return null;
+}
+
+
+/* ---- the right-click menus ---------------------------------------------------------------- */
+
+/* One little menu, shaped once and used twice: the draft box's (Paste and Copy) and a message
+   header's (Copy). Items are [label, action]; it opens at the cursor and is torn down on any click
+   away or Escape. The embedded browser offers no menu of its own here, and writing the clipboard
+   is allowed even where reading it needs a permission nobody is there to grant - so Copy runs in
+   the page while Paste asks the app (which runs on this same machine) to read it back. */
+function popupMenu(items) {
+  const menu = document.createElement("div");
+  menu.className = "popmenu";
+  menu.hidden = true;
+  for (const [label, action] of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.append(label);
+    button.addEventListener("click", () => { menu.hidden = true; action(); });
+    menu.append(button);
+  }
+  document.body.append(menu);
+  return menu;
+}
+
+function openMenu(menu, event) {
   event.preventDefault();
-  pasteMenu.style.left = `${Math.min(event.clientX, innerWidth - 120)}px`;
-  pasteMenu.style.top = `${Math.min(event.clientY, innerHeight - 48)}px`;
-  pasteMenu.hidden = false;
-});
+  menu.hidden = false;  // shown first, so its measured height keeps it clear of the bottom edge
+  menu.style.left = `${Math.min(event.clientX, innerWidth - menu.offsetWidth - 8)}px`;
+  menu.style.top = `${Math.min(event.clientY, innerHeight - menu.offsetHeight - 8)}px`;
+}
 
-pasteItem.addEventListener("click", async () => {
-  pasteMenu.hidden = true;
-  const response = await fetch("/clipboard");
-  const { text } = await response.json();
+/* The draft box: paste what the app reads off the clipboard, or copy what is picked out of the box
+   (or the whole box, if nothing is selected). */
+async function pasteIntoDraft() {
+  const { text } = await (await fetch("/clipboard")).json();
   if (!text) return;
   draft.focus();
   draft.setRangeText(text, draft.selectionStart, draft.selectionEnd, "end");
   draft.dispatchEvent(new Event("input"));  // the kept-draft store must see the paste too
+}
+function copyFromDraft() {
+  const picked = draft.value.slice(draft.selectionStart, draft.selectionEnd) || draft.value;
+  if (picked) navigator.clipboard.writeText(picked);
+}
+const draftMenu = popupMenu([["Paste", pasteIntoDraft], ["Copy", copyFromDraft]]);
+draft.addEventListener("contextmenu", (event) => openMenu(draftMenu, event));
+
+/* A message header ("You · 05:01:59"): right-click to copy the same dated pointer the link button
+   copies - the useful thing to paste back at Entity, since the header on screen shows only the
+   time. The header is selectable too (see .who in app.css), so a plain drag-select still works. */
+let headerReference = "";
+const headerMenu = popupMenu([["Copy", () => headerReference
+  && navigator.clipboard.writeText(headerReference)]]);
+thread.addEventListener("contextmenu", (event) => {
+  const said = event.target.closest(".who")?.closest(".said");
+  const entry = said && said.dataset.at !== undefined ? latest[Number(said.dataset.at)] : null;
+  if (!entry || !entry.reference) return;   // not a datable message header - leave the default menu
+  headerReference = entry.reference;
+  openMenu(headerMenu, event);
 });
 
+/* Any click away, or Escape, puts every open menu away. */
 addEventListener("pointerdown", (event) => {
-  if (!pasteMenu.contains(event.target)) pasteMenu.hidden = true;
+  for (const menu of document.querySelectorAll(".popmenu")) {
+    if (!menu.contains(event.target)) menu.hidden = true;
+  }
 });
 addEventListener("keydown", (event) => {
-  if (event.key === "Escape") pasteMenu.hidden = true;
+  if (event.key === "Escape") {
+    for (const menu of document.querySelectorAll(".popmenu")) menu.hidden = true;
+  }
 });

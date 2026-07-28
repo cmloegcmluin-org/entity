@@ -24,6 +24,7 @@ from entity.memory import (
     save_learned,
     save_persona_additions,
     save_translations,
+    split_filed,
     translation_pairs,
 )
 from entity.links import link_parts, offers, open_link
@@ -58,21 +59,30 @@ SECTIONS = (
 )
 
 
-def _said(entry, label="", speakers=SPEAKERS):
+def _said(entry, label="", day="", speakers=SPEAKERS):
     """One entry as the page needs it: who said it, when, and whether it is a message at all.
 
     `label` is a session's name, which the break itself does not carry - it is worked out from
     the day above it and the first thing said inside it. The break shows exactly what the row in
-    the contents shows, so the two read as the same thing rather than as a rule and some dots."""
+    the contents shows, so the two read as the same thing rather than as a rule and some dots.
+
+    `day` is the date of the break above this entry. A message keeps only the time on screen, but
+    its `reference` - the pointer he copies and pastes back at Entity to name an exact moment -
+    carries the full date and time, since a bare "You · 05:01:59" could be any day. A break is a
+    place, not a moment, so it carries none."""
+    bubble = entry["role"] in SIDES
+    name = speakers.get(entry["role"], "")
+    dated = f"{day} {entry['stamp']}".strip()  # "date time", or just the time before the first break
     return {
         "role": entry["role"],
-        "name": speakers.get(entry["role"], ""),
+        "name": name,
         "stamp": entry["stamp"],
         "text": entry["text"],
         "label": label,
         "historical": entry["historical"],
-        "bubble": entry["role"] in SIDES,
+        "bubble": bubble,
         "side": SIDES.get(entry["role"], ""),
+        "reference": f"{name} · {dated}" if bubble else "",
         # What in it can be opened, worked out here so the page only draws it. Space-aware, so a
         # path with a folder like "Field Notes" in it is one link, not one broken one.
         "parts": link_parts(entry["text"]) if entry["role"] in SIDES else [],
@@ -85,13 +95,28 @@ def _thread(entries, since, speakers=SPEAKERS):
     # By position, never by value: every session break is the same dict as every other, so
     # looking one up by equality sent all of them to the first one in the thread.
     named = {at: label for label, at in found}
+    # The date in force at each position, from the whole thread - so a message's dated reference is
+    # right even when the poll starts past the day break that dates it.
+    day_at, day = [], ""
+    for entry in entries:
+        if entry["role"] == "day":
+            day = entry["stamp"]
+        day_at.append(day)
     return {
-        "entries": [_said(entry, named.get(since + offset, ""), speakers)
+        "entries": [_said(entry, named.get(since + offset, ""), day_at[since + offset], speakers)
                     for offset, entry in enumerate(entries[since:])],
         "at": since,
         "total": len(entries),
         "sessions": [{"label": label, "at": at} for label, at in found],
     }
+
+
+def _with_filed(item):
+    """A checklist item split into the words he edits and the filing moment shown beside them as a
+    link. The stamp stays out of the editable words - the page carries it in `data-filed` and puts
+    it back on save (see writing.js), so the file keeps the exact "(filed …)" it always did."""
+    words, filed = split_filed(item["text"])
+    return {**item, "text": words, "filed": filed}
 
 
 def _heading(found, stem):
@@ -271,7 +296,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         found = _profile_text()
 
         def section(title, heading, kind, subtitle):
-            items = checklist_items(found[heading])
+            items = [_with_filed(item) for item in checklist_items(found[heading])]
             return {"title": title, "heading": heading, "kind": kind, "subtitle": subtitle,
                     "active": [item for item in items if not item["done"]],
                     "done": [item for item in items if item["done"]]}

@@ -36,6 +36,24 @@ def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
     assert shown["sessions"] == [{"label": "2026-07-18 02:41", "at": 0}]
 
 
+def test_a_message_carries_a_full_dated_reference_the_copy_link_can_locate():
+    # The copy-link pointer he pastes back at Entity was only "You · 05:01:59" - a time with no
+    # day, which "could be any fucking day". Each message now carries a reference with the date of
+    # the break above it, and it is worked out from the whole thread so it stays right even when
+    # the poll starts past that break. A break is a place, not a moment, so it carries none.
+    model = _model("===== 2026-07-18 =====",
+                   "[02:41:38] you said: morning",
+                   "[02:42:10] entity> Morning.")
+
+    shown = _client(model).get("/messages?since=2").get_json()
+
+    assert shown["entries"][0]["reference"] == "Excephalon · 2026-07-18 02:42:10"
+
+    whole = _client(model).get("/messages").get_json()["entries"]
+    assert whole[1]["reference"] == "You · 2026-07-18 02:41:38"
+    assert whole[0]["reference"] == ""  # the day break is a place, not a turn to point at
+
+
 def test_a_poll_carries_only_what_the_page_has_not_drawn():
     # Four times a second against every session ever recorded, so it cannot hand back the lot.
     model = _model("===== 2026-07-18 =====",
@@ -102,6 +120,22 @@ def test_the_bar_stays_frozen_with_the_same_air_above_and_below_the_pills():
     assert "top: 0" in frozen
     assert "background:" in frozen  # opaque, or the scrolled content bleeds through the tabs
     assert "padding: 10px 0" in frozen  # the same air above the pills and below them
+
+
+def test_the_copy_buttons_sit_above_the_full_width_break_rows():
+    # A day or session break is a full-width row, and it is painted AFTER the copy buttons: the
+    # buttons are the thread's first children, every entry is appended after them, and .day /
+    # .session / .said are all position:relative. With equal z-index the later row wins the paint
+    # order, so the full-width break sat ON TOP of the copy button that hovering it had just
+    # placed - the button showed but the click landed on the transparent row over it, which is why
+    # copying a date heading did nothing while copying a bubble (whose gutter is clear) worked. A
+    # z-index lifts the button back above the rows.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    copy = _rule_for(css, ".copy")
+    assert "z-index:" in copy, "the copy button needs a stacking order above the break rows"
+    zindex = int(copy.split("z-index:")[1].split(";")[0].strip())
+    assert zindex >= 1
 
 
 def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
@@ -569,6 +603,44 @@ def test_the_one_click_yes_and_the_bin_are_both_on_the_page():
     page = _client().get("/").get_data(as_text=True)
 
     assert 'id="yes"' in page and 'id="bin"' in page
+
+
+def test_a_filed_enhancement_shows_its_stamp_as_a_link_not_as_text_he_edits(tmp_path):
+    # The "filed" tag was dead text sitting in the words he edits; what matters is jumping to where
+    # it was filed. So the words he edits lose the stamp, and the stamp becomes a link to that
+    # moment in the conversation (the page reads #at= and scrolls there).
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 warn about credits (filed 2026-07-28 02:23)\n",
+                       encoding="utf-8")
+
+    page = _client(profile_path=profile).get("/config").get_data(as_text=True)
+
+    # The editable words no longer carry the stamp...
+    assert ">warn about credits</span>" in page
+    assert "(filed 2026-07-28 02:23)" not in page
+    # ...it is a link to that point in the conversation, and the row remembers it for the save.
+    assert 'class="filed"' in page
+    assert 'href="/#at=2026-07-28%2002%3A23"' in page
+    assert 'data-filed="2026-07-28 02:23"' in page
+
+
+def test_the_draft_box_menu_copies_as_well_as_pastes():
+    # Its right-click menu used to say only Paste; words leave the box as well as arrive in it, so
+    # Copy joins it. (The embedded browser draws no menu of its own in this box.)
+    js = _client().get("/static/window.js").get_data(as_text=True)
+
+    built = js[js.index("draftMenu = popupMenu("):]
+    built = built[:built.index("]]")]
+    assert '"Paste"' in built and '"Copy"' in built
+
+
+def test_a_message_header_is_right_clickable_to_copy_its_dated_pointer():
+    # "You · 05:01:59" is selectable already; it is now right-clickable too, to copy the dated
+    # reference (the server's `reference`) to paste back at Entity rather than the day-less header.
+    js = _client().get("/static/window.js").get_data(as_text=True)
+
+    assert 'closest(".who")' in js
+    assert "entry.reference" in js and "headerReference" in js
 
 
 def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):

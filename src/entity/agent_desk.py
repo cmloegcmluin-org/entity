@@ -113,6 +113,18 @@ RESUME_LANDING = (
     "it lands or fails; never hand the watch to a background task and end your turn."
 )
 
+# A revived agent recorded idle with building work never presented is a black hole: nothing
+# re-engages an idle agent, so its task - however far it got - sat invisible for hours while
+# the user was told the agent "finished" with nothing to show. One died four minutes into a
+# feature when the app closed, came back idle, and the user only learned the work was stranded
+# by asking after it that night. Presenting is the one duty such an agent still owes.
+PRESENT_AFTER_RESTART = (
+    "Entity restarted and found you idle on work that was never presented for the user's eyes. "
+    "Say plainly where the task stands: if the work is ready, present it now with the exact "
+    "steps for the user to see it running; if it is unfinished, pick it back up and finish, "
+    "then present; if nothing of it survives, say that outright so it can be restarted."
+)
+
 # Sent by the desk itself the moment a verdict is recorded - after the user has spoken, what
 # remains is mechanical, and mechanical steps are not left to anyone's memory. The watch is
 # commanded in the FOREGROUND because a landing agent once handed it to a background task and
@@ -251,6 +263,10 @@ class AgentDesk:
                 self._dispatch(name, RESUME_LANDING)
             elif entry.get("state") in ("starting", "working"):
                 self._dispatch(name, CONTINUE_AFTER_RESTART)
+            elif (entry.get("delivery") or "building") == "building" and not entry.get("steps"):
+                # Recorded idle (or dead) with work never presented: the black hole. Idle it
+                # stays idle forever, and what it built goes unseen unless it is asked to show.
+                self._dispatch(name, PRESENT_AFTER_RESTART)
         self._persist()
         return revived
 

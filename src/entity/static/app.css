@@ -143,7 +143,11 @@ body.page .topbar, body.config .topbar {
    reads as one line rather than as a table to scan across - and both things are typed straight
    into, with + below making the next empty pair. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }
-.swaps li { display: flex; align-items: baseline; gap: 9px; padding: 2px 0; flex-wrap: wrap; }
+/* One shared grid for every row, so all the arrows sit in one vertical line however long the
+   left sides run - per-row flex gave each row its own arrow position. */
+.swaps { display: grid; grid-template-columns: max-content max-content 1fr;
+         column-gap: 9px; row-gap: 4px; align-items: baseline; }
+.swaps li { display: contents; }
 .swaps .heard { color: var(--dim); }
 .swaps .arrow { color: var(--accent); }
 .swaps [contenteditable] { min-width: 8ch; padding: 0 4px; margin: 0 -4px; border-radius: 6px;
@@ -157,7 +161,15 @@ body.page .topbar, body.config .topbar {
 .as-text { margin-top: 10px; }
 .as-text summary { font-size: .76rem; color: var(--dim); cursor: pointer; }
 .as-text .writing { margin-top: 6px; }
-.agent.thread { height: 340px; }
+.agent.thread, .agent-archive.thread { height: 340px; }
+/* A retired agent's exchange, reopenable in place: the same quiet fold as the done
+   lists, opening onto the same panel a live thread uses. */
+.archived summary { cursor: pointer; padding: 4px 0; color: var(--dim); list-style: none; }
+.archived summary::-webkit-details-marker { display: none; }
+.archived summary::before { content: "B8"; margin-right: 6px; display: inline-block; }
+.archived[open] summary::before { transform: rotate(90deg); }
+.archived[open] summary { color: var(--fg); }
+.archived .thread { margin: 6px 0 14px; }
 .section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
                     background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
 .section h2 .shut:hover { color: #ff9b9b; }
@@ -200,7 +212,7 @@ body.page .topbar, body.config .topbar {
 
 /* ---- the conversation --------------------------------------------------------------------- */
 
-#thread, .agent.thread {
+#thread, .agent.thread, .agent-archive.thread {
   position: relative;   /* so a session's offsetTop is measured against the thread, for the contents */
   overflow-y: auto;
   background: var(--panel);

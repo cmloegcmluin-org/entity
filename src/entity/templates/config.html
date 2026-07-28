@@ -83,7 +83,7 @@
   <section class="section" id="card-instructions" data-kind="instructions">
     <h2>Instructions</h2>
     <p class="note">How you've told it to behave, plus anything it files here itself. One per
-      row; applies immediately.</p>
+      row.</p>
     <ul class="checklist" id="instructions">
       {% for line in instructions %}{{ row({"text": line}, "bullets") }}
       {% else %}{{ row({}, "bullets") }}
@@ -100,8 +100,7 @@
         simply pass through a save untouched, since a folder's name is not this page's to
         remove. -#}
     <p class="note">Fixes for common mishearings of domain terms, sorted by what they fix. A left
-      side of (circasonant) catches anything that merely sounds close enough to the right side.
-      Applies immediately.</p>
+      side of (circasonant) catches anything that merely sounds close enough to the right side.</p>
     <ul class="swaps" id="swaps">
       {% for swap in swaps %}
       <li data-heard="{{ swap.heard }}" data-stock="{{ swap.stock }}">

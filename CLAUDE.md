@@ -184,16 +184,15 @@ model is in. `actions.py` is everything the brain can DO: thirteen typed in-proc
 the desk — among them update_persona and remember, its levers to edit its own persona overlay
 (`runtime/persona.md`) and memory the way it files an enhancement — its speech carries no control
 phrases and its options carry no built-in tools.
-`polish.py` is the punctuation repairman: one Haiku session, every exchange on one asker thread
-of its own, repairing the draft IN THE BACKGROUND as it grows (`precook`, re-handed the draft at
-every pause) so the submit mostly stitches a finished repair plus a short bounded tail. Word-safe
-by CODE via sequence alignment: respellings ("Maine"->"main") and joins ("Notes nook"->
-"Notesnook") pass, anything eaten or invented refuses the repair whole - the old same-count rule
-refused every join, which silently meant NO long dictation was ever repaired. Its prompt carries
-his vocabulary (the model cannot fix "ideas" to Highdeas without knowing the name) and a worked
-example, because the session learns from its own history: a warmup that needed no repair taught
-it to echo, and it echoed his seventy-word request back untouched. Known residuals: the model
-still sometimes declines name fixes, and a cold session's first repair can go through raw. `errands.py` is the quiet errand hand: small local chores - move a file, tidy a folder - run in one helper session with file tools, no agent tab, its outcome narrated like any other news. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
+`polish.py` is the chop mender, deterministic and instant: a sentence mark followed by a
+lowercase continuation is a break no writer makes on purpose ("what we need to do. in order"),
+so `mend` heals it on the way to the brain; a break before a capital is left alone, because
+telling a mid-sentence chop from a real boundary needs semantics and the price of guessing is
+eating his meaning. A Haiku repairman sat on this path for three rounds and was retired in his
+hands: it answered in four to eighty seconds when it answered at all, learned to echo drafts
+back unchanged from its own no-op warmup, and its submit-time wait added a flat eight seconds
+that bought nothing he could see. Do not put a model back here without solving the latency and
+the echo both; mishearings of his own terms are the transcriber's vocabulary pass's job. `errands.py` is the quiet errand hand: small local chores - move a file, tidy a folder - run in one helper session with file tools, no agent tab, its outcome narrated like any other news. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
 brain's ask_foreman tool, one persistent Opus-high session that reads a stuck agent's task,
 situation and log tail, settles technical snags itself through its one tell_agent tool (answering
 "handled", which is swallowed), and escalates to the user only what is genuinely theirs — its

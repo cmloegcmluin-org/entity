@@ -39,7 +39,7 @@ from entity.memory import (
     user_name,
 )
 from entity.outbox import Outbox
-from entity.polish import Polisher
+from entity.polish import mend
 from entity.relay import notice
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
@@ -288,12 +288,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     inbox_watcher.start()
 
     announce("Excephalon is waking up...")
-    # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks
-    # and mishearings of his own terms in a submitted draft, inside a scaled deadline (see
-    # entity.polish). It knows his vocabulary - "ideas" only becomes Highdeas if the name is in
-    # front of it - and the warmup queues without blocking the boot.
-    polisher = Polisher(terms=_vocab_terms)
-    polisher.warmup()
+    # The chop mender: spurious sentence breaks healed instantly and deterministically (see
+    # entity.polish - the model-based repairman is retired; it cost eight seconds a submit and
+    # often did nothing).
     # The desk holds each agent as a live session on its own thread; the brain drives it through
     # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
     # returns at once and whatever the agent says comes back through the outbox. Nothing the brain
@@ -356,8 +353,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         dictation = Dictation(
             transcriber, mic, recorder=recorder, stop=stop, interrupt=outbox.arrived,
             hearing=hearing,
-            polish=polisher.polish,  # pause-chopped punctuation repaired on the way to the brain
-            precook=polisher.precook,  # ...and already being repaired while he speaks
+            polish=mend,  # spurious sentence breaks healed on the way to the brain, instantly
             muted=True,  # the mic starts OFF; they turn it on when they're ready to talk
             on_draft=lambda t: feed.push("draft", t),
             on_state=lambda s: feed.push("state", s),
@@ -498,7 +494,6 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 brain.close,
                 foreman.close,
                 errands.close,
-                polisher.close,
                 mic.close if mic is not None else None,
                 recorder.close if recorder is not None else None,
                 hearing.close if hearing is not None else None,

@@ -541,6 +541,9 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
                         complete_enhancement=lambda item: ticked.append(item) or True)
     revived.revive()
 
+    # Revival just asked this never-presented agent to show its work; let that exchange finish
+    # first - retire rightly refuses an agent that is still mid-reply.
+    assert _wait_for(lambda: revived._desked["voice"].state == "idle")
     assert revived.retire("voice") is True
     assert ticked == ["Better voice"]  # and the revived agent still ticks it
 
@@ -652,6 +655,7 @@ def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
     state.write_text(json.dumps([
         {"name": "fixer", "cwd": "/wt/fixer", "task": "fix the link",
          "session_id": "sess-1", "state": "idle",
+         "delivery": "presented", "steps": "open the page and click the link",
          "model": "claude-opus-4-8", "effort": "high"},
         {"name": "builder", "cwd": "/wt/builder", "task": "build the thing",
          "session_id": "sess-2", "state": "working",
@@ -671,7 +675,8 @@ def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
     assert ("fixer", "claude-opus-4-8", "high", "sess-1") in revived
     assert ("builder", "claude-fable-5", "max", "sess-2") in revived
     assert "fixer" in desk.digest() and "builder" in desk.digest()
-    # The one that was mid-task is told to pick back up; the idle one is not disturbed.
+    # The one that was mid-task is told to pick back up; the one at rest - work presented,
+    # awaiting the user's verdict - is not disturbed.
     assert _wait_for(lambda: any("restarted" in m for a in desk._desked.values()
                                  for m in a.agent.messages))
     fixer = desk._desked["fixer"].agent
@@ -697,6 +702,27 @@ def test_revive_sends_a_landing_agent_to_settle_its_merge(tmp_path):
 
     lander = desk._desked["lander"].agent
     assert _wait_for(lambda: any("merged" in m for m in lander.messages))
+    desk.close()
+
+
+def test_revive_asks_an_idle_agent_with_unpresented_work_to_present(tmp_path):
+    # The black hole: an agent died four minutes into a feature when the app closed, came back
+    # "idle", and nothing ever re-engaged it - the user learned the work was stranded only by
+    # asking after it that night. Recorded idle with building work and nothing presented,
+    # revival now asks for the one thing still owed: where the work stands, for his eyes.
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "stray", "cwd": "/wt/stray", "task": "expand the groups",
+         "session_id": "sess-3", "state": "idle"},
+    ]), encoding="utf-8")
+    desk, _, _ = _desk(state=state)
+
+    desk.revive()
+
+    stray = desk._desked["stray"].agent
+    assert _wait_for(lambda: any("never presented" in m for m in stray.messages))
     desk.close()
 
 

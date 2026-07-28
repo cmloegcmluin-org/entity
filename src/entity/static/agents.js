@@ -16,6 +16,18 @@ if (threads.length) {
   setInterval(follow, 1000);  // an agent writes as it works, but not four times a second
 }
 
+/* Archived exchanges load once, on first open. They never grow, so there is nothing to poll -
+   and pages with a long history would otherwise pay for every retired agent every second. */
+for (const shelf of document.querySelectorAll("details.archived")) {
+  shelf.addEventListener("toggle", async () => {
+    if (!shelf.open || shelf.dataset.loaded) return;
+    shelf.dataset.loaded = "1";
+    const shown = await (await fetch(
+      `/agents/archived/${encodeURIComponent(shelf.dataset.agent)}?since=0`)).json();
+    drawInto(shelf.querySelector(".thread"), shown.entries, shown.at);
+  });
+}
+
 /* Closing one archives its log and takes its section away. The archive is what makes it stick:
    the roster is the log folder, so a log left in place comes back on the next poll. */
 for (const shut of document.querySelectorAll(".shut")) {

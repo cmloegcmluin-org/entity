@@ -25,11 +25,12 @@ from entity.mirror import APP_ID  # noqa: E402  - the one definition of the id, 
 STGM_READWRITE = 0x00000002  # loading a .lnk read-only makes every write Access Denied
 
 # Where Windows keeps the two copies of a shortcut: the one in the menu, and the one a pin made.
-SHORTCUTS = (
-    Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Entity.lnk",
-    Path.home() / ("AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/"
-                   "TaskBar/Entity.lnk"),
-)
+# Both names, because a pin is a copy and keeps the name it was made under - a pin from before
+# the app presented as Excephalon still sits there as Entity.lnk, and it needs the id no less.
+_MENU = Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs"
+_PINS = Path.home() / "AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar"
+SHORTCUTS = tuple(place / name for place in (_MENU, _PINS)
+                  for name in ("Excephalon.lnk", "Entity.lnk"))
 
 
 def stamp(path, app_id):

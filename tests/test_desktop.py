@@ -129,6 +129,20 @@ def test_the_dialogs_close_answers_the_request_first_then_closes(tmp_path):
     assert window.destroyed
 
 
+def test_our_own_destroy_is_waved_through_the_closing_event(tmp_path):
+    # destroy() fires the same closing event the X does. Answering our own destroy with the
+    # dialog question - evaluate_js against a page mid-teardown - blocked the GUI thread forever:
+    # the dialog's Close hung the whole app twice, and the thread dump showed this exact handler
+    # inside the destroy. After quit(), the only answer is "go".
+    window = _Shown()
+    controls = Controls(window, tmp_path / "spot.json")
+
+    controls.quit()
+
+    assert controls.asked_to_close() is True   # the closing our destroy fires passes through...
+    assert window.evaluated == []              # ...without ever asking the dying page anything
+
+
 def test_restart_closes_marked_so_the_winddown_relaunches():
     window = _Shown()
     controls = Controls(window)

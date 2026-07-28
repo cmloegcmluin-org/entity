@@ -203,13 +203,16 @@ light-mode box in a dark app; only the dialog's Close, through `Controls.quit`, 
 and its bar carrying a Restart-to-upgrade button that appears only when the checkout on disk has
 moved past the booted commit (worktrees.head_commit, polled by the page) and whose winddown
 relaunches a fresh process on the current code; window teardown answers the /quit request before
-destroying (destroying inside the request deadlocked the app — Windows logged it HUNG), and the
-main thread waits the session worker out so native audio is never torn down under a live thread. `usage.py` is the credit warning: the rolling week's tokens summed from the machine's own session
-records, spoken once at each of his chosen shares (50/80/90/95/98/99%) of
-`runtime/usage-weekly-limit.txt` — no line on file, no warnings, because a guessed limit fires
-wrong in both directions. The app presents as
+destroying, and waves its OWN destroy through the closing event (destroy fires that same event,
+and answering it with the dialog question against a dying page hung the GUI thread — twice), and
+the main thread waits the session worker out so native audio is never torn down under a live
+thread. The credit warning was tried and DROPPED
+by his call: the local records count tokens, Anthropic's real weekly meter is percentages it does
+not expose locally, and a warning measured against a guessed denominator fires wrong in both
+directions — do not rebuild it without a sanctioned usage source. The app presents as
 "Excephalon" everywhere he sees or hears it — title, icon (the Chaosphere: a brain in a spiked
-wire cage), launcher `Excephalon.bat`, the persona's own name, and the wake phrase ("hey
+wire cage, drawn transparent in the two-app family palette — gray-green metal, light-pink brain —
+shared with Highdeas's leaf-and-mic), launcher `Excephalon.bat`, the persona's own name, and the wake phrase ("hey
 excephalon", with "hey entity" kept working because the transcriber only sometimes lands the
 coined word — it is in the vocabulary to help) — while the repo, the module, the transcript
 line format and every internal role key stay `entity`: renaming those breaks parsers of past

@@ -121,6 +121,7 @@ class Controls:
         self._window = window
         self._path = Path(position_path) if position_path else None
         self.restart_asked = False
+        self._leaving = False  # quit() was called; the next closing event is our own destroy
 
     def keep_position(self):
         """Write down where the window stands, so the next launch opens it right there."""
@@ -136,7 +137,15 @@ class Controls:
 
     def asked_to_close(self):
         """The X was pressed: keep the spot, put the question to the page, keep the window.
-        Returning False is what cancels the native close."""
+        Returning False is what cancels the native close.
+
+        UNLESS the close is our own: destroy() fires this same closing event, and answering it
+        with evaluate_js against the page being torn down blocked the GUI thread forever - the
+        dialog's Close hung the whole app, twice, and the second time the thread dump showed
+        exactly this handler inside the destroy. Once quit() has spoken, the answer is only
+        ever "go"."""
+        if self._leaving:
+            return True
         self.keep_position()
         try:
             self._window.evaluate_js("askToClose && askToClose()")
@@ -152,6 +161,7 @@ class Controls:
         window while its page still awaits the response deadlocked the whole app on his first
         try (Windows logged pythonw as HUNG). Answer the request first; close a beat later."""
         self.keep_position()
+        self._leaving = True  # before the destroy, so its closing event is waved through
         threading.Timer(0.2, self._window.destroy).start()
 
     def restart(self):

@@ -249,7 +249,9 @@ median 0.18, and the high outliers in that set were literally Entity's replies l
 speakers into the armed mic) — but a print scraped from UNLABELED session audio matches everything
 a little, so enrollment is the clean recording, never scraped bootstrapping. No score DECIDES
 anything yet: `score()` yields None without a print, callers keep the words, and the dropping
-threshold gets chosen only from scores logged across real sessions. Loopback gating WAS built once
+threshold gets chosen only from scores logged across real sessions - which the window's pump now
+collects: `Scorekeeper` (wired into `Dictation`) scores every worded chunk on a worker of its own
+into `runtime/voice/scores-*.log`, score beside words, a no-op until the minute is recorded. Loopback gating WAS built once
 and was taken back out the same day, because it went deaf to the user — the meter moved with their
 voice and not a word reached the draft. That is the whole lesson, and it cost an hour of a broken
 app: a false negative here is far worse than a false positive, and the threshold that produced it

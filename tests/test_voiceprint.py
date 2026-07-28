@@ -1,6 +1,17 @@
+import threading
+
 import numpy as np
 
-from entity.voiceprint import Voiceprint, speechy_chunks
+from entity.voiceprint import Scorekeeper, Voiceprint, speechy_chunks
+
+
+def _wait_for(check, timeout=2.0):
+    tick = threading.Event()
+    for _ in range(int(timeout / 0.01)):
+        if check():
+            return True
+        tick.wait(0.01)
+    return check()
 
 
 def _tone(seconds=2.0, level=0.1):
@@ -46,6 +57,32 @@ def test_without_an_enrollment_there_is_no_score(tmp_path):
     print_of = Voiceprint(tmp_path, embedder=_embedder_by_loudness)
 
     assert print_of.score(_tone()) is None
+
+
+def test_the_scorekeeper_writes_each_heard_chunk_with_its_score(tmp_path):
+    # Watch-only: every chunk the mic turned into words gets its against-his-voice score written
+    # beside the words, and nothing anywhere DECIDES on it - the log is the evidence the dropping
+    # threshold will one day be chosen from, across real sessions.
+    voiceprint = Voiceprint(tmp_path, embedder=_embedder_by_loudness)
+    voiceprint.enroll(_tone(seconds=10.0, level=0.1))
+    keeper = Scorekeeper(tmp_path, voiceprint=voiceprint, clock=lambda spec: "12-00-00")
+
+    keeper.note(_tone(level=0.1), "his words, as transcribed")
+
+    logged = tmp_path / "scores-12-00-00.log"
+    assert _wait_for(logged.exists)
+    line = logged.read_text(encoding="utf-8")
+    assert "1.00" in line and "his words, as transcribed" in line
+
+
+def test_without_a_learned_voice_the_scorekeeper_stays_silent(tmp_path):
+    keeper = Scorekeeper(tmp_path, clock=lambda spec: "12-00-00")
+
+    keeper.note(_tone(), "anything")
+
+    settle = threading.Event()
+    settle.wait(0.1)
+    assert list(tmp_path.glob("scores-*.log")) == []
 
 
 def test_enrolling_on_pure_silence_is_refused(tmp_path):

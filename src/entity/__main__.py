@@ -319,6 +319,13 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         from entity.hearing import Hearing
 
         transcriber, mic, recorder = _open_ears(announce)
+        # Watch-only voice measuring: once he has recorded his minute (Learn my voice.bat), every
+        # worded chunk is scored against his voiceprint into runtime/voice/scores-*.log. Nothing
+        # reads the score at runtime - the log is evidence for choosing a threshold later, since
+        # the last threshold picked from thin evidence went deaf to him. No print, no-op.
+        from entity.voiceprint import Scorekeeper
+
+        scorekeeper = Scorekeeper(RUNTIME_DIR / "voice")
         # Words on screen while they are still saying them: the burst so far, read over and over on a
         # worker of its own. The same transcriber, on purpose - one 2.4 GB model, loaded already,
         # and onnxruntime will run it from both threads.
@@ -334,6 +341,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             on_level=lambda v: feed.push("level", v),
             on_submit_request=lambda: feed.push("submit", ""),
             on_retract=lambda: feed.push("retract", ""),
+            scorekeeper=scorekeeper,
         )
         if attach is not None:
             attach(dictation)  # the window is already up, waiting to be wired to a mic

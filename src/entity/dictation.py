@@ -112,6 +112,7 @@ class Dictation:
         hearing=None,
         clock=time.monotonic,
         polish=None,
+        scorekeeper=None,
     ):
         self._transcriber = transcriber
         self._mic = mic
@@ -145,6 +146,10 @@ class Dictation:
         self._clock = clock
         self._last_worded = None  # when words last landed in the draft: the mid-thought clock
         self._polish = polish  # repairs a submitted draft's pause-chopped punctuation, bounded
+        # Watch-only voice measuring (see voiceprint.Scorekeeper): every worded chunk is scored
+        # against the learned voice on the keeper's own worker. Measured, never acted on - the
+        # threshold that will one day act is chosen from these logs, not fitted blind.
+        self._scores = scorekeeper
 
     # ---- the Conversation-facing half ----------------------------------------------------------
 
@@ -365,6 +370,8 @@ class Dictation:
         text = without_hesitations(self._transcriber.transcribe(audio).strip())
         if not text:
             return
+        if self._scores is not None:
+            self._scores.note(audio, text)  # measured whatever happens to it below; never acted on
         if self._bark is not None and _is_stop_bark(text, self._stop_words):
             # A bark cuts the turn whenever a watch is up - sounding OR still thinking. The think
             # phase used to be covered only because the whole watch counted as "speaking"; with

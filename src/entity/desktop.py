@@ -139,12 +139,14 @@ class Controls:
         """The X was pressed: keep the spot, put the question to the page, keep the window.
         Returning False is what cancels the native close.
 
-        UNLESS the close is our own: destroy() fires this same closing event, and answering it
-        with evaluate_js against the page being torn down blocked the GUI thread forever - the
-        dialog's Close hung the whole app, twice, and the second time the thread dump showed
-        exactly this handler inside the destroy. Once quit() has spoken, the answer is only
-        ever "go"."""
+        UNLESS the close is our own: the wind-down fires this same closing event, and answering
+        it with evaluate_js against the page being torn down blocked the GUI thread forever -
+        the dialog's Close hung the whole app, twice, and the second time the thread dump showed
+        exactly this handler inside the destroy. Once quit() has spoken, the answer is only ever
+        "go" - and the position is saved HERE, because this handler runs on the GUI thread,
+        where reading the window's geometry is unconditionally safe."""
         if self._leaving:
+            self.keep_position()
             return True
         self.keep_position()
         try:
@@ -156,13 +158,47 @@ class Controls:
     def quit(self):
         """Actually close - the page's dialog said so, or a restart is tearing down.
 
-        The destroy is deferred to its own thread rather than run inline, because this is called
-        from inside a request handler of the very server the window is showing: destroying the
-        window while its page still awaits the response deadlocked the whole app on his first
-        try (Windows logged pythonw as HUNG). Answer the request first; close a beat later."""
-        self.keep_position()
-        self._leaving = True  # before the destroy, so its closing event is waved through
-        threading.Timer(0.2, self._window.destroy).start()
+        Three hard-won rules live here, each a hang he sat through. The close is deferred off
+        this thread, because it is called from inside a request handler of the very server the
+        window is showing, and tearing the window down under its own unanswered request
+        deadlocked the app. The close goes through the NATIVE close on the GUI thread - the same
+        road the X takes, the one path the toolkit exercises everywhere - not a cross-thread
+        destroy, which still hung on his desk after the repro of it passed here. And a watchdog
+        writes every thread's stack to runtime/close-stall.log if the app is somehow still alive
+        well after the close was asked for, so the NEXT stall carries its own evidence instead
+        of anyone's inference about his machine."""
+        self._leaving = True  # before the close, so the closing event it fires is waved through
+        threading.Timer(0.2, self._close_on_gui_thread).start()
+        watchdog = threading.Timer(12.0, self._dump_stall)
+        watchdog.daemon = True  # if the close succeeds, the process is gone before this fires
+        watchdog.start()
+
+    def _close_on_gui_thread(self):
+        try:
+            form = self._window.native  # the winforms form pywebview built
+            from System import Action  # noqa: PLC0415 - pythonnet, only under the winforms backend
+
+            if form.InvokeRequired:
+                form.Invoke(Action(form.Close))
+            else:
+                form.Close()
+        except Exception:
+            try:
+                self._window.destroy()  # a backend without winforms still gets a close
+            except Exception:
+                pass
+
+    def _dump_stall(self):
+        """The app should be gone by now; write down exactly where every thread is stuck."""
+        try:
+            import faulthandler
+
+            where = (self._path.parent if self._path is not None else Path("runtime"))
+            with open(where / "close-stall.log", "a", encoding="utf-8") as log:
+                log.write("\n=== the close was asked for 12s ago and the app is still alive ===\n")
+                faulthandler.dump_traceback(log)
+        except Exception:
+            pass  # the watchdog must never become its own crash
 
     def restart(self):
         """Close, marked so the winddown relaunches a fresh process - the reload button's whole

@@ -21,6 +21,7 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from entity.delivery import DeliveryError
 from entity.memory import (append_enhancement, append_learned, append_persona_addition,
+                           forget_learned,
                            complete_enhancement_by_id, revise_enhancement)
 from entity.models import resolve as resolve_model
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
@@ -31,7 +32,7 @@ SERVER = "entity"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "revise_enhancement", "check_off_enhancement", "update_persona", "remember",
+                                "file_improvement", "revise_enhancement", "check_off_enhancement", "update_persona", "remember", "forget_memory",
                                 "close_agent_tab", "mark_ready",
                                 "record_verdict", "ask_foreman", "run_errand"))
 
@@ -60,7 +61,7 @@ def _resolve(target):
 def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
                   revise=revise_enhancement, check_off=complete_enhancement_by_id,
                   add_persona=append_persona_addition,
-                  remember_fact=append_learned,
+                  remember_fact=append_learned, forget_fact=forget_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
                   clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
@@ -147,6 +148,15 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         add_persona(str(args["instruction"]))
         return _say("Added to your standing instructions - it's part of your persona from next start.")
 
+    @tool("forget_memory", "Drop one remembered fact from the memory store - the review's "
+          "delete, for a memory the user judged not worth keeping (or one just converted into "
+          "a standing instruction). Give the fact's words; a close paraphrase lands on the "
+          "right line.", {"fact": str})
+    async def forget_memory(args):
+        if forget_fact(str(args["fact"])):
+            return _say("Dropped from memory.")
+        return _say("No memory matched those words - read the store back to them if unsure.")
+
     @tool("remember", "Keep one durable fact about the user that came up - a preference, a "
           "commitment, a life detail worth having next time. For lasting facts, not this turn's "
           "chatter. One call per fact.", {"fact": str})
@@ -207,7 +217,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
 
     tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
              check_off_item_tool, run_errand, update_persona,
-             remember, close_agent_tab, mark_ready, record_verdict, ask_foreman]
+             remember, forget_memory, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
 

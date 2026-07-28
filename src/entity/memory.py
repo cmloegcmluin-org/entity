@@ -224,6 +224,53 @@ def save_learned(text, path=DEFAULT_LEARNED_PATH):
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
+def forget_learned(fact, path=DEFAULT_LEARNED_PATH):
+    """Drop the remembered line closest to `fact` - the memory inbox's delete. Matched on folded
+    words, containment either way, so the brain's paraphrase of a memory still lands on the line
+    he meant. False when nothing matches; the caller owes him that plainly, never a silent no."""
+    fold = lambda text: " ".join(text.casefold().split())
+    wanted = fold(fact)
+    if not wanted:
+        return False
+    lines = _read(path).splitlines()
+    for at, line in enumerate(lines):
+        said = fold(line.lstrip("-* ").strip())
+        if said and (wanted in said or said in wanted):
+            del lines[at]
+            Path(path).write_text("\n".join(lines).strip() + ("\n" if any(lines) else ""),
+                                  encoding="utf-8")
+            return True
+    return False
+
+
+def reconcile_lexicon(kept_terms, scanned, path=None):
+    """The Config page's paraphone rows, written back to the lexicon: terms he added join it,
+    lexicon terms he removed from the page leave it, and everything else - glosses, the intro,
+    terms that came from folder scans rather than this file - is left exactly as it stands."""
+    where = Path(path) if path else lexicon_path()
+    kept = {term.casefold() for term in kept_terms if term.strip()}
+    scanned_fold = {term.casefold() for term in scanned}
+    existing = _read(where)
+    known = set()
+    lines = []
+    for line in existing.splitlines():
+        match = _BULLET.match(line)
+        if match and match.group("item").strip():
+            term = _GLOSS.split(match.group("item").strip(), maxsplit=1)[0].strip()
+            known.add(term.casefold())
+            if term.casefold() not in kept:
+                continue  # removed on the page; removed here
+        lines.append(line)
+    fresh = [term for term in kept_terms
+             if term.strip() and term.casefold() not in known
+             and term.casefold() not in scanned_fold]
+    body = "\n".join(lines).rstrip()
+    if fresh:
+        body = (body + "\n" if body else "") + "\n".join(f"- {term.strip()}" for term in fresh)
+    where.parent.mkdir(parents=True, exist_ok=True)
+    where.write_text(body + "\n" if body else "", encoding="utf-8")
+
+
 def append_learned(facts, path=DEFAULT_LEARNED_PATH):
     if not facts:
         return

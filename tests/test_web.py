@@ -214,7 +214,8 @@ def test_every_translation_in_force_is_an_editable_row_with_no_labels_and_no_sec
     # exactly what differs from what ships.
     translations = tmp_path / "translations.md"
     translations.write_text("notecraf -> Notecraft\n", encoding="utf-8")
-    client = _client(translations_path=translations, terms=["Notecraft", "Git Bash"])
+    client = _client(translations_path=translations, scanned_terms=["Git Bash"],
+                     lexicon_reader=lambda: ["Notecraft"])
 
     page = client.get("/config").get_data(as_text=True)
     assert "cloud agent" in page and "Claude agent" in page  # one that ships, shown unbadged
@@ -224,7 +225,11 @@ def test_every_translation_in_force_is_an_editable_row_with_no_labels_and_no_sec
     assert "notecraf" in page and page.count("notecraf") == 2
     assert 'data-translations' not in page                     # the raw textarea is gone
     assert 'id="add-swap"' in page                             # + makes the next empty row
-    assert "Git Bash" in page                                  # what the fuzzy pass snaps to
+    # The old Vocabulary card lives here now, as rows whose left side is the coined word for
+    # "anything close enough": scanned folder names and his lexicon, one alphabet.
+    assert 'id="card-vocabulary"' not in page
+    assert page.count("(paraphone)") >= 2
+    assert "Git Bash" in page
 
     client.post("/translations", data={"body": "notecraf -> Notecraft\nhi deas -> Notecraft"})
 
@@ -343,22 +348,22 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     page = _client(profile_path=profile).get("/config").get_data(as_text=True)
 
     # The words of an item are the item - one editable span per row (Goals and Projects here,
-    # plus the Memory card's one empty row), no raw-markdown box.
-    assert page.count('class="item" contenteditable="plaintext-only"') == 3
+    # plus the Memory and Instructions cards' empty rows), no raw-markdown box.
+    assert page.count('class="item" contenteditable="plaintext-only"') == 4
     assert "Edit as text" not in page
 
 
-def test_entitys_own_standing_instructions_are_shown_and_saved_back(tmp_path):
-    # The persona was the one config the window could read but never write - the very gap that let
-    # Entity say it couldn't update itself. Now its own accreted instructions have an editable box,
-    # like what it has learned, while the full composed persona stays shown read-only above it.
+def test_the_instructions_card_is_bullet_rows_that_save_back(tmp_path):
+    # "instructions should get the same bullet treatment that all the other cards get. c'mon."
     additions = tmp_path / "persona.md"
     additions.write_text("- never read a commit hash aloud\n", encoding="utf-8")
     client = _client(persona_additions_path=additions)
 
     page = client.get("/config").get_data(as_text=True)
-    assert "never read a commit hash aloud" in page   # in an editable box, not only the read-only text
-    assert 'data-persona="true"' in page
+    card = page.split('id="card-instructions"')[1].split("</section>")[0]
+    assert "never read a commit hash aloud" in card
+    assert "<textarea" not in card                    # rows, not a box
+    assert 'contenteditable="plaintext-only"' in card
 
     client.post("/persona", data={"body": "- never read a commit hash aloud\n- one line at night"})
 

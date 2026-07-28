@@ -42,11 +42,16 @@ SPEAKERS = {"you": "You", "entity": "Excephalon", "heads-up": "Excephalon · hea
 # count would miscount it as work. `subtitle` is the one-line explanation under each card's
 # title, which every card carries now.
 SECTIONS = (
+    # The three checklists' subtitles are drawn from the project's founding words - "a local,
+    # voice-in/voice-out, memory-persistent partner you pair with on your life... it keeps a
+    # durable memory so it doesn't lose the thread across days or months."
     ("Enhancements", "Enhancements", "checklist",
-     "Improvements you want made. File one here and an agent can be put on it; done items keep "
-     "their record in the fold below."),
-    ("Goals", "Goals", "checklist", "What you're working toward - ticked when reached."),
-    ("Projects", "Projects", "checklist", "Long-term undertakings, held as standing context."),
+     "The construction roadmap for this partner itself - file an ask and an agent can be put "
+     "on it; done items keep their record in the fold below."),
+    ("Goals", "Goals", "checklist",
+     "The life-goal work you're pairing on - ticked when reached."),
+    ("Projects", "Projects", "checklist",
+     "The long undertakings of that life, held so the thread isn't lost across days or months."),
     ("Context", "Life context", "bullets",
      "Background it should always hold about your life - facts, not tasks."),
 )
@@ -147,7 +152,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                opener=open_link, mirror=None, clipboard=_windows_clipboard,
                profile_path=None, learned_path=None, translations_path=None, terms=(),
                persona_additions_path=None, agent_logs_dir=None, clock=None,
-               on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None):
+               on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None,
+               scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
@@ -268,6 +274,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         # as one. The rows are the memories; the heading is re-derived on save.
         memories = [line.lstrip("-* ").strip() for line in learned.splitlines()
                     if line.strip() and not line.lstrip().startswith("#")]
+        lexicon_now = sorted(set(lexicon_reader() if lexicon_reader is not None else ()),
+                             key=str.lower)
         return render_template(
             "config.html", here="/config", sections=sections,
             # Each row remembers what the stock rule for its "heard" says, so a save can tell an
@@ -276,9 +284,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             # 'built-in' or not; don't display that").
             swaps=[{"heard": heard, "said": in_force[heard], "stock": stock.get(heard, "")}
                    for heard in sorted(in_force)],
-            terms=sorted(terms, key=str.lower),
+            # The old Vocabulary card, as (paraphone) rows: the live lexicon plus what the
+            # project folders contribute, shown as one alphabet.
+            paraphones=sorted(set(scanned_terms) | set(lexicon_now), key=str.lower),
             memories=memories,
-            additions=_persona_additions(),
+            instructions=[line.lstrip("-* ").strip() for line in _persona_additions().splitlines()
+                          if line.strip()],
         )
 
     # The tabs this page replaced still answer, so a window standing open across the update lands
@@ -333,6 +344,16 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             if on_translations_saved is not None:
                 # In force NOW: the running ear swaps to the saved rules for the very next chunk.
                 on_translations_saved(translation_pairs(request.form["body"]))
+        return ("", 204)
+
+    @app.post("/lexicon")
+    def write_lexicon():
+        """The (paraphone) rows written back: additions join his lexicon, removals leave it, and
+        the folder-scanned terms pass through untouched - a folder's name is not this page's to
+        delete. In force immediately, like every other row on the card."""
+        if on_lexicon_saved is not None:
+            kept = [line.strip() for line in request.form["terms"].splitlines() if line.strip()]
+            on_lexicon_saved(kept)
         return ("", 204)
 
     @app.post("/memory")

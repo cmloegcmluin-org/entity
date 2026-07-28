@@ -404,6 +404,27 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # Keep the same lines the terminal shows, timestamped, so a session that went wrong can be read
     # back afterwards instead of the user having to copy their scrollback out by hand.
     session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
+    # The memory inbox's nudge: in genuine downtime - fleet idle, conversation quiet - one
+    # remembered fact is raised for his verdict, worked toward inbox zero (see entity.review).
+    from entity.memory import DEFAULT_LEARNED_PATH as LEARNED
+    from entity.review import MemoryNudger
+
+    def _memories():
+        try:
+            lines = LEARNED.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        return [line.lstrip("-* ").strip() for line in lines
+                if line.strip() and not line.lstrip().startswith("#")]
+
+    MemoryNudger(
+        agent_events, memories=_memories,
+        fleet_idle=lambda: not any(state in ("starting", "working")
+                                   for _, state, _ in desk.roster()),
+        # The transcript's own mtime is when the conversation last moved - the artifact, not a
+        # parallel clock someone has to remember to update.
+        quiet_for=lambda: max(0.0, time.time() - session_record.path.stat().st_mtime),
+    ).start(stop)
     announce(f"(this conversation is being written to {session_record.path})\n")
     if gui:
         # The window renders a conversation, so it takes the Console's who-said-what seam rather
@@ -559,6 +580,15 @@ def main(argv=None):
     hooks = running["hooks"] = {}
     _REPO = Path(__file__).resolve().parents[2]
     booted_from = head_commit(_REPO)
+    from entity.memory import reconcile_lexicon
+    from entity.vocabulary import scan_terms
+
+    scanned_now = scan_terms(_project_roots()) | {"Excephalon"}
+
+    def save_lexicon_rows(kept):
+        reconcile_lexicon(kept, scanned_now)
+        hooks.get("retune", lambda **_: None)(
+            terms=sorted(scanned_now | set(lexicon_terms(load_lexicon()))))
 
     # The window, as the page may drive it: the styled close dialog's Close, and the Restart
     # button. Filled in once the window exists (hand_controls below); clicks before then no-op.
@@ -588,6 +618,11 @@ def main(argv=None):
         terms=_vocab_terms(),
         agent_logs_dir=AGENT_LOGS,
         on_quit=ask_quit, on_restart=ask_restart,
+        # The (paraphone) rows: the live lexicon joins the folder-scanned terms on the page, his
+        # edits reconcile back into the lexicon alone, and the running ear retunes at once.
+        scanned_terms=sorted(scanned_now),
+        lexicon_reader=lambda: lexicon_terms(load_lexicon()),
+        on_lexicon_saved=save_lexicon_rows,
         # The Restart button shows only when there is genuinely something to restart INTO: the
         # checkout on disk has moved past the commit this process booted from.
         upgrade_ready=lambda: head_commit(_REPO) not in ("", booted_from),

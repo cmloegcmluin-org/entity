@@ -24,13 +24,12 @@ DEFAULT_FAREWELLS = (
 DEFAULT_SUSPENDS = ("suspend", "stop listening")
 DEFAULT_RESUMES = ("resume", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Be seeing you."
-# What they hear when the brain call fails, with `{cause}` filled in. The cause is IN the sentence
-# because it used to go to stderr - and the windowed run is launched by pythonw, which has no stderr
-# at all, so the one line that could explain the failure went nowhere. Every failure then sounded
-# like the same momentary hiccup, including the ones that had wedged the session permanently: "it
-# has never said that and recovered". Sounding human about a fault you can't explain is worth less
-# than the fault.
-DEFAULT_ERROR_REPLY = "Something's broken in my head: {cause}"
+# What they hear when the brain call fails: a plain sentence, no cause. The cause used to be IN
+# the sentence (stderr goes nowhere under pythonw, and an unexplained failure "has never said
+# that and recovered") - but that read "_AskWedged" to the user aloud, a code identifier straight
+# through the insulation. The cause now goes to the session record instead (console.evidence):
+# durable, diagnosable, and never spoken or shown.
+DEFAULT_ERROR_REPLY = "Something's broken in my head - give me a moment, then ask me again."
 # They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
 # repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
@@ -398,6 +397,15 @@ class Conversation:
         # Brain-composed news is the brain's own sentence: spoken as known, so the unwritten-lines
         # ledger never reads its own words back to it as someone else's.
         self._say(news, record=False, known=getattr(news, "composed", False))
+        self._delivered(news)
+
+    def _delivered(self, news):
+        """Tell the outbox this news actually reached the user, so its durable copy is done.
+        Draining is not delivery: three agents' reports once sat drained-in-hand when the brain
+        wedged and the user restarted, and the restarted app had no trace of what it still owed."""
+        spoken = getattr(self._outbox, "spoken", None)
+        if spoken is not None:
+            spoken(news)
 
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named."""
@@ -425,6 +433,7 @@ class Conversation:
         # appended, part of what they hear is app-authored and the ledger must carry it.
         self._say(said, record=False,
                   known=getattr(news, "composed", False) and said == news)
+        self._delivered(news)
         return Turn(heard=heard, said=said)
 
     def _dormant(self):
@@ -598,12 +607,17 @@ class Conversation:
             self._settle(reply)
             release_floor()
             return None
-        except Exception as exc:  # tell them the real cause - it reaches them nowhere else
+        except Exception as exc:  # the plain word to them; the cause to the durable record
             self._keep_for_later(offered)  # the delivery turn died; the update must survive it
             self._settle(reply)
-            said = self.error_reply.format(cause=_cause(exc))
-            self._speak_reply(said)
+            # The floor first: its leak-script is the streamed reply, and a wedge streamed
+            # nothing - spoken under it, the error line's own audio came back through the mic
+            # as the user's draft words. Released, _say opens a watcher scripted with exactly
+            # the line it is about to speak, and the leak is dropped as the Entity's own.
             release_floor()
+            self._console.evidence(f"(brain error: {_cause(exc)})")
+            said = self.error_reply
+            self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
         if not said.strip():
@@ -625,6 +639,8 @@ class Conversation:
             spoken_parts.append(said)  # the floor's script: the whole reply is about to be audible
             self._speak_reply(said, known=True)  # if they hit Enter while it talks, this is cut off
         release_floor()
+        if offered is not None:
+            self._delivered(offered)  # the update rode in this reply, and the reply was spoken
         if self._timings:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()

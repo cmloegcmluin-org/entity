@@ -836,8 +836,8 @@ def test_brain_failure_is_spoken_and_loop_survives():
 
     convo.run()
 
-    assert any("network hiccup" in line for line in tts.spoken)
-    assert tts.spoken[-1] == convo.farewell_reply
+    assert any(convo.error_reply in line for line in tts.spoken)  # plainly told, not left hanging
+    assert tts.spoken[-1] == convo.farewell_reply  # and the loop lived on to say goodbye
 
 
 def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
@@ -847,11 +847,30 @@ def test_a_slow_brain_failure_still_surfaces_as_the_error_reply():
             raise RuntimeError("hiccup after a pause")
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hello"]), SlowBoom(), tts)
+    record = []
+    convo = Conversation(FakeSTT(["hello"]), SlowBoom(), tts,
+                         console=Console(record=record.append))
     turn = convo.turn()
 
     assert turn.error is True
-    assert "hiccup after a pause" in tts.spoken[-1]  # the off-thread error re-raised, and named
+    assert convo.error_reply in tts.spoken[-1]  # the plain line reached the voice
+    assert any("hiccup after a pause" in line for line in record)  # the off-thread cause, kept
+
+
+def test_delivered_news_leaves_the_durable_spool(tmp_path):
+    # The wedge evening: reports drained into the conversation's hands died with the process,
+    # and the restarted app had no trace of what it still owed. Only actual delivery - the
+    # words reaching the user - clears the spool; until then a fresh outbox re-owes them.
+    spool = tmp_path / "outbox.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("fixer finished the drive link", about="fixer", composed=True)
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hello", "goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.run()
+
+    assert any("fixer finished" in line for line in tts.spoken)
+    assert not Outbox(spool=spool)  # delivered, so a restarted outbox owes nothing
 
 
 def test_run_reports_each_completed_turn_to_on_turn():
@@ -1049,25 +1068,60 @@ def test_it_stays_quiet_while_they_are_mid_sentence_then_delivers():
     assert any("fixer" in line for line in tts.spoken)  # they stopped - held news goes out
 
 
-def test_a_brain_failure_says_what_actually_broke():
-    # "It has never said that and recovered. I would prefer at that point that the underlying error
-    # just be leaked. No sense acting uncannily human about it if you can't back it up with anything
-    # useful." The cause WAS being surfaced - to stderr, which under pythonw does not exist at all,
-    # so the one line that could explain a session wedged for good went nowhere and every failure
-    # looked like the same momentary hiccup.
+def test_a_brain_failure_speaks_plainly_and_keeps_the_cause_in_the_record():
+    # Two of his requirements meet here. "I would prefer at that point that the underlying error
+    # just be leaked" - the cause must land somewhere USEFUL, because stderr under pythonw goes
+    # nowhere and an unexplained failure "has never said that and recovered". But spoken, the
+    # cause read "_AskWedged" to him aloud - a code identifier straight through the insulation.
+    # So the voice gets the plain sentence, and the durable session record gets the cause.
     class BrokenBrain:
         def respond(self, utterance):
             raise RuntimeError("the CLI exited with code 1")
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts)
+    record = []
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts,
+                         console=Console(record=record.append))
 
     turn = convo.turn()
 
     assert turn.error is True
-    assert "the CLI exited with code 1" in turn.said  # the real cause, not a mood
-    assert "RuntimeError" in turn.said  # and what kind, so a repeat is recognisable
-    assert any("the CLI exited with code 1" in line for line in tts.spoken)
+    assert "RuntimeError" not in turn.said  # nothing technical is spoken or shown as the reply
+    assert convo.error_reply in tts.spoken
+    kept = " ".join(record)
+    assert "the CLI exited with code 1" in kept  # the real cause, durable
+    assert "RuntimeError" in kept  # and what kind, so a repeat is recognisable
+
+
+def test_the_error_line_is_spoken_under_its_own_leak_script_not_the_turns():
+    # The wedge reply was once spoken while the turn's floor still held the mic, scripted with
+    # the streamed reply - of which a wedge never streamed a word. Judged against that empty
+    # script, the error line's own audio came back through the mic as the user's draft words.
+    # The floor is released first now, so the line is watched with its own words as the script.
+    scripts = []
+
+    class DuplexSTT:
+        def listen(self):
+            return "hello"
+
+        def catch_stop(self, active, script=None, audio=None):
+            scripts.append(script)
+            while active():
+                time.sleep(0.005)
+            return False
+
+    class BrokenBrain:
+        def respond(self, utterance):
+            raise RuntimeError("session wedged")
+
+    convo = Conversation(DuplexSTT(), BrokenBrain(), FakeTTS(), interrupt=threading.Event())
+
+    turn = convo.turn()
+
+    assert turn.error is True
+    error_watch = scripts[-1]  # the watcher opened for the error line itself
+    assert error_watch is not None
+    assert "broken in my head" in error_watch()
 
 
 def test_a_failure_names_the_error_underneath_the_librarys_guess():
@@ -1082,12 +1136,15 @@ def test_a_failure_names_the_error_underneath_the_librarys_guess():
                 raise RuntimeError("Claude Code not found at: C:/present/claude.exe") from underneath
 
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts)
+    record = []
+    convo = Conversation(FakeSTT(["hi"]), BrokenBrain(), tts,
+                         console=Console(record=record.append))
 
-    turn = convo.turn()
+    convo.turn()
 
-    assert "Claude Code not found" in turn.said  # what the library claimed
-    assert "C:/gone/config.json" in turn.said  # and what had actually gone missing
+    kept = " ".join(record)
+    assert "Claude Code not found" in kept  # what the library claimed
+    assert "C:/gone/config.json" in kept  # and what had actually gone missing
 
 
 def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():

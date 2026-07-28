@@ -534,3 +534,35 @@ def test_a_turn_stuck_behind_a_wedged_ask_frees_the_lock_by_shedding_the_session
 
     assert brain.respond("hello?", deadline=0.3) == "reply to hello?"
     stuck.join(timeout=2.0)
+
+
+def test_a_lock_whose_holder_survives_the_shed_is_abandoned_not_waited_out(tmp_path, monkeypatch):
+    # The wedge that outlived every remedy: the holder was stuck somewhere no session close
+    # reaches, so "the session is wedged" answered every later ask until the app was restarted -
+    # the brain deaf for a real evening. The lock is a means, not a principal: when shedding
+    # does not free it, it is ABANDONED - the stranded thread keeps the old object, which
+    # nothing else ever touches again - and the turn proceeds on a fresh lock and session,
+    # writing the holder's stack down at the moment of failure.
+    from entity import brain_sdk
+
+    monkeypatch.setattr(brain_sdk, "WEDGE_EVIDENCE_PATH", tmp_path / "brain-wedge.log")
+
+    class FineSession:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_text=None):
+            return f"reply to {message}"
+
+        def close(self):
+            pass
+
+        def interrupt(self):
+            pass
+
+    brain = SdkBrain(session_factory=FineSession)
+    brain._respond_lock.acquire()  # a holder no shed can unstick; it will never release
+
+    assert brain.respond("hello?", deadline=0.2) == "reply to hello?"
+    assert "abandoned" in (tmp_path / "brain-wedge.log").read_text(encoding="utf-8")
+    assert brain.respond("again?", deadline=0.2) == "reply to again?"  # the fresh lock is free

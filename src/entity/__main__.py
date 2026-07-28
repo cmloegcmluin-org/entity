@@ -266,7 +266,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
     # Entity speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
-    outbox = Outbox()
+    # Spooled, so news that has not reached the user yet survives a restart: three agents'
+    # reports once lived only in a wedged process's memory, and died with it.
+    outbox = Outbox(spool=RUNTIME_DIR / "outbox.json")
 
     # Every agent event - finished, died, wrote to its inbox, gone quiet - takes one trip through
     # the brain so what the user hears is the brain's own sentence, not a label read aloud. The

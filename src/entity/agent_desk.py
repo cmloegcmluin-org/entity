@@ -163,6 +163,11 @@ class _Desked:
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
+        # The session id this agent was REVIVED on. A freshly resumed agent reports no id of its
+        # own until it first answers, and persisting that None over the recorded id orphaned a
+        # whole fleet: the next restart found nulls, skipped every revival, and the user was told
+        # there was "no trace" of agents he had watched work all afternoon.
+        self.recorded_session = None
 
 
 class AgentDesk:
@@ -256,6 +261,7 @@ class AgentDesk:
                                  delivery=Delivery(entry.get("delivery") or "building",
                                                    entry.get("steps")),
                                  enhancement=entry.get("enhancement"))
+                desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
                 self._desked[name] = desked
             revived.append(name)
@@ -546,7 +552,9 @@ class AgentDesk:
         with self._lock:
             record = [
                 {"name": name, "cwd": entry.cwd, "task": entry.task,
-                 "session_id": getattr(entry.agent, "session_id", None),
+                 # The agent's own id once it has spoken this life; until then, the id it was
+                 # revived on - never None over a known id, which orphaned a whole fleet.
+                 "session_id": getattr(entry.agent, "session_id", None) or entry.recorded_session,
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
                  "enhancement": entry.enhancement}

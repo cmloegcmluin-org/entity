@@ -40,3 +40,30 @@ def test_empty_outbox_is_falsy_and_a_pushed_one_is_truthy():
 
     outbox.push("word from an agent")
     assert outbox
+
+
+def test_undelivered_news_survives_the_process_and_delivered_news_does_not(tmp_path):
+    # Three agents' reports once lived only in a wedged process's memory: the user restarted,
+    # and the fresh app had "no trace" of the very updates it had just been offering. The spool
+    # holds every pushed item until the conversation says it actually reached the user -
+    # DRAINING is not delivery, because drained news waits in hand for a lull, sometimes for
+    # minutes, and dies with the process there just the same.
+    spool = tmp_path / "outbox.json"
+    first = Outbox(spool=spool)
+    first.push("the merge landed", about="lander", composed=True)
+    first.push("the fix is ready to look at", about="fixer")
+    first.drain()  # in hand, not yet spoken
+    first.spoken("the merge landed")  # this one actually reached the user
+
+    revived = Outbox(spool=spool)
+
+    [held] = revived.drain()
+    assert held == "the fix is ready to look at"  # still owed, back in the queue
+    assert held.about == "fixer"
+    assert revived.arrived.is_set() is False  # drained again; nothing else waiting
+
+
+def test_a_spoolless_outbox_still_answers_spoken(tmp_path):
+    outbox = Outbox()
+    outbox.push("word")
+    outbox.spoken("word")  # nothing durable to clear; must simply not raise

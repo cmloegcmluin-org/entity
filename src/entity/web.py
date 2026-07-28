@@ -12,10 +12,9 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
-import re
 from pathlib import Path
 
-from flask import Flask, render_template, request
+from flask import Flask, redirect, render_template, request
 
 from entity.memory import (
     ENHANCEMENTS_HEADING,
@@ -77,41 +76,6 @@ def _thread(entries, since, speakers=SPEAKERS):
     }
 
 
-# The persona marks its own sections by shouting - "BREVITY IS YOUR MOST IMPORTANT RULE",
-# "SURFACE FAILURES IMMEDIATELY", "HOW TO PUT AN AGENT ON WORK". Two capitalised words in a row at
-# the start of a sentence is that and nothing else, and it is the only structure six thousand
-# characters arriving on one line have.
-_SHOUT = r"[A-Z][A-Z'’]*(?:[ ,-]+[A-Z][A-Z'’]*)+"
-_OPENS_A_SECTION = re.compile(rf"(?<=[.:!?])\s+(?={_SHOUT}\b)")
-# It is a heading only when it FINISHES - on a full stop, or on the dash that introduces what it
-# is about. Running straight on into lowercase ("A CORE part of your job", "ONE EXCEPTION, and it
-# overrides brevity") it is emphasis inside a sentence, and pulling it out would break the sentence
-# in half.
-_LEAD = re.compile(rf"^({_SHOUT}(?:[.:!?]|(?=\s+[-–—]\s)))\s*")
-
-
-def persona_paragraphs(text):
-    """The persona as something readable, without one word of it being changed.
-
-    This is the exact text the brain reads - the window shows it so they can see what it has been
-    told, and a second, tidied copy would drift from the real one. So nothing here rewrites: it
-    only decides where the breaks go. Blank lines are breaks already (their profile arrives with its
-    own headings and bullets); the rest are where the persona starts shouting, which is where its
-    author meant a new section.
-
-    Each block is {lead, body} - the shouted opening, if it has one, and the rest."""
-    blocks = []
-    for paragraph in text.split("\n\n"):
-        for part in _OPENS_A_SECTION.split(paragraph):
-            part = part.strip()
-            if not part:
-                continue
-            found = _LEAD.match(part)
-            lead = found.group(1) if found else ""
-            blocks.append({"lead": lead, "body": part[found.end():] if found else part})
-    return blocks
-
-
 def _heading(found, stem):
     """Which of the profile's own headings this section means. Matched on the stem, because a
     profile glosses its headings however it likes ("Enhancements they want for you (roadmap, not
@@ -169,13 +133,16 @@ def _windows_clipboard():
 
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
                opener=open_link, mirror=None, clipboard=_windows_clipboard,
-               profile_path=None, learned_path=None, translations_path=None, terms=(), persona="",
-               persona_additions_path=None, agent_logs_dir=None, clock=None):
+               profile_path=None, learned_path=None, translations_path=None, terms=(),
+               persona_additions_path=None, agent_logs_dir=None, clock=None,
+               on_quit=None, on_restart=None, usage_status=None, save_usage_budget=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
     `terms` is the vocabulary transcription is biased toward, as it stood when the session opened -
-    shown, not used, so they can see what it is snapping their words to."""
+    shown, not used, so they can see what it is snapping their words to. `on_quit` and
+    `on_restart` drive the window this app is shown in: the page's own close dialog and the
+    Restart button land here."""
     app = Flask(__name__)
     profile_path = Path(profile_path) if profile_path else None
     learned_path = Path(learned_path) if learned_path else None
@@ -254,17 +221,19 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         opener(target)
         return ("", 204)
 
-    # ---- the pages that were tabs -------------------------------------------------------------
+    # ---- the one page that was five tabs ------------------------------------------------------
 
-    @app.get("/profile")
-    def profile():
-        """The four sections, down one page, every one of them a checklist. They are the same kind
-        of thing - a list of lines under a heading - and only Enhancements drew boxes, so three of
-        the four handed them raw markdown to decode. Matched by prefix, since a profile glosses its
-        own headings, and shown in the profile's order rather than ours where both agree.
+    @app.get("/config")
+    def config():
+        """Everything he tunes, down one page with a contents column beside it: the profile's four
+        checklists, what Entity has learned, its standing instructions, the words it swaps, the
+        vocabulary it snaps to, and the credit line it warns from. These were five tabs
+        ("'Profile' doesn't make sense as a title to me. please change it to 'Config', and
+        consolidate in all the contents"), and the composed-persona dump is deliberately not
+        carried over - it duplicated, worse, what this page already shows.
 
-        Each list is split into what is still open and what is done: the done ones fold into a
-        collapsible section at its foot, so what he still has to act on is what he sees."""
+        Each checklist is split into what is still open and what is done: the done ones fold into
+        a collapsible section at its foot, so what he still has to act on is what he sees."""
         found = _profile_text()
 
         def section(title, heading):
@@ -276,7 +245,29 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         sections = [section(title, heading)
                     for title, heading in ((title, _heading(found, stem)) for title, stem in SECTIONS)
                     if heading is not None]
-        return render_template("profile.html", here="/profile", sections=sections)
+        own = translation_pairs(_own_translations())
+        stock = translations_in_force({})
+        in_force = translations_in_force(own)
+        learned = learned_path.read_text(encoding="utf-8") if (
+            learned_path is not None and learned_path.exists()) else ""
+        return render_template(
+            "config.html", here="/config", sections=sections,
+            # Each row remembers what the stock rule for its "heard" says, so a save can tell an
+            # override worth writing from a built-in left exactly as it was - without the page
+            # ever LABELLING which is which ("it doesn't matter whether a translation is
+            # 'built-in' or not; don't display that").
+            swaps=[{"heard": heard, "said": in_force[heard], "stock": stock.get(heard, "")}
+                   for heard in sorted(in_force)],
+            terms=sorted(terms, key=str.lower),
+            learned=learned,
+            additions=_persona_additions(),
+            usage=usage_status() if usage_status is not None else None,
+        )
+
+    # The tabs this page replaced still answer, so a window standing open across the update lands
+    # here rather than on a 404.
+    for old in ("/profile", "/persona", "/memory", "/translations"):
+        app.add_url_rule(old, f"was_{old.strip('/')}", lambda: redirect("/config"))
 
     @app.post("/profile")
     def write_profile():
@@ -303,15 +294,6 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             return ""
         return persona_additions_path.read_text(encoding="utf-8")
 
-    @app.get("/persona")
-    def show_persona():
-        """The whole persona the brain reads, laid out but never rewritten - and below it, the one
-        part of it that is editable: its own accreted standing instructions. The read-only view
-        already includes them (they are composed into `persona`); the box is where they change."""
-        return render_template("persona.html", here="/persona",
-                               blocks=persona_paragraphs(persona), length=len(persona),
-                               additions=_persona_additions())
-
     @app.post("/persona")
     def write_persona():
         if persona_additions_path is not None:
@@ -323,38 +305,43 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             return ""
         return translations_path.read_text(encoding="utf-8")
 
-    @app.get("/translations")
-    def translations():
-        """What it is quietly rewriting, written out. "Cloud agent" for "Claude agent" is a
-        correction the user cannot see happening and cannot argue with, and they asked to see the
-        lot - the ones that ship and the ones they add, in one list, with the words the fuzzy pass
-        snaps toward underneath them."""
-        own = translation_pairs(_own_translations())
-        in_force = translations_in_force(own)
-        return render_template(
-            "translations.html", here="/translations",
-            rows=[{"heard": heard, "said": in_force[heard], "own": heard in own}
-                  for heard in sorted(in_force)],
-            mine=_own_translations(),
-            terms=sorted(terms, key=str.lower),
-        )
-
     @app.post("/translations")
     def write_translations():
         if translations_path is not None:
             save_translations(request.form["body"], translations_path)
         return ("", 204)
 
-    @app.get("/memory")
-    def memory():
-        learned = learned_path.read_text(encoding="utf-8") if (
-            learned_path is not None and learned_path.exists()) else ""
-        return render_template("memory.html", here="/memory", learned=learned)
-
     @app.post("/memory")
     def write_memory():
         if learned_path is not None:
             save_learned(request.form["body"], learned_path)
+        return ("", 204)
+
+    @app.post("/usage-budget")
+    def write_usage_budget():
+        """The token line the credit warning fires from - his number, set where he can see the
+        spending it is measured against."""
+        if save_usage_budget is not None:
+            spent = request.form["tokens"].strip()
+            if spent.replace(",", "").replace("_", "").isdigit():
+                save_usage_budget(int(spent.replace(",", "").replace("_", "")))
+        return ("", 204)
+
+    # ---- the window itself --------------------------------------------------------------------
+
+    @app.post("/quit")
+    def quit_window():
+        """The page's own close dialog said Close - the one way the window actually goes."""
+        if on_quit is not None:
+            on_quit()
+        return ("", 204)
+
+    @app.post("/restart")
+    def restart():
+        """The Restart button: wind this process down and bring up a fresh one on the current
+        code - how a landed fix reaches the app without him hunting down the .bat."""
+        if on_restart is not None:
+            on_restart()
         return ("", 204)
 
     @app.get("/agents")

@@ -51,8 +51,11 @@ body.conversation {
 }
 body.conversation .topbar { grid-column: 1 / -1; }
 
-/* Every other page is a bar and a column of things to read or write. */
-body.page { padding: 10px; }
+/* Every other page is a bar and a column of things to read or write. The bar carries the page's
+   top gap INSIDE itself (padding, not the body's), because a sticky bar pinned at the top slides
+   up over an outside gap as the page scrolls - the pills' margin above them vanished while the
+   margin below never existed, and both edges were called out. */
+body.page, body.config { padding: 0 10px 10px; }
 
 /* ---- the bar that replaced the tabs -------------------------------------------------------- */
 
@@ -62,15 +65,18 @@ body.page { padding: 10px; }
    reading pages scroll at the document level; the conversation is a fixed-height grid that never
    does, so this is scoped to them, and it carries its own opaque background so the sections slide
    under the bar rather than showing through the tabs. */
-body.page .topbar {
+body.page .topbar, body.config .topbar {
   position: sticky;
   top: 0;
   z-index: 10;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
+  padding: 10px 0;   /* the same air above the pills and below them, scrolled or not */
 }
 .topbtn { font-size: .85rem; padding: 5px 12px; text-decoration: none; }
 .topbtn.here { color: var(--accent); border-color: rgba(127, 255, 0, .45); }
+.topbar .restart { color: var(--dim); }
+.topbar .restart:hover { color: var(--accent); }
 /* A save nobody can see is a save nobody trusts. */
 .saved { margin-left: auto; font-size: .78rem; color: var(--accent); opacity: 0; transition: opacity .2s; }
 .saved.showing { opacity: 1; }
@@ -93,15 +99,9 @@ body.page .topbar {
   padding: 6px 8px;
 }
 .writing:focus { outline: none; border-color: var(--line); }
-.section.tall .writing { min-height: 60vh; }
-/* Thirty-two thousand characters, two of its paragraphs six thousand long apiece. Broken where it
-   shouts, given room between the pieces, and held to a readable measure - the words themselves are
-   untouched, because this is the text the brain reads and a tidied second copy would drift. */
-.persona { padding: 6px 8px; color: var(--past); max-width: 68ch; }
-.persona p { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.persona p:last-child { margin-bottom: 0; }
-/* Where it shouts is where its author meant a new section, so it is allowed to look like one. */
-.persona .shout { display: block; color: var(--fg); font-weight: 600; letter-spacing: .01em; }
+/* A box that holds everything it contains, instead of a box inside a box: "the section shouldn't
+   have an internal scrollbar". The page scrolls; the box just grows. */
+.writing.grows { field-sizing: content; resize: none; min-height: 3em; }
 .empty { color: var(--dim); text-align: center; padding: 40px 0; }
 
 /* An item that gets done is ticked, never removed - it is the only record that a complaint was
@@ -123,8 +123,11 @@ body.page .topbar {
 .checklist .item:focus { background: rgba(127, 255, 0, .07); }
 .checklist li.done .item { color: var(--dim); }
 /* The stable id he refers to a task by. Dim and monospaced so it reads as a tag on the item, not
-   as part of what he typed, and it never takes the caret - only the words beside it are edited. */
-.checklist .tag { flex: none; color: var(--dim); font-family: ui-monospace, "Cascadia Code", monospace;
+   as part of what he typed, and it never takes the caret - only the words beside it are edited.
+   One fixed width whatever the number: #7 and #108 used to indent their words by different
+   amounts, so the column of items wobbled with the ids in front of it. */
+.checklist .tag { flex: none; min-width: 4ch; color: var(--dim);
+                  font-family: ui-monospace, "Cascadia Code", monospace;
                   font-size: .78rem; user-select: none; }
 /* Done tasks fold away at the foot of their list so what he still has to act on is what he sees.
    The summary is the same quiet label as the section headings, with a caret that turns when it
@@ -137,12 +140,16 @@ body.page .topbar {
 .done-fold[open] summary::before { transform: rotate(90deg); }
 .done-fold .done-list { margin-top: 6px; }
 /* What it heard, and what they actually said. A rule is two things and an arrow between them, so it
-   reads as one line rather than as a table to scan across. */
+   reads as one line rather than as a table to scan across - and both things are typed straight
+   into, with + below making the next empty pair. */
 .swaps, .terms { list-style: none; margin: 0; padding: 0; }
 .swaps li { display: flex; align-items: baseline; gap: 9px; padding: 2px 0; flex-wrap: wrap; }
 .swaps .heard { color: var(--dim); }
 .swaps .arrow { color: var(--accent); }
-.stock { margin-left: auto; font-size: .72rem; color: var(--dim); }
+.swaps [contenteditable] { min-width: 8ch; padding: 0 4px; margin: 0 -4px; border-radius: 6px;
+                           outline: none; }
+.swaps [contenteditable]:focus { background: rgba(127, 255, 0, .07); }
+.add-swap { margin-top: 8px; padding: 3px 14px; font-size: 1rem; color: var(--dim); }
 /* The words the fuzzy pass snaps to: a list to skim, not a column to read down. */
 .terms { display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .terms li { color: var(--past); }
@@ -384,6 +391,36 @@ h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-l
 /* A new row reserves its number's spot at once - typing used to start in the space where the id
    belongs - and the placeholder becomes the real number the moment the first save assigns it. */
 .checklist .tag.pending { opacity: .5; }
+
+/* ---- the config page's contents column ----------------------------------------------------- */
+
+/* The cards run long, so a rail beside them makes each one one click away - the same shape as
+   the conversation's contents. Fixed, because the page itself is what scrolls. */
+body.config #content { margin-left: 180px; }
+#toc { position: fixed; left: 10px; top: 62px; width: 158px; background: var(--panel);
+       border-radius: 10px; padding: 8px 0; }
+#toc button { display: block; width: 100%; text-align: left; font: inherit; font-size: .78rem;
+              color: var(--dim); background: transparent; border: 0;
+              border-left: 2px solid transparent; padding: 5px 12px; cursor: pointer; }
+#toc button:hover { color: var(--fg); background: rgba(127, 255, 0, .06); }
+#toc button[aria-current="true"] { color: var(--fg); border-left-color: var(--accent); }
+/* A card arriving under a sticky bar must stop short of it, or its heading lands hidden. */
+.section { scroll-margin-top: 58px; }
+.budget { min-height: 0; max-width: 32ch; }
+
+/* ---- the close question, in the app's own styling ------------------------------------------ */
+
+/* The native confirm was a light-mode system box inside a dark app. This is the same question,
+   dressed like everything else; the veil under it keeps the click that dismisses it deliberate. */
+#veil { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .55);
+        display: flex; align-items: center; justify-content: center; }
+#veil .dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+                padding: 18px 20px; max-width: 380px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+#veil h3 { margin: 0 0 8px; font-size: 1rem; }
+#veil p { margin: 0 0 14px; color: var(--dim); font-size: .88rem; }
+#veil .choices { display: flex; gap: 8px; justify-content: flex-end; }
+.btn.leave { color: #ff5b5b; border-color: rgba(255, 91, 91, .45); }
+.btn.leave:hover { background: rgba(255, 91, 91, .12); border-color: #ff5b5b; color: #ff5b5b; }
 
 /* The page's own Ctrl+F: the embedded browser has no find bar of its own. */
 #finder { position: fixed; top: 10px; right: 14px; z-index: 40; display: flex; gap: 6px;

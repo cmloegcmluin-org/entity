@@ -1,6 +1,6 @@
 from entity.memory import profile_sections
 from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
-from entity.web import create_app, persona_paragraphs
+from entity.web import create_app
 
 
 def _model(*lines):
@@ -66,30 +66,42 @@ def test_every_session_break_is_named_where_it_stands():
     ]
 
 
-def test_the_bar_reaches_every_page_that_used_to_be_a_tab(tmp_path):
+def test_the_bar_reaches_every_page_and_carries_the_restart_button(tmp_path):
     profile = tmp_path / "profile.md"
     profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
-    client = _client(profile_path=profile, persona="BREVITY IS YOUR MOST IMPORTANT RULE.")
+    client = _client(profile_path=profile)
 
-    pages = ("/", "/profile", "/persona", "/memory", "/translations", "/agents")
+    pages = ("/", "/config", "/agents")
     for path in pages:
         page = client.get(path).get_data(as_text=True)
-        assert page.count('class="btn topbtn') == len(pages)  # every page reaches every other one
-        assert f'href="{path}"' in page
+        for other in pages:
+            assert f'href="{other}"' in page  # every page reaches every other one
+        # One click from a landed fix to running it, wherever he happens to be looking.
+        assert 'id="restart"' in page
 
 
-def test_the_bar_stays_frozen_at_the_top_while_a_reading_page_scrolls_under_it():
-    # The profile and the pages beside it scroll at the document level, so a bar left in normal
-    # flow scrolls away and the tabs go out of reach halfway down a long profile. It is pinned
-    # instead - stuck to the top of the page over its own opaque background, so the sections slide
-    # under it rather than showing through. (The conversation is a fixed-height grid that never
-    # scrolls, so this is scoped to the reading pages and leaves that view untouched.)
+def test_the_tabs_this_page_replaced_still_answer(tmp_path):
+    # A window standing open across the update lands on the new page, not on a 404.
+    client = _client()
+
+    for old in ("/profile", "/persona", "/memory", "/translations"):
+        answer = client.get(old)
+        assert answer.status_code == 302
+        assert answer.headers["Location"].endswith("/config")
+
+
+def test_the_bar_stays_frozen_with_the_same_air_above_and_below_the_pills():
+    # The reading pages scroll at the document level, so the bar is pinned over its own opaque
+    # background. Its air is INSIDE it (padding, symmetric): as an outside margin it scrolled
+    # away - "it also strangely scrolls down to remove the margin above the row of pills" - and
+    # below the pills there was never any, the border sitting flush on their bottoms.
     css = _client().get("/static/app.css").get_data(as_text=True)
 
-    frozen = _rule_for(css, "body.page .topbar")
+    frozen = _rule_for(css, "body.page .topbar, body.config .topbar")
     assert "position: sticky" in frozen
     assert "top: 0" in frozen
     assert "background:" in frozen  # opaque, or the scrolled content bleeds through the tabs
+    assert "padding: 10px 0" in frozen  # the same air above the pills and below them
 
 
 def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
@@ -98,7 +110,7 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
                        "## Goals\n- swim\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/profile").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
     assert "better voice" in page and "swim" in page
     # Matched by prefix, since a profile glosses its own headings however it likes.
     assert 'data-heading="Enhancements they want for you (roadmap, not now)"' in page
@@ -119,7 +131,7 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
                        "- [x] hear only their voice\n- live captions\nplain line\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/profile").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
     # A box to click, not `- [x]` spelled out for the reader to decode - and any line with words
     # on it is an item, since they are typed in plain.
     assert page.count("<input type=\"checkbox\"") == 3
@@ -148,7 +160,7 @@ def test_the_enhancements_page_shows_each_items_id(tmp_path):
                        "- [ ] #4 better voice\n- [x] #2 older idea\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/profile").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
     assert 'data-id="4"' in page and "#4" in page
     assert 'data-id="2"' in page and "#2" in page
 
@@ -186,7 +198,7 @@ def test_completed_items_sit_in_a_collapsible_done_section_at_the_bottom(tmp_pat
                        "## Goals\n- [ ] run\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/profile").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
     fold = re.search(r"<details[^>]*class=\"done-fold\".*?</details>", page, re.S)
     assert fold is not None
     body = fold.group(0)
@@ -195,57 +207,71 @@ def test_completed_items_sit_in_a_collapsible_done_section_at_the_bottom(tmp_pat
     assert "Done" in body and "2" in body                     # the summary counts them
 
 
-def test_every_translation_in_force_is_on_the_page_and_a_users_own_save_back(tmp_path):
-    # "can we have an explicit list of translations I can see" - so the ones that ship are listed
-    # beside their own, rather than being applied invisibly.
+def test_every_translation_in_force_is_an_editable_row_with_no_labels_and_no_second_copy(tmp_path):
+    # One styled list, edited in place: no "built in" tag ("it doesn't matter whether a
+    # translation is 'built-in' or not; don't display that"), no plain-text duplicate of his own
+    # rules beneath it, and each row carries the stock rule for its words so a save can write
+    # exactly what differs from what ships.
     translations = tmp_path / "translations.md"
     translations.write_text("notecraf -> Notecraft\n", encoding="utf-8")
     client = _client(translations_path=translations, terms=["Notecraft", "Git Bash"])
 
-    page = client.get("/translations").get_data(as_text=True)
-    assert "cloud agent" in page and "Claude agent" in page  # one that ships
-    assert "notecraf" in page and "Notecraft" in page        # one of the user's own
-    assert "Notecraft" in page and "Git Bash" in page        # and what the fuzzy pass snaps to
+    page = client.get("/config").get_data(as_text=True)
+    assert "cloud agent" in page and "Claude agent" in page  # one that ships, shown unbadged
+    assert "built in" not in page
+    # His own rule appears on its one row only - in the words he sees and the row's memory of
+    # them (data-heard) - never again in a plain-text box below.
+    assert "notecraf" in page and page.count("notecraf") == 2
+    assert 'data-translations' not in page                     # the raw textarea is gone
+    assert 'id="add-swap"' in page                             # + makes the next empty row
+    assert "Git Bash" in page                                  # what the fuzzy pass snaps to
 
     client.post("/translations", data={"body": "notecraf -> Notecraft\nhi deas -> Notecraft"})
 
     assert "hi deas -> Notecraft" in translations.read_text(encoding="utf-8")
 
 
-def test_the_persona_breaks_where_it_shouts_and_not_one_word_is_lost():
-    # Six thousand characters arrive on a single line. The only structure in them is the author's
-    # own shouting - "BREVITY IS YOUR MOST IMPORTANT RULE" - so that is where it is broken.
-    persona = ("You are Entity, their companion. BREVITY IS YOUR MOST IMPORTANT RULE. Keep every "
-               "reply to two sentences. SURFACE FAILURES IMMEDIATELY. Say so in one line first.")
+def test_the_config_page_has_a_contents_column_and_a_credits_card(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Goals\n- swim\n", encoding="utf-8")
+    client = _client(profile_path=profile,
+                     usage_status=lambda: {"tokens": 123456, "budget": 500000})
 
-    blocks = persona_paragraphs(persona)
+    page = client.get("/config").get_data(as_text=True)
 
-    assert [block["lead"] for block in blocks] == [
-        "", "BREVITY IS YOUR MOST IMPORTANT RULE.", "SURFACE FAILURES IMMEDIATELY.",
-    ]
-    # Laid out, never rewritten: this is the exact text the brain reads, and a second edited copy
-    # of it would drift from what it actually reads.
-    rebuilt = " ".join(" ".join(f"{block['lead']} {block['body']}".split()) for block in blocks)
-    assert rebuilt == " ".join(persona.split())
+    assert 'id="toc"' in page                    # each card is one click away
+    assert 'id="card-credits"' in page
+    assert "123,456" in page                     # the five-hour estimate, readable
+    assert 'value="500000"' in page              # the line he set, where he set it
 
 
-def test_shouting_inside_a_sentence_is_not_pulled_out_as_a_heading():
-    # "A CORE part of your job is..." and "ONE EXCEPTION, and it overrides brevity:" both open
-    # with capitals and neither is a heading - lifting one out would cut its sentence in half.
-    blocks = persona_paragraphs("Keep it short. A CORE part of your job is running agents. "
-                                "ONE EXCEPTION, and it overrides brevity: answer them.")
+def test_the_close_dialog_and_its_wiring_reach_every_page():
+    # The X asks in the app's own styling now - the native confirm was a light-mode system box
+    # inside a dark app - so the dialog and its script ride on the shared chrome.
+    page = _client().get("/").get_data(as_text=True)
 
-    assert [block["lead"] for block in blocks] == ["", "", ""]
-    assert blocks[1]["body"].startswith("A CORE part of your job")
+    assert 'id="veil"' in page
+    assert "closing.js" in page
 
 
-def test_a_paragraph_that_is_already_markdown_is_left_as_it_was():
-    # Their profile arrives inside the persona with headings and bullets of its own, on their own
-    # lines. Those are already readable and must survive intact.
-    blocks = persona_paragraphs("## Goals\n- swim\n- cello\n\nplain words after it")
+def test_quit_and_restart_reach_the_window_they_serve_under():
+    ways = []
+    client = _client(on_quit=lambda: ways.append("quit"), on_restart=lambda: ways.append("restart"))
 
-    assert [block["body"] for block in blocks] == ["## Goals\n- swim\n- cello", "plain words after it"]
-    assert all(block["lead"] == "" for block in blocks)
+    client.post("/quit")
+    client.post("/restart")
+
+    assert ways == ["quit", "restart"]
+
+
+def test_the_usage_budget_is_saved_only_when_it_is_a_number(tmp_path):
+    kept = []
+    client = _client(save_usage_budget=kept.append)
+
+    client.post("/usage-budget", data={"tokens": "500,000"})
+    client.post("/usage-budget", data={"tokens": "half a million"})
+
+    assert kept == [500000]
 
 
 def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
@@ -256,7 +282,7 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
                        "## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/profile").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
 
     assert page.count('<ul class="checklist"') == 4  # every section, not just the one
     assert page.count('<input type="checkbox"') == 4
@@ -275,10 +301,11 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     profile = tmp_path / "profile.md"
     profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
 
-    page = _client(profile_path=profile).get("/profile").get_data(as_text=True)
+    page = _client(profile_path=profile).get("/config").get_data(as_text=True)
 
-    assert page.count('contenteditable="plaintext-only"') == 2  # the words of an item are the item
-    assert "Edit as text" not in page and "<textarea" not in page
+    # The words of an item are the item - one editable span per row, no raw-markdown box.
+    assert page.count('class="item" contenteditable="plaintext-only"') == 2
+    assert "Edit as text" not in page
 
 
 def test_entitys_own_standing_instructions_are_shown_and_saved_back(tmp_path):
@@ -287,9 +314,9 @@ def test_entitys_own_standing_instructions_are_shown_and_saved_back(tmp_path):
     # like what it has learned, while the full composed persona stays shown read-only above it.
     additions = tmp_path / "persona.md"
     additions.write_text("- never read a commit hash aloud\n", encoding="utf-8")
-    client = _client(persona="BREVITY IS YOUR RULE.", persona_additions_path=additions)
+    client = _client(persona_additions_path=additions)
 
-    page = client.get("/persona").get_data(as_text=True)
+    page = client.get("/config").get_data(as_text=True)
     assert "never read a commit hash aloud" in page   # in an editable box, not only the read-only text
     assert 'data-persona="true"' in page
 
@@ -303,7 +330,7 @@ def test_what_entity_has_learned_is_read_and_written_back(tmp_path):
     learned.write_text("- prefers metric units\n", encoding="utf-8")
     client = _client(learned_path=learned)
 
-    assert "prefers metric units" in client.get("/memory").get_data(as_text=True)
+    assert "prefers metric units" in client.get("/config").get_data(as_text=True)
 
     client.post("/memory", data={"body": "- prefers metric units\n- hates a wall of text"})
 

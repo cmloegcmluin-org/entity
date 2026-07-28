@@ -49,6 +49,8 @@ from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
+# The token line the credit warning fires from - his number, set on the Config page.
+USAGE_BUDGET = RUNTIME_DIR / "usage-budget.txt"
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
 ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
 AGENT_STATE = RUNTIME_DIR / "agents.json"  # the fleet's survival record: what a restart revives from
@@ -269,6 +271,14 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     quiet_monitor = QuietMonitor(outbox, quiet_after=AGENT_QUIET_AFTER, events=agent_events)
     inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor, events=agent_events)
     inbox_watcher.start()
+
+    # "warn Douglas when he is low on credits": the five-hour spending, measured from the
+    # machine's own records every few minutes, spoken once when it crosses the line he set on the
+    # Config page. No line set, no warnings (see entity.usage).
+    from entity.usage import UsageWatch
+
+    usage_watch = UsageWatch(outbox, USAGE_BUDGET)
+    threading.Thread(target=usage_watch.run, kwargs={"stop": stop}, daemon=True).start()
 
     announce("Entity is waking up...")
     # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks
@@ -533,6 +543,22 @@ def main(argv=None):
     # pressed in that gap is dropped rather than raising at a page that cannot know.
     mic = {}
 
+    from entity.usage import block_tokens, budget_line, save_budget
+
+    # The window, as the page may drive it: the styled close dialog's Close, and the Restart
+    # button. Filled in once the window exists (hand_controls below); clicks before then no-op.
+    window = {}
+
+    def ask_quit():
+        control = window.get("controls")
+        if control is not None:
+            control.quit()
+
+    def ask_restart():
+        control = window.get("controls")
+        if control is not None:
+            control.restart()
+
     app = create_app(
         mirror.model, mirror=mirror,
         on_submit=lambda text: mic.get("submit", lambda _: None)(text),
@@ -545,7 +571,10 @@ def main(argv=None):
         # The same list the mic is about to be built with, so the page says what is in force
         # rather than what could be.
         terms=_vocab_terms(),
-        persona=_persona(), agent_logs_dir=AGENT_LOGS,
+        agent_logs_dir=AGENT_LOGS,
+        on_quit=ask_quit, on_restart=ask_restart,
+        usage_status=lambda: {"tokens": block_tokens(), "budget": budget_line(USAGE_BUDGET)},
+        save_usage_budget=lambda tokens: save_budget(USAGE_BUDGET, tokens),
     )
     # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
     # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
@@ -565,9 +594,29 @@ def main(argv=None):
         finally:
             stop.set()
 
-    threading.Thread(target=worker, daemon=True).start()
-    open_window(app, icon=str(Path(__file__).resolve().parents[2] / "assets" / "entity.ico"))
+    session = threading.Thread(target=worker, daemon=True)
+    session.start()
+    controls = open_window(
+        app, icon=str(Path(__file__).resolve().parents[2] / "assets" / "excephalon.ico"),
+        # Reopen where it was closed: "Entity window should remember where it was on the screen".
+        position_path=RUNTIME_DIR / "window-position.json",
+        hand_controls=lambda given: window.update(controls=given),
+    )
     stop.set()  # the window was closed: ask the loop to wind down, as closing the Tk one did
+    if controls is not None and controls.restart_asked:
+        # The Restart button: wait for this session to wind all the way down - goodbye said, the
+        # fleet recorded for revival - then bring up a fresh process on the current code. Spawned
+        # only after the wind-down, or the new instance would revive from a fleet record the old
+        # one was still writing.
+        session.join(timeout=60)
+        import subprocess
+
+        subprocess.Popen(
+            [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "entity", "--gui"],
+            cwd=str(Path(__file__).resolve().parents[2]),
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
 
 
 if __name__ == "__main__":

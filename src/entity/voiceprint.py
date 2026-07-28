@@ -16,6 +16,9 @@ Run `python -m entity.voiceprint` (or double-click "Learn my voice.bat") to reco
 and save the fingerprint.
 """
 
+import queue
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -87,6 +90,47 @@ class Voiceprint:
         if self._embedder is None:
             self._embedder = _sherpa_embedder(self._dir / MODEL_FILE)
         return self._embedder(samples)
+
+
+class Scorekeeper:
+    """Watch-only: scores what the mic heard against the learned voice, writes each score beside
+    the words it came with, and decides nothing.
+
+    The log is the evidence a dropping threshold will one day be chosen from - across real
+    sessions, with the user's actual words on the keep side - because the one previous attempt
+    picked its threshold from a single recording and went deaf to them. Scoring runs on a worker
+    of its own: the mic's pump thread hands a chunk over and moves on, so measuring can never
+    slow the draft. Without a learned voice on file there is nothing to measure against, and
+    nothing is written at all."""
+
+    def __init__(self, directory, *, voiceprint=None, clock=time.strftime):
+        self._dir = Path(directory)
+        self._voiceprint = voiceprint or Voiceprint(directory)
+        self._clock = clock
+        self._chunks = queue.SimpleQueue()
+        self._path = None  # named on first write, so an unused session leaves no empty file
+        self._worker = None
+
+    def note(self, audio, text):
+        """Queue one heard chunk for scoring. Returns at once; the line lands when the worker
+        gets to it."""
+        if not (self._dir / PRINT_FILE).exists():
+            return  # no voice has been learned; there is no evidence to collect yet
+        if self._worker is None:
+            self._worker = threading.Thread(target=self._keep, daemon=True)
+            self._worker.start()
+        self._chunks.put((np.asarray(audio, dtype=np.float32), text))
+
+    def _keep(self):
+        while True:
+            audio, text = self._chunks.get()
+            score = self._voiceprint.score(audio)
+            if score is None:
+                continue  # the model failed on this chunk; a gap in the log, never a guess
+            if self._path is None:
+                self._path = self._dir / f"scores-{self._clock('%Y%m%d-%H%M%S')}.log"
+            with open(self._path, "a", encoding="utf-8") as log:
+                log.write(f"{score:.2f}  {text}\n")
 
 
 def _sherpa_embedder(model_path):

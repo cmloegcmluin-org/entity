@@ -88,6 +88,30 @@ def test_speech_while_recording_lands_in_the_draft():
     assert ears.submits == 0  # nothing submitted - the draft just accumulates
 
 
+def test_every_worded_chunk_is_handed_to_the_scorekeeper():
+    # The against-his-voice score is measured for everything the mic turns into words - measured
+    # only: the pipeline's decisions are untouched, and the scores go to a log the dropping
+    # threshold will one day be chosen from.
+    class KeeperSpy:
+        def __init__(self):
+            self.noted = []
+
+        def note(self, audio, text):
+            self.noted.append((len(audio), text))
+
+    keeper = KeeperSpy()
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber("add eggs to the list"), FakeMic(_burst_then_pause()),
+                          pause_frames=3, scorekeeper=keeper, **ears.kwargs())
+
+    dictation.pump()
+
+    [(frames, text)] = keeper.noted
+    assert frames > 0
+    assert text == "add eggs to the list"
+    assert ears.drafted == ["add eggs to the list"]  # noting changed nothing about the draft
+
+
 class MicWithAWorkerBeside:
     """A mic whose frames arrive while the hearing worker reads the snapshots they leave - which is
     what its own thread does in the app, without a thread to go wrong in a test."""

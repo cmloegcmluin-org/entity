@@ -196,7 +196,11 @@ holding the view) rather than a browser tab. `links.py` decides what a message n
 opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets), streams the whole exchange into its log, records the fleet in
 `runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught
-mid-task told to pick back up — and `retire()` wraps a finished agent up whole: its log moved to
+mid-task told to pick back up, one recorded mid-landing told to settle the merge NOW and watch it
+in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
+the merged report never existed) — its digest also names tabs whose log files linger with no agent
+behind them, because the window draws a tab per log file and a brain briefed from the desk alone
+once could not see the tab the user was pointing at; and `retire()` wraps a finished agent up whole: its log moved to
 the fleet's one archive (`runtime/agent-logs-archive/`, a SIBLING of the live folder so an archived
 log is outside what the roster globs and can never come back as a tab — `tailing.archive_dir` names
 it in one place, shared with the window's own close button), the Enhancements item it was completing
@@ -218,7 +222,10 @@ output as the machinery under them, capped at both ends with what was dropped co
 held, and it says which one a reply just named. `narrator.py` is how any agent event becomes
 speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
 words each one as its own sentence (composed news skips the unwritten-lines ledger - the brain
-remembers what it wrote), and the plain capped notice is only the cannot-answer fallback.
+remembers what it wrote), and the plain capped notice is the fallback when the brain cannot answer
+- or answers too late: each narration's wait is bounded, because one hung narration once held the
+brain's lock with the merge report and the quiet warning queued behind it until the app closed and
+all of it died unspoken.
 `brain_sdk.py` holds the persona and the session: the FAST tier (Haiku), `tools=[]`, replies
 streamed delta by delta — a talker that pulls levers, never an investigator; the agents it starts
 are where Opus-tier work happens. `memory.py` is the profile, what Entity has learned, and the lexicon.

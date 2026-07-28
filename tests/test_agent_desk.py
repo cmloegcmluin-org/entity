@@ -657,6 +657,56 @@ def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
     desk.close()
 
 
+def test_revive_sends_a_landing_agent_to_settle_its_merge(tmp_path):
+    # The combine agent backgrounded its merge watch and went idle; the merge landed a minute
+    # later with nobody listening, and its tab sat open all day. An agent recorded mid-landing
+    # owes exactly one thing - the outcome - so revival demands it outright instead of leaving
+    # an "idle" lander in peace.
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "lander", "cwd": "/wt/lander", "task": "land the fix",
+         "session_id": "sess-9", "state": "idle", "delivery": "landing"},
+    ]), encoding="utf-8")
+    desk, _, _ = _desk(state=state)
+
+    desk.revive()
+
+    lander = desk._desked["lander"].agent
+    assert _wait_for(lambda: any("merged" in m for m in lander.messages))
+    desk.close()
+
+
+def test_the_digest_names_tabs_left_by_agents_the_desk_no_longer_knows(tmp_path):
+    # He asked for a leftover tab to be closed and Entity answered that it had no agent's name
+    # to go by: the window draws a tab for every log file, but the briefing listed only live
+    # agents, so the two views never met. The digest now names the orphans, so "close that tab"
+    # is one close_agent_tab call away.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "prevent-same-name-combine.log").write_text("old exchange", encoding="utf-8")
+    desk, _, _ = _desk(log_dir=logs)
+
+    briefing = desk.digest()
+
+    assert "No agents running." in briefing
+    assert "prevent-same-name-combine" in briefing
+    assert "close_agent_tab" in briefing
+
+
+def test_a_live_agents_log_is_not_called_a_leftover_tab(tmp_path):
+    logs = tmp_path / "agent-logs"
+    hold = threading.Event()
+    desk, outbox, _ = _desk(hold=hold, log_dir=logs)
+    desk.start("fixer", "/tmp/wt", "make it green")
+
+    assert "Tabs still open" not in desk.digest()
+    hold.set()
+    assert _wait_for(lambda: bool(outbox))
+    desk.close()
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

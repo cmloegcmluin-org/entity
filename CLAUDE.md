@@ -239,7 +239,11 @@ brain's lock with the merge report and the quiet warning queued behind it until 
 all of it died unspoken.
 `brain_sdk.py` holds the persona and the session: the FAST tier (Haiku), `tools=[]`, replies
 streamed delta by delta — a talker that pulls levers, never an investigator; the agents it starts
-are where Opus-tier work happens. `memory.py` is the profile, what Entity has learned, and the lexicon.
+are where Opus-tier work happens. Its every ask is bounded, and so is waiting for its one-at-a-time
+lock: a stream once died without raising, held the lock from inside a narration, and everything
+after — the merged report, a direct question, every later submission — sat at "(thinking…)"
+forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
+frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Entity has learned, and the lexicon.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump

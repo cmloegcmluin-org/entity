@@ -49,8 +49,6 @@ from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
-# His weekly credit line, in tokens - the number the spoken usage warnings are measured against.
-USAGE_WEEKLY_LIMIT = RUNTIME_DIR / "usage-weekly-limit.txt"
 
 
 def _live_instructions():
@@ -288,14 +286,6 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     quiet_monitor = QuietMonitor(outbox, quiet_after=AGENT_QUIET_AFTER, events=agent_events)
     inbox_watcher = InboxWatcher(AGENT_INBOX, outbox, monitor=quiet_monitor, events=agent_events)
     inbox_watcher.start()
-
-    # "I only care about my weekly limit": the rolling seven days' spending, measured from the
-    # machine's own records, spoken once at each of his chosen shares - 50, 80, 90, 95, 98, 99
-    # percent of runtime/usage-weekly-limit.txt. No line set, no warnings (see entity.usage).
-    from entity.usage import UsageWatch
-
-    usage_watch = UsageWatch(outbox, USAGE_WEEKLY_LIMIT)
-    threading.Thread(target=usage_watch.run, kwargs={"stop": stop}, daemon=True).start()
 
     announce("Excephalon is waking up...")
     # The punctuation repairman: one small warm session that fixes pause-chopped sentence breaks

@@ -12,6 +12,7 @@ dependencies = [
     # fake the engine, and nothing downloads the model.
     "kokoro-onnx>=0.4.7",
     "sounddevice>=0.4",          # microphone capture and the neural voice's playback
+    "sherpa-onnx>=1.13",         # speaker embeddings: learning his voice, scoring what the mic hears
     "numpy>=1.26",               # audio frames + energy VAD
     "flask>=3",                  # the window is a local web app
     "pywebview>=5",              # ...shown in its own native window rather than a browser tab

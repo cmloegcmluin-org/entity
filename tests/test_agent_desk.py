@@ -755,6 +755,37 @@ def test_a_live_agents_log_is_not_called_a_leftover_tab(tmp_path):
     desk.close()
 
 
+def test_a_revived_agents_recorded_session_survives_the_next_persist(tmp_path):
+    # A freshly resumed agent reports no session id of its own until it first answers, and
+    # persisting that None over the recorded id orphaned a whole fleet: the next restart found
+    # nulls, skipped every revival, and the user was told there was "no trace" of agents he
+    # had watched work all afternoon.
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "quiet", "cwd": "/wt/quiet", "task": "carry on", "session_id": "sess-q",
+         "state": "idle", "delivery": "presented", "steps": "look at it"},
+    ]), encoding="utf-8")
+
+    class MuteAgent:  # resumed, and has not spoken this life - its own session_id is None
+        session_id = None
+
+        def work(self, message, on_message=None):
+            return ""
+
+        def close(self):
+            pass
+
+    desk = AgentDesk(Outbox(), agent_factory=lambda name, cwd, decide, **k: MuteAgent(),
+                     state_path=state)
+    desk.revive()  # revive persists the fleet immediately
+
+    [kept] = json.loads(state.read_text(encoding="utf-8"))
+    assert kept["session_id"] == "sess-q"  # the recorded id, not the mute agent's None
+    desk.close()
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

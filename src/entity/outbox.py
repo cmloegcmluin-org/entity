@@ -33,14 +33,28 @@ class News(str):
 
 
 class Outbox:
-    def __init__(self):
+    """`spool` (a path) makes undelivered news survive the process. Draining is NOT delivery -
+    the conversation holds drained news in hand, sometimes for minutes, until a lull lets it
+    speak - so the spool keeps every pushed item until `spoken` says it actually went out. On a
+    real evening the brain wedged with three agents' reports in hand and the user restarted:
+    the reports lived only in that process's memory, and the restarted app had "no trace" of
+    the very updates it had just been offering. What is owed to the user must not be a casualty
+    of the process that owed it."""
+
+    def __init__(self, spool=None):
         self._items = deque()
         self._lock = threading.Lock()
+        self._spool = spool
         self.arrived = threading.Event()  # set while something is waiting to be spoken
+        for held in self._spooled():  # last life's undelivered news, back in the queue
+            self._items.append(News(held["message"], held.get("about"), held.get("composed")))
+        if self._items:
+            self.arrived.set()
 
     def push(self, message, about=None, composed=False):
         with self._lock:
             self._items.append(News(message, about, composed))
+            self._keep(message, about, composed)
         self.arrived.set()
 
     def drain(self):
@@ -50,6 +64,43 @@ class Outbox:
             self._items.clear()
             self.arrived.clear()
         return items
+
+    def spoken(self, news):
+        """The conversation reports that this news actually reached the user - only then does it
+        leave the spool. News merely drained is still owed."""
+        with self._lock:
+            kept = self._spooled()
+            for i, held in enumerate(kept):
+                if held["message"] == str(news):
+                    del kept[i]
+                    break
+            self._write(kept)
+
+    def _keep(self, message, about, composed):
+        kept = self._spooled()
+        kept.append({"message": str(message), "about": about, "composed": bool(composed)})
+        self._write(kept)
+
+    def _spooled(self):
+        if self._spool is None:
+            return []
+        try:
+            import json
+
+            return list(json.loads(self._spool.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return []  # an unreadable spool must not stop news from flowing
+
+    def _write(self, kept):
+        if self._spool is None:
+            return
+        try:
+            import json
+
+            self._spool.parent.mkdir(parents=True, exist_ok=True)
+            self._spool.write_text(json.dumps(kept, indent=2), encoding="utf-8")
+        except OSError:
+            pass  # a failed spool write costs durability, never the delivery itself
 
     def __bool__(self):
         with self._lock:

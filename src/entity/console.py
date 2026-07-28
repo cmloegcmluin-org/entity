@@ -94,5 +94,14 @@ class Console:
         self._line(f"entity (heads-up)> {text}\n")  # marked so an unprompted line isn't mistaken for a reply
         self._messages("heads-up", text)
 
+    def evidence(self, text):
+        """A technical detail kept for diagnosis: the durable record only - never the screen, the
+        window, or the voice. The insulation is the point: a brain failure's cause once rode in
+        the spoken reply, and "_AskWedged" was read to the user aloud - a code identifier through
+        the one shield, and its audio then landed in their own draft. The record is where the
+        cause is USEFUL: stderr under pythonw goes nowhere, and an unexplained failure "has never
+        said that and recovered"."""
+        self._line(text, show=False)
+
     def timing(self, *, think, speak):
         self._line(f"  [think {think:.1f}s · speak {speak:.1f}s]")  # the --timings per-turn readout

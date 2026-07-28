@@ -47,6 +47,30 @@ from entity.sdk_session import SdkSession
 RESPOND_DEADLINE = 180.0
 
 
+def _wedge_evidence():
+    """Every thread's stack into runtime/brain-wedge.log at the moment a wedged lock is abandoned,
+    so the next diagnosis starts from where the holder actually stood rather than a story about
+    it. The moment of failure is the only time this evidence exists to be taken."""
+    try:
+        import faulthandler
+        import time
+
+        from entity.memory import DEFAULT_PERSONA_ADDITIONS_PATH
+
+        path = WEDGE_EVIDENCE_PATH or DEFAULT_PERSONA_ADDITIONS_PATH.parent / "brain-wedge.log"
+        with open(path, "a", encoding="utf-8") as log:
+            log.write(time.strftime("\n=== %Y-%m-%d %H:%M:%S the respond lock was abandoned: its "
+                                    "holder never released it and shedding the session did not "
+                                    "unstick it ===\n"))
+            faulthandler.dump_traceback(log)
+    except Exception:
+        pass  # evidence must never become its own crash
+
+
+# Overridable so tests never write into the real runtime; None means beside the persona overlay.
+WEDGE_EVIDENCE_PATH = None
+
+
 class _AskWedged(Exception):
     """An ask outlived the deadline without answering or raising - the silent dead stream."""
 
@@ -220,11 +244,20 @@ class SdkBrain:
         `deadline` closes the session out from under the stuck ask - which makes that ask raise
         in its own thread and free the lock - and a turn whose own ask answers nothing within
         `deadline` sheds the session the same way and fails fast, so the loop lives to speak an
-        error instead of sitting at "(thinking…)" forever."""
-        if not self._respond_lock.acquire(timeout=deadline):
-            self._shed()  # the zombie's ask raises when its session dies; the lock comes free
-            if not self._respond_lock.acquire(timeout=10.0):
-                raise _AskWedged("the brain's session is wedged and shedding it did not free it")
+        error instead of sitting at "(thinking…)" forever.
+
+        And when even the shed does not free the lock - the holder is stuck somewhere no session
+        close reaches - the lock itself is ABANDONED: the stranded thread keeps the old object,
+        which nothing else ever touches again, and this turn starts clean on a fresh lock and a
+        fresh session. Giving up instead ("the session is wedged") left the brain deaf for a real
+        evening: the same wedge answered every later ask until the app was restarted."""
+        lock = self._respond_lock  # held by name, so an abandoned lock is still the one released
+        if not lock.acquire(timeout=deadline):
+            self._shed()  # the zombie's ask raises when its session dies; the lock usually frees
+            if not lock.acquire(timeout=min(10.0, deadline)):
+                _wedge_evidence()  # the holder's actual stack, written while it is still stuck
+                lock = self._respond_lock = threading.Lock()
+                lock.acquire()
         try:
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
@@ -253,7 +286,7 @@ class SdkBrain:
                 self._recent.append((utterance, reply))
             return reply
         finally:
-            self._respond_lock.release()
+            lock.release()
 
     def _bounded_ask(self, utterance, on_text, deadline):
         """One ask that cannot hang: past the deadline the session is closed - the stranded ask

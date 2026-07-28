@@ -87,21 +87,6 @@ body.page .topbar, body.config .topbar {
 .section { background: var(--panel); border-radius: 10px; padding: 12px 14px; }
 .section h2 { margin: 0 0 8px; font-size: .82rem; font-weight: 600; color: var(--dim);
               letter-spacing: .06em; text-transform: uppercase; }
-.writing {
-  width: 100%;
-  min-height: 120px;
-  font: inherit;
-  resize: vertical;
-  background: transparent;
-  color: var(--fg);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-.writing:focus { outline: none; border-color: var(--line); }
-/* A box that holds everything it contains, instead of a box inside a box: "the section shouldn't
-   have an internal scrollbar". The page scrolls; the box just grows. */
-.writing.grows { field-sizing: content; resize: none; min-height: 3em; }
 .empty { color: var(--dim); text-align: center; padding: 40px 0; }
 
 /* An item that gets done is ticked, never removed - it is the only record that a complaint was
@@ -158,9 +143,6 @@ body.page .topbar, body.config .topbar {
 .terms { display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .terms li { color: var(--past); }
 .note { margin: 0 0 10px; color: var(--dim); font-size: .82rem; }
-.as-text { margin-top: 10px; }
-.as-text summary { font-size: .76rem; color: var(--dim); cursor: pointer; }
-.as-text .writing { margin-top: 6px; }
 .agent.thread, .agent-archive.thread { height: 340px; }
 /* A retired agent's exchange, reopenable in place: the same quiet fold as the done
    lists, opening onto the same panel a live thread uses. */

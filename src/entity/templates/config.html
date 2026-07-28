@@ -69,7 +69,10 @@
   <p class="empty">No profile is loaded, so there is nothing here to edit.</p>
   {% endfor %}
 
-  <section class="section" id="card-memory" data-kind="memory">
+  {#- Memory and Instructions are whole files of bullet lines, not profile sections: `data-save`
+      is where their rows go, and it is how the in-place list editor (writing.js) knows to wire
+      the card at all - Enter to make the next bullet, and a save when the typing stops. -#}
+  <section class="section" id="card-memory" data-save="/memory">
     <h2>Memory</h2>
     <p class="note">What Excephalon has learned about you on its own - reviewed here, one fact
       per line, and removable the moment one is wrong.</p>
@@ -80,7 +83,7 @@
     </ul>
   </section>
 
-  <section class="section" id="card-instructions" data-kind="instructions">
+  <section class="section" id="card-instructions" data-save="/persona">
     <h2>Instructions</h2>
     <p class="note">How you've told it to behave, plus anything it files here itself. One per
       row.</p>

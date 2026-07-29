@@ -434,12 +434,28 @@ class AgentDesk:
             entry = self._desked.get(name)
             if entry is not None and entry.state not in ("idle", "failed"):
                 return False  # starting or working - live either way, and a live tab stays up
+            # Work he has not ruled on cannot be wrapped up. An agent built a feature, the tab was
+            # closed over it, and he met the result as a fait accompli: "are you saying you
+            # delivered a feature without me verifying it first? Have you forgotten the absolute
+            # basics of how you are supposed to supervise new features?" A DIED agent is another
+            # matter - there is no verdict to wait for - and a leftover log with no agent behind
+            # it is just a file to file away.
+            if (entry is not None and entry.state == "idle"
+                    and entry.delivery.stage != "landing"):
+                return False
         log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
         if entry is None and (log is None or not log.exists()):
             return False
         if log is not None and log.exists() and self._archive_dir is not None:
             self._archive_dir.mkdir(parents=True, exist_ok=True)
             log.replace(self._archive_dir / log.name)
+        # Anything queued about this agent is news about work that is over: undelivered, it would
+        # arrive as an update on a closed feature - "I'm kind of surprised you have an update for
+        # that one, because that feature is already done." Dropped BEFORE the tick below, whose
+        # own miss report is the one thing about this agent he does still need to hear.
+        drop = getattr(self._outbox, "drop", None)
+        if drop is not None:
+            drop(name)
         if entry is not None:
             with self._lock:
                 self._desked.pop(name, None)

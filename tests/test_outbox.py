@@ -67,3 +67,26 @@ def test_a_spoolless_outbox_still_answers_spoken(tmp_path):
     outbox = Outbox()
     outbox.push("word")
     outbox.spoken("word")  # nothing durable to clear; must simply not raise
+
+
+def test_news_about_a_finished_agent_can_be_dropped_from_the_queue_and_the_spool(tmp_path):
+    # Its work is closed; an update about it lands as a surprise. And with the spool holding it,
+    # it would come back after a restart to surprise him twice.
+    spool = tmp_path / "outbox.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("the copy fixes are ready to look at", about="copy-fixes")
+    outbox.push("the other one needs a decision", about="other")
+
+    outbox.drop("copy-fixes")
+
+    assert [str(news) for news in outbox.drain()] == ["the other one needs a decision"]
+    assert [str(news) for news in Outbox(spool=spool).drain()] == ["the other one needs a decision"]
+
+
+def test_dropping_the_last_item_clears_the_waiting_signal(tmp_path):
+    outbox = Outbox()
+    outbox.push("only this", about="one")
+
+    outbox.drop("one")
+
+    assert not outbox and not outbox.arrived.is_set()

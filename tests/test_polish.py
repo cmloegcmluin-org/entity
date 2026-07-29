@@ -33,3 +33,34 @@ def test_nothing_else_is_ever_touched():
     raw = "One sentence. Another sentence! A question? Yes."
 
     assert mend(raw) == raw
+
+
+def test_a_clause_opener_after_a_full_stop_is_the_same_chop_wearing_a_capital():
+    # Every chop he brought back was this shape. His three, verbatim, with what he said each
+    # should have been - the joins this can decide, and only those.
+    assert mend("We're just going to take advantage of the fact that the feature is already in "
+                "the app. At least your best attempt at the feature.") == (
+        "We're just going to take advantage of the fact that the feature is already in the app, "
+        "at least your best attempt at the feature.")
+    assert mend("You can give me the update first. Although I'm kind of surprised you have an "
+                "update for that one. Because that feature is already done.") == (
+        "You can give me the update first, although I'm kind of surprised you have an update for "
+        "that one because that feature is already done.")
+    assert mend("You're supposed to go out and do it. With a Claude agent.") == (
+        "You're supposed to go out and do it with a Claude agent.")
+
+
+def test_a_capital_that_is_not_a_clause_opener_keeps_its_sentence():
+    # "...on anything other than yourself. You're supposed to..." reads exactly like a real
+    # boundary, and so does every other sentence starting with a pronoun or a noun. Joining
+    # those on a guess would run whole paragraphs of his together.
+    assert mend("Please also review the recent interaction. It's making a ton of mistakes.") == (
+        "Please also review the recent interaction. It's making a ton of mistakes.")
+    assert mend("The demo is good to ship. Excephalon closes properly now.") == (
+        "The demo is good to ship. Excephalon closes properly now.")
+
+
+def test_an_opener_inside_a_sentence_is_left_where_it_is():
+    # Only a chop is mended: the same words mid-sentence are his, and untouched.
+    assert mend("I'll do it because you asked, and so will they.") == (
+        "I'll do it because you asked, and so will they.")

@@ -65,6 +65,16 @@ class Outbox:
             self.arrived.clear()
         return items
 
+    def drop(self, about):
+        """Forget every queued item about one agent - it is finished with, and news about work
+        already closed lands as a surprise rather than an update."""
+        with self._lock:
+            self._items = deque(item for item in self._items
+                                if getattr(item, "about", None) != about)
+            if not self._items:
+                self.arrived.clear()
+            self._write([held for held in self._spooled() if held.get("about") != about])
+
     def spoken(self, news):
         """The conversation reports that this news actually reached the user - only then does it
         leave the spool. News merely drained is still owed."""

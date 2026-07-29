@@ -190,13 +190,20 @@ one stop draining everything — and `tts_neural.py` is the Kokoro engine behind
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
 model is in. `actions.py` is everything the brain can DO: thirteen typed in-process tools wired to
 the desk — among them update_persona and remember, its levers to edit its own persona overlay
-(`runtime/persona.md`) and memory the way it files an enhancement — its speech carries no control
-phrases and its options carry no built-in tools.
-`polish.py` is the chop mender, deterministic and instant: a sentence mark followed by a
-lowercase continuation is a break no writer makes on purpose ("what we need to do. in order"),
-so `mend` heals it on the way to the brain; a break before a capital is left alone, because
-telling a mid-sentence chop from a real boundary needs semantics and the price of guessing is
-eating his meaning. A Haiku repairman sat on this path for three rounds and was retired in his
+(`runtime/persona.md`) and memory the way it files an enhancement, and file_improvement, which
+REFUSES a feature request naming one of his other apps (their folder names are known; see
+`names_another_app`), because the Enhancements list is for changes to Excephalon itself and twice
+a Highdeas request was filed there instead of being handed to an agent, each time answered with a
+written instruction that held until it didn't — its speech carries no control phrases and its
+options carry no built-in tools.
+`polish.py` is the chop mender, deterministic and instant, and it decides two things only. A
+sentence mark before a LOWERCASE continuation is a break no writer makes on purpose ("what we
+need to do. in order"). A sentence mark before one of a closed list of clause OPENERS is the
+same chop wearing a capital ("do it. With a Claude agent", "in the app. At least your best
+attempt", "first. Although I'm surprised", "one. Because that feature is already done") - every
+chop he has ever brought back was one of those two. A capital that is not on the list keeps its
+sentence: "...other than yourself. You're supposed to..." reads exactly like a real boundary,
+and joining on a guess would run whole paragraphs of his together. A Haiku repairman sat on this path for three rounds and was retired in his
 hands: it answered in four to eighty seconds when it answered at all, learned to echo drafts
 back unchanged from its own no-op warmup, and its submit-time wait added a flat eight seconds
 that bought nothing he could see. Do not put a model back here without solving the latency and
@@ -278,7 +285,11 @@ it in one place, shared with the window's own close button), the Enhancements it
 ticked off the user's list, its session closed, its worktree removed. That item rides with the
 agent from `start` (the brain passes it to `start_agent` when the work is one off the list) and is
 ticked only for a cleanly finished agent, never a died one, because a wrong tick would corrupt the
-list's record of ask and answer. Every task the desk hands out carries the standing
+list's record of ask and answer. `retire` also REFUSES an agent holding work he has not ruled on -
+a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
+you delivered a feature without me verifying it first?"), so a verdict is the only state a
+wrap-up is legal from, exactly as it is for the push - and it drops that agent's queued news on
+the way out, since an update about closed work arrives as a surprise rather than news. Every task the desk hands out carries the standing
 rules (rebase before presenting, present for the user's EYES, the engineering law in brief) and a
 pointer to the machine-wide engineering law file when one exists (`law_path`, home-relative in
 `__main__` so nothing personal enters the source); agents load their repo's checked-in CLAUDE.md

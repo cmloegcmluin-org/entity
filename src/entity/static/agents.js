@@ -16,26 +16,39 @@ if (threads.length) {
   setInterval(follow, 1000);  // an agent writes as it works, but not four times a second
 }
 
-/* Archived exchanges load once, on first open. They never grow, so there is nothing to poll -
-   and pages with a long history would otherwise pay for every retired agent every second. */
-for (const shelf of document.querySelectorAll("details.archived")) {
-  shelf.addEventListener("toggle", async () => {
-    if (!shelf.open || shelf.dataset.loaded) return;
-    shelf.dataset.loaded = "1";
-    const shown = await (await fetch(
-      `/agents/archived/${encodeURIComponent(shelf.dataset.agent)}?since=0`)).json();
-    drawInto(shelf.querySelector(".thread"), shown.entries, shown.at);
+/* The rail: every log one click away. An active name scrolls its tab into view; an archived name
+   UNARCHIVES the log - the reload redraws it as an ordinary tab - and the #hash carries which one
+   to scroll to once it exists. The lists are server-drawn, so any change of membership (a close,
+   a restore) reloads rather than patching the page by hand. */
+for (const goes of document.querySelectorAll("#toc button[data-goes]")) {
+  goes.addEventListener("click", () => {
+    document.getElementById(goes.dataset.goes)?.scrollIntoView({ block: "start" });
   });
 }
 
-/* Closing one archives its log and takes its section away. The archive is what makes it stick:
-   the roster is the log folder, so a log left in place comes back on the next poll. */
+for (const shelf of document.querySelectorAll("#toc button[data-restore]")) {
+  shelf.addEventListener("click", async () => {
+    const name = shelf.dataset.restore;
+    await fetch(`/agents/archived/${encodeURIComponent(name)}/restore`, { method: "POST" });
+    location.assign(`/agents#agent-${encodeURIComponent(name)}`);
+    location.reload();  // assign alone won't reload when only the hash differs
+  });
+}
+
+if (location.hash) {
+  // The restore lands here: the freshly unarchived tab exists now - bring it into view.
+  document.getElementById(decodeURIComponent(location.hash.slice(1)))
+    ?.scrollIntoView({ block: "start" });
+}
+
+/* Closing one archives its log, and the reload moves its name to the rail's Archived list - the
+   archive is what makes the close stick: the roster is the log folder, so a log left in place
+   comes back on the next poll. */
 for (const shut of document.querySelectorAll(".shut")) {
   shut.onclick = async () => {
     const name = shut.dataset.agent;
     await fetch(`/agents/${encodeURIComponent(name)}/close`, { method: "POST" });
-    const gone = threads.findIndex((agent) => agent.where.dataset.agent === name);
-    if (gone >= 0) threads.splice(gone, 1);
-    shut.closest("section").remove();
+    location.assign("/agents");
+    location.reload();
   };
 }

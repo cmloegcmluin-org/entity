@@ -580,29 +580,39 @@ def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):
     assert (tmp_path / "agent-logs-archive" / "fixer.log").exists()
     page = client.get("/agents").get_data(as_text=True)
     assert '<div class="agent thread" data-agent="fixer">' not in page  # the live tab is gone
-    assert '<details class="archived" data-agent="fixer">' in page      # but the exchange is not
+    assert 'data-restore="fixer"' in page  # but its name moved to the rail's Archived list
     assert client.post("/agents/fixer/close").status_code == 404  # and it is not a path to touch
 
 
-def test_an_archived_agents_exchange_can_be_read_back(tmp_path):
-    # Closing a tab archives the log rather than deleting it - but with no way back in,
-    # "archived" read as "thrown away" the day a stranded task's only record went there unread.
+def test_the_rail_lists_every_log_and_restoring_an_archived_one_makes_it_a_tab_again(tmp_path):
+    # His design, replacing an unfold-inside-the-archive fold he rejected outright: one rail
+    # like the Config page's, active and archived logs each one click away - and clicking an
+    # archived name UNARCHIVES it, so the exchange comes back as an ordinary tab in the main
+    # view rather than being read in some second place.
     logs = tmp_path / "agent-logs"
     logs.mkdir()
+    (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix it\n", encoding="utf-8")
     archive = tmp_path / "agent-logs-archive"
     archive.mkdir()
     (archive / "settler.log").write_text("[10:00:00] ENTITY> settle the merge\n"
                                          "[10:00:31] AGENT> Merged.\n", encoding="utf-8")
     client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
 
-    assert '<details class="archived" data-agent="settler">' in client.get(
-        "/agents").get_data(as_text=True)
-    shown = client.get("/agents/archived/settler").get_json()
+    page = client.get("/agents").get_data(as_text=True)
+    assert 'data-goes="agent-fixer"' in page       # the active log, a scroll away
+    assert 'id="agent-fixer"' in page              # and the tab the rail scrolls to
+    assert 'data-restore="settler"' in page        # the archived log, a restore away
+
+    assert client.post("/agents/archived/settler/restore").status_code == 204
+
+    assert (logs / "settler.log").exists()         # back in the live folder: it IS a tab again
+    assert not (archive / "settler.log").exists()
+    shown = client.get("/agents/settler").get_json()
     assert [(entry["name"], entry["text"]) for entry in shown["entries"]] == [
         ("Excephalon", "settle the merge"), ("settler", "Merged."),
     ]
-    # Only names straight out of the archive folder are paths to read.
-    assert client.get("/agents/archived/elsewhere").status_code == 404
+    # Only names straight out of the archive folder are paths to touch.
+    assert client.post("/agents/archived/elsewhere/restore").status_code == 404
 
 
 def test_the_win_enter_chord_reaches_the_page_as_one_send():

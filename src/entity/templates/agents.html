@@ -4,10 +4,31 @@
 {% block content %}
 {#- One home for the agents, however many are being driven at once. Each exchange reads the way
     the conversation does - who asked, who answered, and when - rather than as a wall of log
-    lines. In an agent's thread the Entity is the one asking and the agent answers. -#}
+    lines. In an agent's thread the Entity is the one asking and the agent answers.
+
+    The rail is the same contents column the Config page has: every log, active and archived, one
+    click away. An archived name is not opened in place - clicking it UNARCHIVES the log, so it
+    comes back as an ordinary tab in the main view (an unfold-inside-the-archive design was tried
+    and rejected outright). Closing a tab is what sends a log to the archive, so the two lists
+    trade members and no exchange is ever unreachable. -#}
+<aside id="toc" aria-label="Agent logs">
+  <p class="rail-label">Active</p>
+  {%- for name in names %}
+  <button type="button" data-goes="agent-{{ name }}">{{ name }}</button>
+  {%- else %}
+  <p class="rail-none">none</p>
+  {%- endfor %}
+  {%- if archived %}
+  <p class="rail-label">Archived</p>
+  {%- for name in archived %}
+  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view">{{ name }}</button>
+  {%- endfor %}
+  {%- endif %}
+</aside>
+
 <main id="content" class="reading">
   {% for name in names %}
-  <section class="section">
+  <section class="section" id="agent-{{ name }}">
     {#- Closing one archives its log, which is what makes it stay closed: the roster IS the log
         folder, so a log left in it comes straight back on the next poll. -#}
     <h2>{{ name }}
@@ -19,20 +40,6 @@
   {% else %}
   <p class="empty">No agent is running. When Entity starts one, its work appears here.</p>
   {% endfor %}
-  {% if archived %}
-  {#- Closing a tab archives its log rather than deleting it - and with no way back in, the
-      archive read as a black hole the day a stranded task's only record went there unread. -#}
-  <section class="section" id="archive">
-    <h2>Archive</h2>
-    <p class="note">Every closed agent's exchange, kept. Open one to read it back.</p>
-    {% for name in archived %}
-    <details class="archived" data-agent="{{ name }}">
-      <summary>{{ name }}</summary>
-      <div class="agent-archive thread"></div>
-    </details>
-    {% endfor %}
-  </section>
-  {% endif %}
 </main>
 {% endblock %}
 

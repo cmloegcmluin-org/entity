@@ -28,6 +28,18 @@ NARRATE_DEADLINE = 120.0
 
 # What the brain is asked, by kind of event. Each is a system-originated turn: the brain answers
 # it the way it answers anything - and because it composed the words, it remembers saying them.
+# Every narration carries this, because a narrated line is a line he HEARS - and the standing
+# conduct that governs a reply reaches only replies. "The agent reported the feature is working
+# ... but it's already wrapped up at the desk" was a narration: jargon he had to ask about twice,
+# in a sentence that named no feature.
+NARRATION_CONDUCT = (
+    "\n\n[Standing conduct for this line, same as any reply: no internal vocabulary EVER - never "
+    "'the desk', 'the fleet', 'the outbox', 'the roster', 'marked ready', 'the delivery stage', "
+    "and never an agent's internal name as a thing he should recognise; say 'your agents', 'the "
+    "list', 'ready for you to look at'. Name the WORK in his own words - never 'the feature' or "
+    "'the work', which say nothing. One or two short sentences.]"
+)
+
 PROMPTS = {
     "finished": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} just finished a "
@@ -127,7 +139,8 @@ class Narrator:
     def _narrate(self, kind, agent, report):
         if kind == "finished" and self._stage_of(agent) == "landing":
             kind = "landing"
-        prompt = PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
+        prompt = (PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
+                  + NARRATION_CONDUCT)
         # One claim on delivering this event: whichever of the two threads takes it speaks, the
         # other stays silent. Without it, a reply landing just as the deadline runs out would be
         # spoken AND covered by the notice - the same news twice.

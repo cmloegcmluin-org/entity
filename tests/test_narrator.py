@@ -262,3 +262,22 @@ def test_an_errands_outcome_is_worded_like_any_other_news():
     [(asked, _)] = brain.asked
     assert "chore" in asked
     assert "Moved the log into the archive." in asked
+
+
+def test_every_narration_carries_the_same_conduct_a_reply_does():
+    # "The agent reported the feature is working... but it's already wrapped up at the desk" was a
+    # narration, and the standing conduct that bans internal words reaches only replies - so he
+    # got jargon he had to ask about twice, in a sentence that named no feature.
+    asked = []
+
+    class Brain:
+        def respond(self, prompt, remember=True):
+            asked.append(prompt)
+            return "The copy fixes are ready to look at."
+
+    outbox = Outbox()
+    Narrator(Brain(), outbox).tell("finished", "copy-fixes", "done")
+
+    assert _wait_for(outbox)
+    assert "the desk" in asked[0] and "never" in asked[0]  # named, not merely a category
+    assert "the feature" in asked[0]  # and told to name the work in his own words

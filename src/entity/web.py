@@ -176,7 +176,7 @@ class Agents:
                                 TranscriptModel(clock=self._clock))
         tail, model = self._read[name]
         for line in tail.poll().splitlines():
-            model.apply("history", line)
+            model.apply("log", line)
         return model.entries
 
 

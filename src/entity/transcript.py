@@ -7,6 +7,8 @@ read back afterwards. The clock is injected so tests are deterministic; writes a
 background workers and the conversation loop both log.
 """
 
+import json
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +39,144 @@ class Transcript:
 
 
 SESSION_MARK = "===== session ====="  # emitted between files; no log ever contains one
+
+
+class MessageLog:
+    """The conversation as MESSAGES - one JSON line each, beside the human-readable .log.
+
+    The .log is prose for people: prefixes, wrapped lines, a date header. Reading it back into
+    messages meant guessing - which prefix, whose line, is this bare line a continuation or
+    something the app spoke - and every guess was a rule that eventually rewrote his history in
+    front of him ("the conversation history had been rewritten. this is terrifying"). What the
+    window draws now is not a guess: the same role the live view already gets is written down
+    the moment it is said, and read straight back.
+
+    One object per message: {"at": "<date time>", "role": ..., "text": ...}. Roles are the
+    conversation's own - "you", "entity", "heads-up", "status" - and the text is exact, newlines
+    and all."""
+
+    def __init__(self, path, *, clock=datetime.now):
+        self.path = Path(path)
+        self._clock = clock
+        self._lock = threading.Lock()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def keep(self, role, text):
+        line = json.dumps({"at": self._clock().strftime("%Y-%m-%d %H:%M:%S"),
+                           "role": role, "text": str(text)}, ensure_ascii=False)
+        with self._lock:
+            with open(self.path, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+
+
+def messages_in(path):
+    """The messages one .jsonl record holds, as (role, date, time, text). A torn last line (the
+    process died mid-write) is skipped rather than taking the session down with it."""
+    kept = []
+    try:
+        raw = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return kept
+    for line in raw:
+        if not line.strip():
+            continue
+        try:
+            held = json.loads(line)
+        except ValueError:
+            continue
+        at = str(held.get("at", ""))
+        date, _, clock = at.partition(" ")
+        kept.append((held.get("role", "status"), date, clock, held.get("text", "")))
+    return kept
+
+
+def messages_from_log(path):
+    """One old .log, read back as messages - the guesswork, done ONCE.
+
+    Sessions recorded before the message log existed are all there is for those days, so they are
+    converted rather than lost, and the result is written down so no rule ever has to run over
+    them again. Three things the format lets us know: a line carrying a prefix opens a message; a
+    bare line in the SAME second is that message continuing (one message is written in one call,
+    so it carries one stamp); and a bare line of its own is something the app spoke aloud without
+    printing - an update offer, an acknowledgement - which is Excephalon talking, not an aside.
+    Only the console's own asides, which open with "(" or "[", are asides."""
+    kept = []
+    date = ""
+    try:
+        raw = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return kept
+    for line in raw:
+        day = day_of(line)
+        if day is not None:
+            date = day
+            continue
+        parsed = parse_line(line)
+        if parsed is None:
+            if kept and re.fullmatch(r"\[[^\]]*\]\s*", line.strip()):
+                kept[-1] = kept[-1][:3] + (kept[-1][3] + "\n",)  # a blank line inside a message
+            continue
+        role, clock, text = parsed
+        if role in ("day", "session"):
+            continue
+        if (kept and role == "status" and clock == kept[-1][2]
+                and kept[-1][0] in ("you", "entity", "heads-up")
+                and not text.startswith(("(", "["))):
+            joined = kept[-1][3].rstrip("\n") + "\n" + text
+            kept[-1] = kept[-1][:3] + (joined,)
+            continue
+        if role == "status" and not text.startswith(("(", "[")):
+            role = "entity"  # spoken, never printed: the app talking in its own voice
+        kept.append((role, date, clock, text))
+    return kept
+
+
+def past_messages(directory, *, current=None, convert=True):
+    """Every session ever recorded, oldest first, as one op per thing to draw:
+    ("history", ("day", date)), ("history", ("session", "")) and
+    ("history", ("message", role, stamp, text)).
+
+    Each .log gets a .jsonl beside it the first time it is read, so the old format is converted
+    once and never guessed at again. `current` is this session's own record, which is live and
+    excluded."""
+    directory = Path(directory)
+    if not directory.is_dir():
+        return []
+    current = Path(current).stem if current else None
+    # By session NAME, from either half: the record is what is read, and a log is what it is
+    # converted from - a session that has only one of the two is still a session.
+    names = sorted({path.stem for path in directory.glob("*.log")}
+                   | {path.stem for path in directory.glob("*.jsonl")})
+    ops, dated, first = [], None, True
+    for name in names:
+        if name == current:
+            continue
+        kept, log = directory / f"{name}.jsonl", directory / f"{name}.log"
+        if convert and not kept.exists() and log.exists():
+            _write_messages(kept, messages_from_log(log))
+        messages = messages_in(kept) if kept.exists() else messages_from_log(log)
+        if not messages:
+            continue
+        if not first:
+            ops.append(("history", ("session",)))
+        first = False
+        for role, date, clock, text in messages:
+            if date and date != dated:
+                dated = date
+                ops.append(("history", ("day", date)))
+            ops.append(("history", ("message", role, clock, text)))
+    return ops
+
+
+def _write_messages(path, messages):
+    """The converted session, written down beside its log so the conversion happens once."""
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            for role, date, clock, text in messages:
+                handle.write(json.dumps({"at": (date + " " + clock).strip(), "role": role,
+                                         "text": text}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # a read-only archive is still readable; the conversion simply runs again
 
 
 def past_lines(directory, *, current):

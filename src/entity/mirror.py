@@ -10,10 +10,10 @@ same id and there must be one definition of it rather than a copy in the install
 """
 
 import queue
-import re
 import time
 
-from entity.transcript import parse_line
+from entity.transcript import DAY_BREAK, SESSION_BREAK, parse_line
+
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
 # identity of whatever other python-hosted app already owns a button - the Entity window turned up
@@ -48,45 +48,39 @@ class TranscriptModel:
             self._add(role, text)
         elif op == "history":
             self._history(payload)
+        elif op == "log":
+            # An AGENT's log, which is a different archive with a different shape: the desk
+            # writes it a line at a time and prefixes every line, so it reads back without any
+            # of the guessing the conversation's own record no longer needs either.
+            parsed = parse_line(payload)
+            if parsed is not None:
+                role, stamp, text = parsed
+                self._add(role, text, stamp=stamp, historical=True)
         elif op == "line":
             if str(payload).strip():
                 self._add("status", str(payload))
         elif op == "overwrite":
             self._overwrite(payload)
 
-    def _history(self, line):
-        """One recorded line back into the conversation - with a multi-line message made whole.
+    def _history(self, message):
+        """One recorded message back into the conversation, exactly as it was said.
 
-        The session file stamps every line it writes, but only a message's FIRST line carries its
-        "you said:" or "entity>" prefix - the rest are bare. Read back one line at a time, those
-        continuations parsed as status asides, and a long submission he watched land as one green
-        bubble came back after a restart as one bubble plus a column of small dim grey lines. A
-        bare line right after a message is that message still going, so it rejoins it; a stamped
-        EMPTY line there is the paragraph break it was.
-
-        Its STAMP is what says so. One message is written in one call, so every line of it carries
-        the same second; a line the app spoke later - "I've got an update on X when you're ready",
-        recorded bare because the terminal did not show it - carries its own. Judged on the prefix
-        alone, that offer was swallowed into the bubble above it, and a restart redrew the history
-        without a message he had just been given: "the conversation history had been rewritten.
-        this is terrifying". Nothing was ever lost from the file; the reader was.
-
-        (The console's own asides also start with "(" or "[" - "(thinking…)", "[think 2.3s…]" -
-        which keeps them asides even inside a message's own second.)"""
-        parsed = parse_line(line)
-        previous = self.entries[-1] if self.entries else None
-        continuable = (previous is not None and previous.get("historical")
-                       and previous["role"] in ("you", "entity", "heads-up"))
-        if parsed is None:
-            if continuable and re.fullmatch(r"\[[^\]]*\]\s*", line.strip()):
-                previous["text"] += "\n"  # a blank line inside the message: its paragraph break
-            return
-        role, stamp, text = parsed
-        if (role == "status" and continuable and stamp == previous["stamp"]
-                and not text.startswith(("(", "["))):
-            previous["text"] += "\n" + text  # a paragraph break above already left its newline
-            return
-        self._add(role, text, stamp=stamp, historical=True)
+        There is no parsing here any more, and no rules about what a line might be. The record
+        the window replays holds the role the live view was given at the moment each message was
+        spoken (see transcript.MessageLog), so a reload cannot disagree with what he watched
+        happen - which it did, twice, until "the conversation history had been rewritten. this is
+        terrifying and unacceptable... How fucking complicated can it be? It's just a fucking
+        transcript!" The guessing that used to live here now runs once, offline, over the logs
+        written before the record existed (transcript.messages_from_log)."""
+        kind, rest = message[0], message[1:]
+        if kind == "day":
+            # Its own role, so the date is read off the entry rather than back out of its words.
+            self._add("day", DAY_BREAK.format(rest[0]), stamp=rest[0], historical=True)
+        elif kind == "session":
+            self._add("session", SESSION_BREAK, stamp="", historical=True)
+        else:
+            role, stamp, text = rest
+            self._add(role, text, stamp=stamp, historical=True)
 
     def _add(self, role, text, *, stamp=None, historical=False):
         self._counter = None

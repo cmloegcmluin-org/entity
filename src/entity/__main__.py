@@ -43,7 +43,7 @@ from entity.polish import mend
 from entity.relay import notice
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
-from entity.transcript import Transcript, recent_turns
+from entity.transcript import MessageLog, Transcript, recent_turns
 from entity.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from entity.tts_system import NullTTS, SystemTTS
 from entity.voice import Speaker, play_samples
@@ -420,7 +420,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     read_pause = 0.0 if text_mode else 1.2
     # Keep the same lines the terminal shows, timestamped, so a session that went wrong can be read
     # back afterwards instead of the user having to copy their scrollback out by hand.
-    session_record = Transcript(TRANSCRIPTS / f"session-{datetime.now():%Y%m%d-%H%M%S}.log")
+    _session_name = f"session-{datetime.now():%Y%m%d-%H%M%S}"
+    session_record = Transcript(TRANSCRIPTS / f"{_session_name}.log")
+    # The same conversation as MESSAGES, written the moment each one is said - what the window
+    # replays, so a reload cannot disagree with what he watched happen. The .log beside it stays
+    # what it always was: prose for people.
+    session_messages = MessageLog(TRANSCRIPTS / f"{_session_name}.jsonl")
     # The memory inbox's nudge: in genuine downtime - fleet idle, conversation quiet - one
     # remembered fact is raised for his verdict, worked toward inbox zero (see entity.review).
     from entity.memory import DEFAULT_LEARNED_PATH as LEARNED
@@ -450,9 +455,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         console = Console(voice=True, record=session_record.write, listening_notice="",
                           echo=lambda t: None,
                           overwrite=lambda t: feed.push("overwrite", t),
-                          messages=lambda role, text: feed.push("message", (role, text)))
+                          messages=lambda role, text: (session_messages.keep(role, text),
+                                                       feed.push("message", (role, text))))
     else:
-        console = Console(voice=not text_mode, record=session_record.write)
+        console = Console(voice=not text_mode, record=session_record.write,
+                          messages=session_messages.keep)
 
     if not text_mode and not muted:
         # Spoken lines render as bubbles - "'I'm ready, what can I do for you?'... don't render
@@ -585,7 +592,7 @@ def main(argv=None):
         DEFAULT_TRANSLATIONS_PATH,
     )
     from entity.no_console import silence_child_consoles
-    from entity.transcript import past_lines
+    from entity.transcript import past_messages
     from entity.mirror import Mirror
     from entity.web import create_app
 
@@ -593,8 +600,8 @@ def main(argv=None):
     # Claude CLI the brain runs was turning up as a second window on their desktop.
     silence_child_consoles(anyio)
 
-    for line in past_lines(TRANSCRIPTS, current=None):
-        feed.push("history", line)  # yesterday's sessions, above the divider - no more amnesia
+    for op, payload in past_messages(TRANSCRIPTS, current=session_record.path):
+        feed.push(op, payload)  # yesterday's sessions, above the divider - no more amnesia
     feed.push("line", "───────  this session  ───────")
 
     mirror = Mirror(feed)

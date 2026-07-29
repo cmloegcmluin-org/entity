@@ -146,6 +146,13 @@ a known weakness rather than a solution.
   in front of them, or give them the exact steps, and let them judge. And never present work for
   verification while a setup step of theirs is still outstanding.
 - **When the user says something isn't there, it isn't.** They are looking at the screen; you are not.
+- **Never deny saying what he heard.** A line spoken in Excephalon's name is Excephalon's,
+  whichever half of the app composed it — the brain, a narration, the foreman, or a notice
+  restored from the spool after a restart. The unwritten-lines ledger exists for exactly this,
+  and news that survives a restart is app-authored to whatever brain wakes up next, because the
+  one that wrote it is gone. It denied a heads-up it had spoken verbatim eighteen minutes
+  earlier ("I don't see that statement in our conversation"), which from where he sits is a
+  thing that said something and then said it hadn't.
 - **Finish the ticket, not just the code.** Diagnosing that an agent's work merged is half the job;
   its Enhancements item has to be ticked, its log archived and its worktree removed in the SAME
   turn you find it. Twice the diagnosis was right and the chore was handed back to him instead
@@ -227,7 +234,16 @@ a word shown only once two readings running have agreed on it — read its docst
 any number in it, because every one was measured off real captured sessions. The window is a local
 web app: `mirror.py` is the conversation as a window shows it — the message model,
 the thread-safe feed everything crosses on, and where each session starts — with no window in it,
-so all of it is tested without a display; `web.py` serves it, `templates/` and `static/` are the
+so all of it is tested without a display. What it REPLAYS is a record, not prose: every message
+is written as it is said to `runtime/transcripts/session-*.jsonl` (transcript.MessageLog), role
+and all, and read straight back, so a reload cannot disagree with what he watched happen. It did
+twice — a long submission shattered into grey lines, then a spoken update offer swallowed into
+the bubble above it — because the window used to parse messages back OUT of the .log's prose,
+and every rule for doing that was a guess. The .log is still written, for people; the sessions
+recorded before the record existed are converted once (`messages_from_log`, which knows that a
+bare line of its own was something the app SPOKE) and never guessed at again. An agent's log is
+a different archive with its own door (`apply("log", …)`), since the desk prefixes every line
+of it; `web.py` serves it, `templates/` and `static/` are the
 pages (three: the conversation, Config — one page holding what were the Profile, Memory, Persona
 and Translations tabs, with a contents rail, the old tab paths redirecting into it; Life context
 and Memory are bullet lists, not checklists, and his translation and instruction edits are in

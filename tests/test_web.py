@@ -798,6 +798,22 @@ def test_a_multi_line_submission_reads_back_as_one_bubble():
     assert model.entries[1]["text"] == "(thinking…)"
 
 
+def test_a_line_spoken_later_is_not_swallowed_by_the_message_above_it():
+    # "I just clicked Restart to Upgrade and when I came back, the conversation history had been
+    # rewritten. This is terrifying." The app records what it SAYS without a prefix - the update
+    # offer, an acknowledgement - so a reader that folded every bare line into the bubble above
+    # it ate a message he had just been given. One message is written in one call and carries one
+    # second on every line; a line spoken later carries its own, and that is the test.
+    model = TranscriptModel(clock=lambda: "12:00:00")
+    for line in ("[17:25:10] entity (heads-up)> The link fix is ready for your eyes.",
+                 "[17:28:29] I've got an update on fix-instructions-enter when you're ready."):
+        model.apply("history", line)
+
+    assert [entry["role"] for entry in model.entries] == ["heads-up", "status"]
+    assert model.entries[1]["text"].startswith("I've got an update")
+    assert "update" not in model.entries[0]["text"]  # and it did not join the bubble above
+
+
 def test_a_bare_line_with_no_message_above_it_stays_a_status_line():
     # The continuation rule needs a message to continue; a stray unprefixed line at the top of
     # a file (or after an aside has broken the run) is still just a line.

@@ -944,6 +944,37 @@ def test_revive_reminds_him_of_work_presented_that_he_never_ruled_on(tmp_path):
     desk.close()
 
 
+def test_an_agent_whose_log_is_archived_is_not_brought_back(tmp_path):
+    # The survival record is written on the way DOWN, so an agent wrapped up from outside the app
+    # comes back from the dead at the next launch - and every mechanism built to keep him informed
+    # then re-raises work he has already ruled on: "can you get it to stop talking about this
+    # thing, which I've already told it twice is finished? this is the third time it's pestered
+    # me." The archive is the wrap-up's own record, and it outlives the file.
+    import json
+
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "settled.log").write_text("[10:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "settled", "cwd": "/wt/settled", "task": "the finished work",
+         "session_id": "sess-s", "state": "idle", "delivery": "ready", "steps": "look at it"},
+        {"name": "live", "cwd": "/wt/live", "task": "still going", "session_id": "sess-l",
+         "state": "idle", "delivery": "landing"},
+    ]), encoding="utf-8")
+    (logs / "live.log").write_text("[10:00:00] ENTITY> carry on" + chr(10), encoding="utf-8")
+    outbox = Outbox()
+    outbox.push("the settled work is ready for your eyes", about="settled")
+    desk, _, _ = _desk(outbox=outbox, state=state, log_dir=logs)
+
+    assert desk.revive() == ["live"]  # the wrapped-up one stays wrapped up
+
+    assert [str(news) for news in outbox.drain()] == []  # and its news goes with it
+    desk.close()
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

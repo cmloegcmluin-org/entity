@@ -107,7 +107,7 @@ def test_the_bar_stays_frozen_with_the_same_air_above_and_below_the_pills():
 def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements they want for you (roadmap, not now)\n- better voice\n\n"
-                       "## Goals\n- swim\n", encoding="utf-8")
+                       "## Projects (long-term)\n- swim\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
@@ -115,7 +115,10 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     # Matched by prefix, since a profile glosses its own headings however it likes.
     assert 'data-heading="Enhancements they want for you (roadmap, not now)"' in page
 
-    client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
+    # The save resolves the stem the same way the read does: written back exactly, "Projects"
+    # forked a rival "## Projects" section at the bottom of the live profile while the card
+    # kept reading the glossed one it had always read.
+    client.post("/profile", json={"heading": "Projects", "drawn": ["swim"],
                                   "items": [{"done": False, "text": "swim, three times a week"}]})
 
     saved = profile.read_text(encoding="utf-8")
@@ -123,6 +126,7 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     # upgrades itself the first time they touch it rather than needing a migration run.
     assert "- [ ] swim, three times a week" in saved
     assert "- better voice" in saved  # the section beside it is untouched
+    assert saved.count("## Projects") == 1  # into the glossed section, never a rival one
 
 
 def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
@@ -328,20 +332,20 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
     # one with boxes; the other three showed them the markdown and left them to decode it.
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements\n- better voice\n\n## Life context\n- new to the city\n\n"
-                       "## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
+                       "## Projects\n- entity\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
 
-    # Enhancements, Goals and Projects keep boxes; Life context and Memory are bullets now -
-    # background, not work.
-    assert page.count('<input type="checkbox"') == 3
+    # Enhancements and Projects keep boxes (the Goals card retired into Projects, his call);
+    # Life context and Memory are bullets now - background, not work.
+    assert page.count('<input type="checkbox"') == 2
 
     # And a tick in any of them still writes markdown back, which is what the brain reads.
-    client.post("/profile", json={"heading": "Goals", "drawn": ["swim"],
-                                  "items": [{"done": True, "text": "swim"}]})
+    client.post("/profile", json={"heading": "Projects", "drawn": ["entity"],
+                                  "items": [{"done": True, "text": "entity"}]})
 
-    assert "- [x] swim" in profile.read_text(encoding="utf-8")
+    assert "- [x] entity" in profile.read_text(encoding="utf-8")
 
 
 def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path):
@@ -349,12 +353,12 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     # raw markdown was the only way to add one, and it lost what they typed - so the items
     # themselves are what they type into, and a new one is made by pressing Enter in the list.
     profile = tmp_path / "profile.md"
-    profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
+    profile.write_text("## Enhancements\n- better voice\n\n## Projects\n- entity\n", encoding="utf-8")
 
     page = _client(profile_path=profile).get("/config").get_data(as_text=True)
 
-    # The words of an item are the item - one editable span per row (Goals and Projects here,
-    # plus the Memory and Instructions cards' empty rows), no raw-markdown box.
+    # The words of an item are the item - one editable span per row (Enhancements and Projects
+    # here, plus the Memory and Instructions cards' empty rows), no raw-markdown box.
     assert page.count('class="item" contenteditable="plaintext-only"') == 4
     assert "Edit as text" not in page
 

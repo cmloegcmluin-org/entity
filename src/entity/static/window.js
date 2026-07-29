@@ -45,11 +45,11 @@ function listSessions(found) {
 /* ---- the copy button ---------------------------------------------------------------------- */
 
 function offer(node, entries) {
-  offers = { node, text: whatToCopy(node, entries), ref: referenceTo(node, entries) };
+  offers = { node, text: whatToCopy(node, entries), url: linkTo(node, entries) };
   copier.hidden = false;
   copier.classList.remove("done");
   copier.classList.add("showing");
-  linker.hidden = !offers.ref;
+  linker.hidden = !offers.url;
   linker.classList.remove("done");
   linker.classList.add("showing");
   // Beside what is drawn: a message's box, or a break's mark - never the full-width row a
@@ -69,14 +69,14 @@ function offer(node, entries) {
   linker.style.left = copier.style.left;
 }
 
-/* A LINK to a message is its header line WITH the date - "Entity · 2026-07-18 21:14:27" - the
-   pointer he pastes back at Entity to name an exact moment of its own conversation. The date is
-   what a bare time lacked ("could be any fucking day"); it is worked out on the server (from the
-   break above the message) and handed over ready, so the page never has to date it from a header
-   that shows only the time. Only messages have one; a break is a place, not a moment. */
-function referenceTo(node, entries) {
+/* The link button copies an actual URL with an anchor hash - http://127.0.0.1:5199/#at=<moment> -
+   that reopens the conversation at this exact turn, not just the readable text. `moment` (the
+   date and time, no name) comes from the server; the page encodes it into the hash of THIS
+   instance's own origin, so the URL points at whatever port the window is on. Only messages have
+   one; a break is a place, not a moment. */
+function linkTo(node, entries) {
   const entry = entries[Number(node.dataset.at)];
-  return (entry && entry.reference) || "";
+  return entry && entry.moment ? `${location.origin}/#at=${encodeURIComponent(entry.moment)}` : "";
 }
 
 copier.addEventListener("click", async () => {
@@ -87,8 +87,8 @@ copier.addEventListener("click", async () => {
 });
 
 linker.addEventListener("click", async () => {
-  if (!offers || !offers.ref) return;
-  await navigator.clipboard.writeText(offers.ref);
+  if (!offers || !offers.url) return;
+  await navigator.clipboard.writeText(offers.url);
   linker.classList.add("done");
   setTimeout(() => linker.classList.remove("done"), 1100);
 });
@@ -268,16 +268,16 @@ function jumpToHash() {
   node.classList.add("landed");
 }
 
-/* Which drawn entry a "date HH:MM(:SS)" pointer names: the first message on that day at that
-   minute. The filing stamp is minute-precision and messages carry seconds, so it is matched to the
-   minute; failing that it falls back to the day's own break, so he lands on the right day at least. */
+/* Which drawn entry a "date HH:MM(:SS)" pointer names. A link button's URL carries the full second,
+   so it lands on the exact turn even when two share a minute; a filing stamp carries only the
+   minute, so it lands on the first turn of that minute. Either way the stamp is matched by prefix,
+   and failing that it falls back to the day's own break so he lands on the right day at least. */
 function turnAt(pointer) {
   const [date, time = ""] = pointer.trim().split(" ");
-  const minute = time.slice(0, 5);
   let day = "";
   for (let at = 0; at < latest.length; at++) {
     if (latest[at].role === "day") day = latest[at].stamp;
-    if (latest[at].bubble && day === date && latest[at].stamp.startsWith(minute)) return at;
+    if (latest[at].bubble && day === date && latest[at].stamp.startsWith(time)) return at;
   }
   for (let at = 0; at < latest.length; at++) {
     if (latest[at].role === "day" && latest[at].stamp === date) return at;

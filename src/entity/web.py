@@ -67,9 +67,10 @@ def _said(entry, label="", day="", speakers=SPEAKERS):
     the contents shows, so the two read as the same thing rather than as a rule and some dots.
 
     `day` is the date of the break above this entry. A message keeps only the time on screen, but
-    its `reference` - the pointer he copies and pastes back at Entity to name an exact moment -
-    carries the full date and time, since a bare "You · 05:01:59" could be any day. A break is a
-    place, not a moment, so it carries none."""
+    it carries two dated pointers: `reference`, the readable "You · 2026-07-18 05:01:59" he copies
+    to paste back at Entity, and `moment`, the bare "date time" the link button encodes into a
+    URL's #at= hash to reopen the conversation at this turn. A bare "05:01:59" could be any day, so
+    both carry the date. A break is a place, not a moment, so it carries neither."""
     bubble = entry["role"] in SIDES
     name = speakers.get(entry["role"], "")
     dated = f"{day} {entry['stamp']}".strip()  # "date time", or just the time before the first break
@@ -83,6 +84,7 @@ def _said(entry, label="", day="", speakers=SPEAKERS):
         "bubble": bubble,
         "side": SIDES.get(entry["role"], ""),
         "reference": f"{name} · {dated}" if bubble else "",
+        "moment": dated if bubble else "",
         # What in it can be opened, worked out here so the page only draws it. Space-aware, so a
         # path with a folder like "Field Notes" in it is one link, not one broken one.
         "parts": link_parts(entry["text"]) if entry["role"] in SIDES else [],
@@ -178,15 +180,24 @@ class Agents:
         return model.entries
 
 
-def _windows_clipboard():
+def _windows_clipboard(run=None):
     """The machine's clipboard, read by the app itself. The embedded browser gives the draft box
     no paste menu of its own, and reading the clipboard IN the page needs a browser permission
-    nobody is there to grant - while this server already runs on the same machine as the text."""
-    from entity.worktrees import run_hidden
+    nobody is there to grant - while this server already runs on the same machine as the text.
 
-    done = run_hidden(["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
-                      capture_output=True, text=True)
-    return done.stdout.rstrip("\r\n") if done.returncode == 0 else ""
+    Read as UTF-8 at both ends. PowerShell writes stdout in the console's OEM codepage by default,
+    and decoding that as the locale's ANSI codepage turned a middot (·) into ú when he pasted a
+    copied "Excephalon · …" back in - so the output encoding is forced to UTF-8 and the bytes are
+    decoded the same way here, rather than trusting `text=True` to guess right."""
+    if run is None:
+        from entity.worktrees import run_hidden
+        run = run_hidden
+    done = run(["powershell", "-NoProfile", "-Command",
+                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"],
+               capture_output=True)
+    if done.returncode != 0:
+        return ""
+    return done.stdout.decode("utf-8", "replace").rstrip("\r\n")
 
 
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,

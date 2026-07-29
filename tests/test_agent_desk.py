@@ -860,6 +860,30 @@ def test_revive_recovers_a_lost_session_id_from_the_store(tmp_path, monkeypatch)
     desk.close()
 
 
+def test_revive_reminds_him_of_work_presented_that_he_never_ruled_on(tmp_path):
+    # He rejected a round, the agent fixed everything and presented again into an app he had just
+    # closed, and the next launch said nothing at all - nothing re-engages an idle agent, and the
+    # review simply stopped existing. A revived agent holding presented work with no verdict is
+    # news for HIM, so it is raised at startup rather than waiting for him to think to ask.
+    import json
+
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "presenter", "cwd": "/wt/presenter", "task": "fix the copy buttons",
+         "session_id": "sess-p", "state": "idle", "delivery": "ready",
+         "steps": "open the page and click the link button"},
+    ]), encoding="utf-8")
+    seen = []
+    desk, _, _ = _desk(state=state)
+    desk._events = lambda kind, agent, report: seen.append((kind, agent, report))
+
+    desk.revive()
+
+    assert seen == [("pending", "presenter", "open the page and click the link button")]
+    assert desk._desked["presenter"].agent.messages == []  # the agent itself is left in peace
+    desk.close()
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

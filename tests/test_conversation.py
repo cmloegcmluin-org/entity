@@ -1460,3 +1460,28 @@ def test_every_turn_carries_the_standing_conduct_note():
     assert "act first" in prompt.lower()
     assert "absolutely right" in prompt.lower()
     assert "this turn" in prompt.lower()
+
+
+def test_fresh_news_about_an_agent_already_listed_is_read_out_again():
+    # The roll call had been read out with two agents waiting. One of them then reported the very
+    # thing he was waiting for - its work presented for his eyes - which SUPERSEDED its own older
+    # item, leaving the tally at two. Measured by count, "has the list changed" said no, and the
+    # presentation was never spoken: he closed the app still owed it ("I never heard back
+    # again"). The roll call is remembered by its news now, not by its length.
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox)
+    outbox.push("fixer is still going", about="fixer")
+    outbox.push("builder is still going", about="builder")
+
+    convo.turn()  # the roll call names both
+    assert any("fixer" in line and "builder" in line for line in tts.spoken)
+    spoken_so_far = len(tts.spoken)
+
+    convo.turn()  # nothing has changed - and nothing is said again
+    assert len(tts.spoken) == spoken_so_far
+
+    outbox.push("fixer presented its work for your eyes", about="fixer")
+    convo.turn()
+
+    assert len(tts.spoken) > spoken_so_far  # the fresh report re-opens the roll call

@@ -294,6 +294,11 @@ class AgentDesk:
                 self._dispatch(name, RESUME_LANDING)
             elif entry.get("state") in ("starting", "working"):
                 self._dispatch(name, CONTINUE_AFTER_RESTART)
+            elif entry.get("delivery") == "ready":
+                # Presented, and no verdict on record: the user is the one holding this up, and
+                # nothing re-engages an idle agent - so the reminder is raised at startup rather
+                # than waiting for him to think to ask.
+                self._events("pending", name, entry.get("steps") or "")
             elif (entry.get("delivery") or "building") == "building" and not entry.get("steps"):
                 # Recorded idle (or dead) with work never presented: the black hole. Idle it
                 # stays idle forever, and what it built goes unseen unless it is asked to show.

@@ -278,7 +278,7 @@ class Conversation:
         self.empty_turn_reply = empty_turn_reply
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._waiting = []  # news drained from the outbox and not delivered yet
-        self._announced = 0  # how many were waiting when the roll call was last read out
+        self._announced = ()  # the news the roll call last read out, so fresh news re-reads
         self._clock = clock
         self._dormant_after = dormant_after
         self._last_engaged = clock()  # startup counts: they just launched it, so they are here
@@ -416,7 +416,7 @@ class Conversation:
         self._waiting.extend(self._outbox.drain())
         self._waiting = _newest_per_agent(self._waiting)
         if not self._waiting:
-            self._announced = 0  # nothing outstanding, so the next single item is simply spoken
+            self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
             return
         if self._they_are_talking():
@@ -431,8 +431,12 @@ class Conversation:
         self._update_offered = False
         if self._announced:
             # A list has been read out and not worked through. Say it again only if it has changed,
-            # or every trip round the loop would recite the same names at them.
-            if len(self._waiting) != self._announced:
+            # or every trip round the loop would recite the same names at them - but changed means
+            # the NEWS, not the count. Measured by count, an agent's fresh report replacing its own
+            # older one left the tally at two and was never spoken: the presented work he was
+            # waiting on sat silent for the rest of that session, and he closed the app still owed
+            # it ("I never heard back again").
+            if self._announced != self._roll():
                 self._announce()
             return
         if len(self._waiting) > 1:
@@ -453,9 +457,14 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
+    def _roll(self):
+        """What is waiting right now, as the comparison the roll call is remembered by: the news
+        itself, not how much of it there is."""
+        return tuple(str(item) for item in self._waiting)
+
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named."""
-        self._announced = len(self._waiting)
+        self._announced = self._roll()
         line = roll_call(self._waiting)
         self._console.heads_up(line)
         self._say(line, record=False)
@@ -473,7 +482,7 @@ class Conversation:
             return None
         news = self._waiting.pop(place)
         said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
-        self._announced = len(self._waiting)
+        self._announced = self._roll()
         self._console.heads_up(said)
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
@@ -591,7 +600,7 @@ class Conversation:
             # into this turn's prompt and the brain says it once. Speaking the stored line as well
             # - after the brain had already covered it from memory - is how he heard it all twice.
             self._update_offered = False
-            self._announced = 0
+            self._announced = ()
             return self._answer(heard, offered=self._waiting.pop())
         if self._update_offered and self._waiting and canonical in _GO_AHEADS:
             return self._release_updates(heard)  # several are held; read out the choice

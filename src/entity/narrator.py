@@ -60,6 +60,18 @@ PROMPTS = {
         "did not land, tell them in one sentence what is stuck. Never relay the report's "
         "internals - no commit hashes, no test counts, no branch names, no file lists.]"
     ),
+    # A restart found an agent holding work it had already presented and never got a verdict on.
+    # Nothing re-engages an idle agent, so without this the review simply stopped existing: he
+    # rejected a round, the agent fixed and re-presented into a closed app, and the next launch
+    # said nothing - "I never heard back again."
+    "pending": (
+        "[Agent event, from the app - not the user speaking. You have just started up, and your "
+        "agent {agent} is holding finished work it presented for the user's eyes that never got "
+        "a verdict. The steps it gave for seeing it run:\n{report}\n\nRemind them in your own "
+        "one or two short sentences that it is waiting on their yes or no, and give them those "
+        "steps - where to click and what to watch happen. Never relay internals - no commit "
+        "hashes, no test counts, no branch names, no file lists.]"
+    ),
     "died": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} DIED mid-task: "
         "{report}\n\nTell the user plainly in one short sentence that it died and what you "

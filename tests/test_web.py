@@ -954,3 +954,66 @@ def test_a_rename_onto_a_name_already_in_use_is_still_refused(tmp_path):
 
     assert client.post("/agents/one/rename", data={"to": "two"}).status_code == 409
     assert (logs / "one.log").exists()  # nothing moved
+
+
+def test_ctrl_f_reaches_every_page_not_just_the_lists():
+    # "We have a Ctrl+F search feature on the Config tab, but can we get that on both the
+    # Conversation and Agents tabs too?" It lived inside the Config page's own script, which left
+    # the two pages with the most to read through unsearchable.
+    client = _client()
+
+    for path in ("/", "/config", "/agents"):
+        assert "finder.js" in client.get(path).get_data(as_text=True)
+
+    finder = client.get("/static/finder.js").get_data(as_text=True)
+    for row in ("#thread .said", ".agent.thread .said", ".checklist li", "#toc .rail-row"):
+        assert row in finder  # what counts as a row on each of the three pages
+    assert "ctrlKey" in finder and "metaKey" in finder
+
+
+def test_the_agents_rail_dates_every_row_by_when_its_agent_started(tmp_path):
+    # "The active agents lack a date but they should have one too. the date should be when the
+    # agent was started, not when it finished" - which is the first line the desk ever wrote to
+    # that log, and every log opens with its own date header.
+    import os
+
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    live = logs / "still-going.log"
+    live.write_text("===== 2026-07-21 =====" + chr(10) + "[09:00:00] ENTITY> go" + chr(10),
+                    encoding="utf-8")
+    os.utime(live, (1_769_000_000, 1_769_000_000))  # finished much later: the start is what shows
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "older.log").write_text("===== 2026-07-19 =====" + chr(10)
+                                       + "[09:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+
+    assert ">2026-07-21<" in page  # the live row is dated by its start, not its last write
+    assert ">2026-07-19<" in page
+
+
+def test_the_archive_icons_are_actually_in_the_page(tmp_path):
+    # "Whatever you added here is invisible." The two symbols sat outside every Jinja block, so
+    # they were discarded and both buttons drew nothing at all.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "fixer.log").write_text("[10:00:00] ENTITY> go" + chr(10), encoding="utf-8")
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "older.log").write_text("[09:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+
+    page = _client(agent_logs_dir=logs, clock=lambda: "12:00:00").get("/agents").get_data(as_text=True)
+
+    assert 'id="archive-icon"' in page and 'id="unarchive-icon"' in page
+    assert page.index('id="archive-icon"') > page.index('data-archive="fixer"')  # the sprite ships
+
+
+def test_a_tab_name_keeps_the_case_he_typed():
+    # He typed "OTO" and the heading's own uppercase made it indistinguishable from "oto", so he
+    # could not tell which part of the name had actually shouted.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    assert "text-transform: none" in _rule_for(css, ".section h2 .rename")

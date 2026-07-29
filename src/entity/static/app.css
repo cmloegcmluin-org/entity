@@ -162,7 +162,7 @@ body.page .topbar, body.config .topbar {
    it is called. The date column is a fixed width - every date is the same length - so the dates
    line up under each other and so do the names. An active agent has no date and keeps the
    column, so its name still lands in line, and (none) sits at the same left edge as the rest. */
-#toc .rail-row { display: grid; grid-template-columns: 20px 6.2rem 1fr; column-gap: 6px;
+#toc .rail-row { display: grid; grid-template-columns: 20px 4.7rem 1fr; column-gap: 4px;
                  align-items: center; }
 #toc .when { font-size: .68rem; color: var(--dim);
              font-family: ui-monospace, "Cascadia Code", monospace; }
@@ -182,11 +182,14 @@ body.page .topbar, body.config .topbar {
 #toc .rail-row .rail-do:hover { color: var(--accent); }
 /* (none) stands where a name stands: the same left edge as every row below it, reached by
    the grid rather than by a guessed indent. */
-#toc .rail-none { display: grid; grid-template-columns: 20px 6.2rem 1fr; column-gap: 6px;
+#toc .rail-none { display: grid; grid-template-columns: 20px 4.7rem 1fr; column-gap: 4px;
                   margin: 0 0 4px; padding: 3px 0; font-size: .78rem; color: var(--dim); }
 #toc .rail-none span { grid-column: 3; }
-/* The name on a tab, typed into in place - the same quiet edit the profile's rows have. */
-.section h2 .rename { padding: 0 4px; margin: 0 -4px; border-radius: 6px; outline: none; }
+/* The name on a tab, typed into in place - the same quiet edit the profile's rows have, and in
+   the case he typed: the heading's own uppercase made "OTO" indistinguishable from "oto", so he
+   could not tell which part of his rename had actually shouted. */
+.section h2 .rename { padding: 0 4px; margin: 0 -4px; border-radius: 6px; outline: none;
+                      text-transform: none; letter-spacing: 0; }
 .section h2 .rename:focus { background: rgba(127, 255, 0, .07); color: var(--fg); }
 .section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
                     background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
@@ -464,5 +467,6 @@ body.agents #content { margin-left: 360px; max-width: none; }
 #finder input { font: inherit; background: transparent; color: var(--fg); border: none;
                 outline: none; width: 180px; }
 #finder .count { font-size: .75rem; color: var(--dim); align-self: center; }
-.checklist li.found { outline: 2px solid rgba(127, 255, 0, .55); border-radius: 6px; }
-.checklist li.found-here { outline-color: var(--accent, #7fff00); background: rgba(127, 255, 0, .08); }
+/* A match, wherever it was found - a checklist item, a message, a row in the rail. */
+.found { outline: 2px solid rgba(127, 255, 0, .55); border-radius: 6px; }
+.found-here { outline-color: var(--accent, #7fff00); background: rgba(127, 255, 0, .08); }

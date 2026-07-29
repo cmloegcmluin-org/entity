@@ -15,12 +15,12 @@
     trade members and no exchange is ever unreachable. -#}
 <aside id="toc" aria-label="Agent logs">
   <p class="rail-label">Active</p>
-  {%- for name in names %}
+  {%- for name, when in names %}
   <div class="rail-row">
     <button type="button" class="rail-do" data-archive="{{ name }}"
             title="Archive {{ name }}" aria-label="Archive {{ name }}">
       <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#archive-icon"></use></svg></button>
-    <span class="when"></span>
+    <span class="when">{{ when }}</span>
     <button type="button" class="rail-name" data-goes="agent-{{ name }}"
             title="{{ name }}">{{ name }}</button>
   </div>
@@ -47,7 +47,7 @@
 </aside>
 
 <main id="content" class="reading">
-  {% for name in names %}
+  {% for name, when in names %}
   <section class="section" id="agent-{{ name }}">
     {#- Closing one archives its log, which is what makes it stay closed: the roster IS the log
         folder, so a log left in it comes straight back on the next poll. -#}
@@ -63,7 +63,6 @@
   <p class="empty">No agent is running. When Entity starts one, its work appears here.</p>
   {% endfor %}
 </main>
-{% endblock %}
 
 {#- Two arrows and a shelf: into the archive, and back out of it. -#}
 <svg hidden>
@@ -78,6 +77,8 @@
     <path d="M2.8 12.4h10.4"></path>
   </symbol>
 </svg>
+{% endblock %}
+
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='thread.js') }}"></script>

@@ -667,3 +667,36 @@ def test_saving_the_enhancements_hands_back_each_rows_number():
 
     assert answer == {"ids": [7, 8]}
     assert "- [ ] #8 a brand new ask" in profile.read_text(encoding="utf-8")
+
+
+def test_a_multi_line_submission_reads_back_as_one_bubble():
+    # He watched a long submission land as one green bubble, restarted, and found everything
+    # after its first line rendered as a column of small dim grey status lines: the file stamps
+    # every line, but only a message's first line carries its prefix, so the continuations came
+    # back as asides. A bare stamped line right after a message is that message still going.
+    model = TranscriptModel(clock=lambda: "12:00:00")
+    for line in ("[17:39:09] you said: The demo is good to ship.",
+                 "[17:39:09] ",
+                 "[17:39:09] I have lots of feedback on the other one:",
+                 "[17:39:09] * The links should not say filed.",
+                 "[17:39:09] (thinking…)",
+                 "[17:40:11] entity> Landing it.",
+                 "[17:40:44]   [think 61.6s · speak 33.0s]"):
+        model.apply("history", line)
+
+    roles = [entry["role"] for entry in model.entries]
+    assert roles == ["you", "status", "entity", "status"]  # continuations folded into the bubble
+    assert model.entries[0]["text"] == ("The demo is good to ship." + chr(10) + chr(10)
+                                        + "I have lots of feedback on the other one:" + chr(10)
+                                        + "* The links should not say filed.")
+    # The console's own asides keep their shape: they start with "(" or "[".
+    assert model.entries[1]["text"] == "(thinking…)"
+
+
+def test_a_bare_line_with_no_message_above_it_stays_a_status_line():
+    # The continuation rule needs a message to continue; a stray unprefixed line at the top of
+    # a file (or after an aside has broken the run) is still just a line.
+    model = TranscriptModel(clock=lambda: "12:00:00")
+    model.apply("history", "[10:00:00] some stray line")
+
+    assert [entry["role"] for entry in model.entries] == ["status"]

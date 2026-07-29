@@ -156,17 +156,35 @@ body.page .topbar, body.config .topbar {
 #toc .rail-label { margin: 8px 0 2px; font-size: .7rem; color: var(--dim);
                    text-transform: uppercase; letter-spacing: .06em; }
 #toc .rail-label:first-child { margin-top: 0; }
-#toc .rail-none { margin: 0 0 4px; padding: 3px 8px; font-size: .78rem; color: var(--dim); }
 /* When an archived agent last spoke - under its name, quiet, so the list reads as the
    history it is rather than a filing cabinet. */
-/* Two columns down the rail: when it last spoke, then what it is called. The date column is a
-   fixed width - every date is the same length - so the dates line up under each other and so do
-   the names. An active agent has no date and keeps the column, so its name still lands in line. */
-#toc button[data-goes], #toc button[data-restore] { display: grid;
-    grid-template-columns: 8.4em 1fr; column-gap: 8px; align-items: baseline; }
+/* Three columns down the rail: the one thing to DO with the row, when it last spoke, then what
+   it is called. The date column is a fixed width - every date is the same length - so the dates
+   line up under each other and so do the names. An active agent has no date and keeps the
+   column, so its name still lands in line, and (none) sits at the same left edge as the rest. */
+#toc .rail-row { display: grid; grid-template-columns: 20px 6.2rem 1fr; column-gap: 6px;
+                 align-items: center; }
 #toc .when { font-size: .68rem; color: var(--dim);
              font-family: ui-monospace, "Cascadia Code", monospace; }
-#toc .who { overflow-wrap: anywhere; }
+/* A long name is cut with an ellipsis rather than wrapped: the rows stay one line each, and the
+   whole name is in the tooltip. */
+#toc .rail-row .who, #toc .rail-row .rail-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                             font-size: .78rem; color: var(--dim); }
+#toc .rail-row .who { padding: 5px 0; }
+#toc .rail-row .rail-name { text-align: left; background: none; border: 0; padding: 5px 0; width: 100%;
+                  cursor: pointer; font-family: inherit; }
+#toc .rail-row .rail-name:hover { color: var(--fg); }
+/* The row's one action, on its left - a button that looks like one and takes the pointer. */
+#toc .rail-row .rail-do { display: flex; align-items: center; justify-content: center; width: 20px;
+                height: 20px; padding: 0; background: none; border: 0; color: var(--dim);
+                cursor: pointer; }
+#toc .rail-row .rail-do svg { width: 13px; height: 13px; }
+#toc .rail-row .rail-do:hover { color: var(--accent); }
+/* (none) stands where a name stands: the same left edge as every row below it, reached by
+   the grid rather than by a guessed indent. */
+#toc .rail-none { display: grid; grid-template-columns: 20px 6.2rem 1fr; column-gap: 6px;
+                  margin: 0 0 4px; padding: 3px 0; font-size: .78rem; color: var(--dim); }
+#toc .rail-none span { grid-column: 3; }
 /* The name on a tab, typed into in place - the same quiet edit the profile's rows have. */
 .section h2 .rename { padding: 0 4px; margin: 0 -4px; border-radius: 6px; outline: none; }
 .section h2 .rename:focus { background: rgba(127, 255, 0, .07); color: var(--fg); }
@@ -412,8 +430,8 @@ body.config #content { margin-left: 180px; }
    the page makes room for it. "I understand that this makes the sidebar wider. it's not
    like the sidebar has a consistent width across the Conversation, Config, and Agents
    tabs anyway." */
-body.agents #toc { width: 280px; }
-body.agents #content { margin-left: 300px; max-width: none; }
+body.agents #toc { width: 340px; }
+body.agents #content { margin-left: 360px; max-width: none; }
 #toc { position: fixed; left: 10px; top: 62px; width: 158px; background: var(--panel);
        border-radius: 10px; padding: 8px 0; }
 #toc button { display: block; width: 100%; text-align: left; font: inherit; font-size: .78rem;

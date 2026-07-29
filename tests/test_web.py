@@ -916,7 +916,41 @@ def test_the_agents_rail_puts_the_dates_in_one_column_and_the_names_in_another(t
     page = client.get("/agents").get_data(as_text=True)
     assert 'class="when"' in page and 'class="who"' in page
     assert "page agents" in page  # its own shape, so only this rail is the wide one
+    # The row is not the control: one button on the left does the one thing to the row.
+    assert 'data-archive="live-one"' in page and 'data-restore="older"' in page
+    assert ">2025-10-09<" in page  # the day, not the minute
 
     css = client.get("/static/app.css").get_data(as_text=True)
-    rail = _rule_for(css, "#toc button[data-goes], #toc button[data-restore]")
-    assert "grid-template-columns" in rail  # one column of dates, one of names
+    rail = _rule_for(css, "#toc .rail-row")
+    assert "grid-template-columns" in rail  # the action, then the dates, then the names
+    elided = _rule_for(css, "#toc .rail-row .who, #toc .rail-row .rail-name")
+    assert "text-overflow: ellipsis" in elided and "nowrap" in elided  # cut, never wrapped
+
+
+def test_a_tab_whose_agent_the_desk_no_longer_holds_can_still_be_renamed(tmp_path):
+    # "I can edit the name, but the changes don't persist; they simply get silently rejected."
+    # The desk rightly refuses a name it has never heard of - but the window draws a tab per LOG,
+    # so a log outliving its agent is still a tab he is looking at, and its name is still his.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "leftover.log").write_text("[10:00:00] ENTITY> did a thing" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00",
+                     on_rename=lambda name, to: "")  # the desk does not hold it
+
+    answer = client.post("/agents/leftover/rename", data={"to": "the early one"})
+
+    assert answer.get_json() == {"name": "the-early-one"}
+    assert (logs / "the-early-one.log").exists()
+    assert not (logs / "leftover.log").exists()
+    assert 'data-goes="agent-the-early-one"' in client.get("/agents").get_data(as_text=True)
+
+
+def test_a_rename_onto_a_name_already_in_use_is_still_refused(tmp_path):
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    for name in ("one", "two"):
+        (logs / f"{name}.log").write_text("[10:00:00] ENTITY> go" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00", on_rename=lambda name, to: "")
+
+    assert client.post("/agents/one/rename", data={"to": "two"}).status_code == 409
+    assert (logs / "one.log").exists()  # nothing moved

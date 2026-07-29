@@ -163,19 +163,35 @@ class Agents:
                 when = None
             dated.append((name, when))
         dated.sort(key=lambda entry: (entry[1] is not None, entry[1]), reverse=True)
-        return [(name, when.strftime("%Y-%m-%d %H:%M") if when else "") for name, when in dated]
+        # The day, not the minute: it buys room for the names beside it, and an archive is
+        # remembered by which day the work happened on.
+        return [(name, when.strftime("%Y-%m-%d") if when else "") for name, when in dated]
+
+    def rename_live(self, name, to):
+        """Rename a tab whose log is all there is - a leftover from an agent the desk let go.
+
+        "I can edit the name, but the changes don't persist; they simply get silently rejected":
+        the desk owns the agents it is holding, and it rightly refused a name it had never heard
+        of. But the window draws a tab per LOG file, so a log outliving its agent is still a tab
+        he is looking at, and its name is still his to change."""
+        return self._move(self._directory, name, to)
 
     def rename_archived(self, name, to):
         """An archived exchange under the name he gives it. The live ones are the desk's to
         rename (it holds the session too); this is the same move for a log with no agent left."""
+        return self._move(self._archive, name, to)
+
+    def _move(self, folder, name, to):
+        """One log renamed inside its own folder, or "" when that cannot be done cleanly."""
         wanted = safe_name(to)
-        if not wanted or self._archive is None:
+        if not wanted or folder is None:
             return ""
-        log = self._archive / f"{name}.log"
-        if not log.exists() or (self._archive / f"{wanted}.log").exists():
+        log = folder / f"{name}.log"
+        if not log.exists() or (folder / f"{wanted}.log").exists():
             return ""
+        self._read.pop(name, None)
         self._read.pop(("archived", name), None)
-        log.replace(self._archive / f"{wanted}.log")
+        log.replace(folder / f"{wanted}.log")
         return wanted
 
     def restore(self, name):
@@ -472,9 +488,14 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         """His name for a running agent. The desk owns the live ones - it holds the session, the
         log and the record - so the app hands the ask over rather than moving files behind it."""
         wanted = request.form.get("to", "")
-        if on_rename is None or name not in agents.names():
+        if name not in agents.names():
             return ("", 404)
-        renamed = on_rename(name, wanted)
+        # The desk first: it holds the session, the record and the news, so a live agent is its
+        # rename to make. A tab whose agent it no longer holds is a log and nothing else, and
+        # moving that log is the whole job - which is why the ask never fails silently now.
+        renamed = on_rename(name, wanted) if on_rename is not None else ""
+        if not renamed:
+            renamed = agents.rename_live(name, wanted)
         return ({"name": renamed}, 200) if renamed else ("", 409)
 
     @app.post("/agents/archived/<name>/rename")

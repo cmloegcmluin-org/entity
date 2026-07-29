@@ -16,10 +16,16 @@
 <aside id="toc" aria-label="Agent logs">
   <p class="rail-label">Active</p>
   {%- for name in names %}
-  <button type="button" data-goes="agent-{{ name }}"><span class="when"></span><span
-      class="who">{{ name }}</span></button>
+  <div class="rail-row">
+    <button type="button" class="rail-do" data-archive="{{ name }}"
+            title="Archive {{ name }}" aria-label="Archive {{ name }}">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#archive-icon"></use></svg></button>
+    <span class="when"></span>
+    <button type="button" class="rail-name" data-goes="agent-{{ name }}"
+            title="{{ name }}">{{ name }}</button>
+  </div>
   {%- else %}
-  <p class="rail-none">none</p>
+  <p class="rail-none"><span>(none)</span></p>
   {%- endfor %}
   {%- if archived %}
   <p class="rail-label">Archived</p>
@@ -27,8 +33,15 @@
       alphabetical it read as a filing cabinet. Two columns, so the dates line up under each
       other and the names do too - worth the wider rail. -#}
   {%- for name, when in archived %}
-  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view"><span
-      class="when">{{ when }}</span><span class="who">{{ name }}</span></button>
+  {#- The row is not the control: clicking anywhere on it to unarchive was a surprise, and the
+      cursor never said otherwise. The button says it, and only the button does it. -#}
+  <div class="rail-row">
+    <button type="button" class="rail-do" data-restore="{{ name }}"
+            title="Unarchive {{ name }}" aria-label="Unarchive {{ name }}">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#unarchive-icon"></use></svg></button>
+    <span class="when">{{ when }}</span>
+    <span class="who" title="{{ name }}">{{ name }}</span>
+  </div>
   {%- endfor %}
   {%- endif %}
 </aside>
@@ -51,6 +64,20 @@
   {% endfor %}
 </main>
 {% endblock %}
+
+{#- Two arrows and a shelf: into the archive, and back out of it. -#}
+<svg hidden>
+  <symbol id="archive-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+          stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 2.5v6.5"></path><path d="M5.2 6.4L8 9.2l2.8-2.8"></path>
+    <path d="M2.8 11.8h10.4"></path>
+  </symbol>
+  <symbol id="unarchive-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+          stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 9.5V3"></path><path d="M5.2 5.6L8 2.8l2.8 2.8"></path>
+    <path d="M2.8 12.4h10.4"></path>
+  </symbol>
+</svg>
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='thread.js') }}"></script>

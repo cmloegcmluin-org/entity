@@ -75,6 +75,16 @@ DEFAULT_WAKE_PHRASES = ("hey excephalon", "hey entity", "resume")
 # scratch that, the red one") - so the usage that would be a false alarm IS the one it is for.
 DEFAULT_RETRACT_PHRASES = ("scratch that", "strike that")
 
+# What the transcriber writes down when he says the terminator and it does not land. "Over" is a
+# short common word with a shorter commoner neighbour, and the model reaches for the neighbour:
+# turns end "...Surely you can figure it out. Okay." in the record, which is his "over" wearing
+# someone else's spelling ("'Over' keeps getting misheard as 'Okay'. Can we do anything about
+# that?"). Accepted only where it CANNOT be him saying okay for real: the draft must already hold
+# dictated words, and the word must stand as its own sentence - so "okay" alone answers a question
+# as it always did, and "...that's fine, okay" mid-clause is left where it lies. The cost of a
+# false positive is a turn sent a beat early; the cost of the miss is a gesture that does nothing.
+MISHEARD_TERMINATORS = ("okay",)
+
 # Spoken formatting: said aloud, these become the formatting they name, never words in the draft
 # ("I should be able to speak commands like 'paragraph break'"). Stock dictation idioms, so the
 # utterance that would be a false alarm is the one they exist for. Order matters: the two-word
@@ -139,6 +149,7 @@ class Dictation:
         # while they are still talking rather than only once a pause ends the sentence.
         self._hearing = hearing
         self._submitted = queue.SimpleQueue()  # the window hands finished turns over here
+        self._drafted = False  # dictated words are sitting in the box, unsubmitted
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
         self._bark = None  # while the Entity speaks: an Event a stop bark should fire
@@ -184,6 +195,7 @@ class Dictation:
         if self._polish is not None and text:
             text = self._polish(text)
         self._submitted.put(text)
+        self._drafted = False  # the box is empty again; the next terminator needs new words
         self._last_worded = None  # the thought was handed over; he is not mid-anything now
         if self._armed:
             self.set_recording(False)
@@ -406,6 +418,8 @@ class Dictation:
         if self._retract_what_he_took_back(spoken):
             return
         without_over = _strip_terminator(text, self._terminator)
+        if without_over is None:
+            without_over = self._misheard_over(text)
         if without_over is not None:
             # Whatever came before "over" is kept as said. It is NOT run past the invention
             # filter: a chunk carrying the terminator is someone deliberately ending a turn,
@@ -427,6 +441,19 @@ class Dictation:
         # the whitespace-only chunk made exactly that case do nothing at all.
         if text.strip() or "\n" in text:
             self._on_draft(text)
+            self._drafted = True  # there is something in the box for a terminator to end
+
+    def _misheard_over(self, text):
+        """The chunk minus a trailing word the transcriber wrote where he said the terminator, or
+        None when this is not that. Deliberately narrow - see MISHEARD_TERMINATORS."""
+        words = text.split()
+        if not words or not self._drafted:
+            return None
+        if words[-1].lower().strip(".,!?;:'\"") not in MISHEARD_TERMINATORS:
+            return None
+        if len(words) > 1 and not words[-2].endswith((".", "!", "?", "…")):
+            return None  # mid-clause ("that's fine, okay") - his word, not the gesture
+        return " ".join(words[:-1]).strip()
 
     def _retract_what_he_took_back(self, spoken):
         """"Scratch that" - rewind, and say it again. True if this chunk was them doing that.

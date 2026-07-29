@@ -378,15 +378,6 @@ body.page .topbar, body.config .topbar {
    at Entity ("as you can see per Entity · 10:12:59...") - riding just under the copy button. */
 .copylink { margin-top: 2px; }
 
-/* The right-click menus - the draft box's (Paste, Copy) and a message header's (Copy). One shape
-   for both, since the embedded browser offers no menu of its own here. Torn down on any click away. */
-.popmenu { position: fixed; z-index: 30; background: var(--panel, #222); color: var(--fg);
-           border: 1px solid var(--line); border-radius: 8px; padding: 4px;
-           box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
-.popmenu button { display: block; width: 100%; text-align: left; background: none;
-                  border: none; color: inherit; font: inherit; padding: 6px 14px;
-                  border-radius: 6px; cursor: pointer; }
-.popmenu button:hover { background: rgba(127, 255, 0, .12); }
 
 /* The section heading carries the open count - what he acts on; done is counted at its fold. */
 h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-left: 10px; }

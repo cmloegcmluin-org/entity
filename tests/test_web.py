@@ -1,25 +1,6 @@
-import subprocess
-
 from entity.memory import profile_sections
 from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
-from entity.web import _windows_clipboard, create_app
-
-
-def test_the_clipboard_is_read_as_utf8_so_a_pasted_middot_survives():
-    # Copying "Excephalon · …" and pasting it back through the box's menu returned "Excephalon ú …":
-    # PowerShell writes stdout in the console's OEM codepage, and decoding that as the locale's ANSI
-    # codepage turned the middot's byte into ú. The read forces UTF-8 at both ends now - it tells
-    # PowerShell to emit UTF-8 and decodes the bytes as UTF-8, rather than trusting `text=True`.
-    seen = {}
-
-    def fake_run(cmd, **kw):
-        seen["cmd"], seen["kw"] = cmd, kw
-        return subprocess.CompletedProcess(
-            cmd, 0, stdout="Excephalon · 2026-07-28 02:23:05\r\n".encode("utf-8"))
-
-    assert _windows_clipboard(run=fake_run) == "Excephalon · 2026-07-28 02:23:05"
-    assert any("OutputEncoding" in part and "UTF8" in part for part in seen["cmd"])
-    assert seen["kw"].get("text") is not True  # bytes, decoded here - not the locale's guess
+from entity.web import create_app
 
 
 def _model(*lines):
@@ -127,6 +108,20 @@ def test_the_bar_reaches_every_page_and_carries_the_restart_button(tmp_path):
             assert f'href="{other}"' in page  # every page reaches every other one
         # One click from a landed fix to running it, wherever he happens to be looking.
         assert 'id="restart"' in page
+
+
+def test_the_restart_says_it_is_updating_instead_of_leaving_him_guessing():
+    # "It does sit there for a long time leaving me in suspense whether it's going to work or
+    # not." The window goes down, a helper waits for the process to die, a fresh one comes up -
+    # all of it silent. The veil now says so, and cannot be waved away: nothing is being asked.
+    page = _client().get("/").get_data(as_text=True)
+    assert 'id="updating"' in page and "Updating" in page
+
+    js = _client().get("/static/closing.js").get_data(as_text=True)
+    restart = js[js.index('getElementById("restart")'):]
+    assert "updating.hidden = false" in restart
+    assert restart.index("veil.hidden = false") < restart.index('fetch("/restart"')  # said first
+    assert "leaving" in js and "if (!leaving) veil.hidden = true" in js  # and not dismissable
 
 
 def test_the_tabs_this_page_replaced_still_answer(tmp_path):
@@ -659,23 +654,26 @@ def test_a_filed_enhancement_shows_its_stamp_as_a_link_not_as_text_he_edits(tmp_
     assert 'title="Links back to where this enhancement was identified in the conversation"' in page
 
 
-def test_the_draft_box_menu_copies_as_well_as_pastes():
-    # Its right-click menu used to say only Paste; words leave the box as well as arrive in it, so
-    # Copy joins it. (The embedded browser draws no menu of its own in this box.)
+def test_the_page_builds_no_right_click_menus_of_its_own():
+    # "Can't we just use the built-in Windows menus for all the text on this page? ... I had
+    # misspelled 'proprietary' here and Windows had marked it with a jagged red underline, and
+    # usually in that case I right-click and accept the spelling autocorrection, but I don't get
+    # that option here, but I should." Edge's own menus are on app-wide (desktop.py); two boxes
+    # cancelled them to draw bespoke ones, which is what took his spelling suggestions - and gave
+    # him a menu on the date heading beside a different menu on the header above it.
     js = _client().get("/static/window.js").get_data(as_text=True)
 
-    built = js[js.index("draftMenu = popupMenu("):]
-    built = built[:built.index("]]")]
-    assert '"Paste"' in built and '"Copy"' in built
+    assert "popupMenu" not in js and "popmenu" not in js
+    assert 'addEventListener("contextmenu"' not in js  # nothing cancels the real menu now
+    css = _client().get("/static/app.css").get_data(as_text=True)
+    assert ".popmenu" not in css
 
 
-def test_a_message_header_is_right_clickable_to_copy_its_dated_pointer():
-    # "You · 05:01:59" is selectable already; it is now right-clickable too, to copy the dated
-    # reference (the server's `reference`) to paste back at Entity rather than the day-less header.
-    js = _client().get("/static/window.js").get_data(as_text=True)
-
-    assert 'closest(".who")' in js
-    assert "entry.reference" in js and "headerReference" in js
+def test_the_clipboard_is_not_read_by_the_app_any_more():
+    # The server read the clipboard only because the bespoke Paste needed it (a page cannot read
+    # the clipboard without a permission nobody is there to grant). Edge's own Paste needs no
+    # such thing - and the middot that arrived as "ú" was a casualty of that very detour.
+    assert _client().get("/clipboard").status_code == 404
 
 
 def test_the_link_button_copies_a_url_not_the_reference_text():
@@ -752,16 +750,6 @@ def test_the_win_enter_chord_reaches_the_page_as_one_send():
 
     assert client.get("/messages").get_json()["send"] is True
     assert client.get("/messages").get_json()["send"] is False  # and the box is sent once
-
-
-def test_the_clipboard_is_served_to_the_drafts_own_paste_menu():
-    # The embedded browser gives the draft box no paste menu, so the page asks the app - which
-    # runs on the same machine as the clipboard - instead of asking the browser for permission.
-    client = _client(clipboard=lambda: "words he copied elsewhere")
-
-    got = client.get("/clipboard").get_json()
-
-    assert got == {"text": "words he copied elsewhere"}
 
 
 def test_saving_the_enhancements_hands_back_each_rows_number():

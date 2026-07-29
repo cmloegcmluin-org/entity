@@ -849,3 +849,60 @@ def test_a_formatting_command_alone_is_just_its_formatting():
 
     assert ears.drafted == ["\n\n"]  # the command IS its formatting - spoken alone,
     # with a pause either side, is exactly how he says it, and it must still land
+
+
+def _mouth(*, terminator="over"):
+    """A pump with no mic behind it: chunks go straight to the path where the terminator - said
+    or misheard - is recognised. `said` marks a chunk as deliberate, which is what a real burst
+    of his voice carries; without it the invention filter eats short filler like a bare "okay",
+    and this is about the ones he really said."""
+    ears = Ears()
+    pump = Dictation(FakeTranscriber(), FakeMic([]), terminator=terminator, **ears.kwargs())
+    said = lambda text: pump._take_dictation(text, deliberate=True)
+    return pump, ears, said
+
+
+def test_the_terminator_still_lands_when_it_is_heard_as_okay():
+    # "'Over' keeps getting misheard as 'Okay'. Can we do anything about that?" The record shows
+    # exactly that shape - a turn ending "...Surely you can figure it out. Okay." - so a trailing
+    # "okay" standing as its own sentence, with dictated words already in the box, is taken as the
+    # gesture it was: the turn goes over, the word never lands, and the mic goes down with it.
+    pump, ears, said = _mouth()
+    said("The link and copy work is ready.")
+    said("Okay.")
+
+    assert ears.drafted == ["The link and copy work is ready."]  # the stray word never arrives
+    assert ears.submits == 1
+    assert ears.states[-1] == "muted"  # the whole gesture, exactly as "over" is
+
+
+def test_okay_by_itself_with_an_empty_box_is_just_him_saying_okay():
+    # He answers questions with it all day. With nothing dictated to end, it is a word like any
+    # other - the failure this must never become is a turn sent while he is only agreeing.
+    pump, ears, said = _mouth()
+    said("Okay.")
+
+    assert ears.drafted == ["Okay."]
+    assert ears.submits == 0
+
+
+def test_okay_mid_clause_is_his_word_and_stays_put():
+    # "...that's fine, okay" is speech, not a sign-off: only a standalone sentence counts.
+    pump, ears, said = _mouth()
+    said("The gym thing is settled.")
+    said("And that's fine, okay")
+
+    assert ears.drafted == ["The gym thing is settled.", "And that's fine, okay"]
+    assert ears.submits == 0
+
+
+def test_a_submitted_box_needs_new_words_before_okay_ends_a_turn_again():
+    # The box empties with the turn, so the next lone "okay" is an answer again, not a gesture.
+    pump, ears, said = _mouth()
+    said("Send this one.")
+    said("Okay.")
+    pump.submit("Send this one.")
+    said("Okay.")
+
+    assert ears.submits == 1  # the second one drafted rather than submitting
+    assert ears.drafted[-1] == "Okay."

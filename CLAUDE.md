@@ -211,7 +211,11 @@ that` to take back what was just said, and it reports whether it is recording so
 over the user. It is also the duplex ear: while the brain merely thinks the ear stays open and
 words land in the draft; while the voice is actually sounding, chunks are judged against the
 script being spoken (`covered_by`) — its own leak dropped, other words kept, and only a stop bark
-cuts the audio, so the TV can never kill a reply. `hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
+cuts the audio, so the TV can never kill a reply. Its terminator answers to a mishearing as
+well as to itself: "over" comes back from the transcriber as "okay" often enough that the gesture
+simply failed, so a trailing "okay" standing as its own sentence ends the turn too - but only
+with dictated words already in the box, so a bare "okay" answering a question is still a word.
+`hearing.py` is the live line: the burst so far, re-read on a worker of its own, with
 a word shown only once two readings running have agreed on it — read its docstring before changing
 any number in it, because every one was measured off real captured sessions. The window is a local
 web app: `mirror.py` is the conversation as a window shows it — the message model,
@@ -223,13 +227,19 @@ and Memory are bullet lists, not checklists, and his translation and instruction
 force immediately — translations swap into the running ear on save, instructions ride the
 per-turn notes — and Agents),
 and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
-holding the view) rather than a browser tab — reopening where it was last closed unless that
-monitor is gone, its X answered by the page's own styled dialog (asked OFF the GUI thread: evaluate_js inside the
+holding the view) rather than a browser tab - it also switches Edge's own context menus back on
+(pywebview ties them to its debug flag), and that is the ONLY right-click menu the app has: the
+page builds none of its own, because a bespoke menu cancels the real one and takes Cut/Copy/Paste
+and the red-squiggle spelling suggestions with it ("I don't get that option here, but I should");
+a message's dated pointer, the one thing no native menu can know, is a hover button instead. The
+window reopens where it was last closed unless that monitor is gone, its X answered by the page's own styled dialog (asked OFF the GUI thread: evaluate_js inside the
 closing event waits on plumbing that needs that same thread, and the inline ask froze the X press
 itself) (the native confirm was a
 light-mode box in a dark app; only the dialog's Close, through `Controls.quit`, actually closes),
 and its bar carrying a Restart-to-upgrade button that appears only when the checkout on disk has
-moved past the booted commit (worktrees.head_commit, polled by the page) - the relaunch is a
+moved past the booted commit (worktrees.head_commit, polled by the page) - the click raises an
+Updating veil, undismissable, BEFORE the request goes out, since the wind-down, the wait on the
+old pid and the fresh launch are otherwise a silent stretch of wondering whether it worked - the relaunch is a
 DETACHED helper (`relauncher.py`) spawned at the moment of the request, which waits for the old
 pid to die however it dies and then starts the new app, because relaunching as the old process's
 last act meant no relaunch at all when teardown misbehaved; window teardown answers the /quit request before

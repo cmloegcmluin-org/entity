@@ -25,13 +25,25 @@
   {#- The X asks first - in the app's own styling, since the native confirm turned up light-mode
       in a dark app. The window's closing event calls askToClose() (closing.js) instead of
       closing; only this dialog's Close actually does. -#}
+  {#- One veil over two dialogs: the close question, and the word that the restart is under way.
+      "It does sit there for a long time leaving me in suspense whether it's going to work or
+      not" - the window goes down, the helper waits for the process to die, and a fresh one comes
+      up, all of it silent. This says so while it happens, and it cannot be dismissed: there is
+      nothing to decide, and the window is on its way out. -#}
   <div id="veil" hidden>
-    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="closing-title">
+    <div class="dialog" id="closing" role="alertdialog" aria-modal="true"
+         aria-labelledby="closing-title">
       <h3 id="closing-title">Close Excephalon?</h3>
       <div class="choices">
         <button type="button" class="btn" id="keep-open">Keep it open</button>
         <button type="button" class="btn leave" id="really-close">Close</button>
       </div>
+    </div>
+    <div class="dialog" id="updating" role="alertdialog" aria-modal="true"
+         aria-labelledby="updating-title" hidden>
+      <h3 id="updating-title">Updating…</h3>
+      <p class="note">This window closes and comes back on the new code by itself. Give it a
+        moment.</p>
     </div>
   </div>
   <script src="{{ url_for('static', filename='closing.js') }}"></script>

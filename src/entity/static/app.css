@@ -143,15 +143,13 @@ body.page .topbar, body.config .topbar {
 .terms { display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .terms li { color: var(--past); }
 .note { margin: 0 0 10px; color: var(--dim); font-size: .82rem; }
-.agent.thread, .agent-archive.thread { height: 340px; }
-/* A retired agent's exchange, reopenable in place: the same quiet fold as the done
-   lists, opening onto the same panel a live thread uses. */
-.archived summary { cursor: pointer; padding: 4px 0; color: var(--dim); list-style: none; }
-.archived summary::-webkit-details-marker { display: none; }
-.archived summary::before { content: "B8"; margin-right: 6px; display: inline-block; }
-.archived[open] summary::before { transform: rotate(90deg); }
-.archived[open] summary { color: var(--fg); }
-.archived .thread { margin: 6px 0 14px; }
+.agent.thread { height: 340px; }
+/* The rail's two lists: which logs are live tabs, and which rest in the archive. The
+   same column as the Config page's contents rail, so the two pages read as one hand. */
+#toc .rail-label { margin: 8px 0 2px; font-size: .7rem; color: var(--dim);
+                   text-transform: uppercase; letter-spacing: .06em; }
+#toc .rail-label:first-child { margin-top: 0; }
+#toc .rail-none { margin: 0 0 4px; padding: 3px 8px; font-size: .78rem; color: var(--dim); }
 .section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
                     background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
 .section h2 .shut:hover { color: #ff9b9b; }
@@ -194,7 +192,7 @@ body.page .topbar, body.config .topbar {
 
 /* ---- the conversation --------------------------------------------------------------------- */
 
-#thread, .agent.thread, .agent-archive.thread {
+#thread, .agent.thread {
   position: relative;   /* so a session's offsetTop is measured against the thread, for the contents */
   overflow-y: auto;
   background: var(--panel);

@@ -85,8 +85,7 @@
 
   <section class="section" id="card-instructions" data-save="/persona">
     <h2>Instructions</h2>
-    <p class="note">How you've told it to behave, plus anything it files here itself. One per
-      row.</p>
+    <p class="note">How you've told it to behave, plus anything it files here itself.</p>
     <ul class="checklist" id="instructions">
       {% for line in instructions %}{{ row({"text": line}, "bullets") }}
       {% else %}{{ row({}, "bullets") }}

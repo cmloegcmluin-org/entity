@@ -786,6 +786,63 @@ def test_a_revived_agents_recorded_session_survives_the_next_persist(tmp_path):
     desk.close()
 
 
+def test_newest_session_for_reads_the_clis_per_cwd_store(tmp_path):
+    # The CLI keeps one folder per working directory, a .jsonl per session; the newest session
+    # that ever ran in an agent's own worktree is that agent, because nothing else runs there.
+    import os
+
+    from entity.agent_desk import newest_session_for
+
+    folder = tmp_path / "C--wt-stray"
+    folder.mkdir()
+    (folder / "older.jsonl").write_text("{}", encoding="utf-8")
+    (folder / "newest.jsonl").write_text("{}", encoding="utf-8")
+    os.utime(folder / "older.jsonl", (100, 100))
+    os.utime(folder / "newest.jsonl", (200, 200))
+
+    assert newest_session_for("C:/wt/stray", store=tmp_path) == "newest"
+    assert newest_session_for("C:/wt/gone", store=tmp_path) is None
+    assert newest_session_for(None, store=tmp_path) is None
+
+
+def test_revive_recovers_a_lost_session_id_from_the_store(tmp_path, monkeypatch):
+    # The orphaned-fleet boot: one restart persisted nulls over the known ids, and the next
+    # found "no trace" of agents the user had watched work all afternoon. The record heals
+    # from the CLI's own store instead of skipping the fleet.
+    import json
+
+    from entity import agent_desk
+
+    monkeypatch.setattr(agent_desk, "newest_session_for", lambda cwd, store=None: "sess-found")
+    state = tmp_path / "agents.json"
+    state.write_text(json.dumps([
+        {"name": "stray", "cwd": "/wt/stray", "task": "carry on",
+         "session_id": None, "state": "idle", "delivery": "presented", "steps": "look"},
+    ]), encoding="utf-8")
+    resumed = []
+
+    class MuteAgent:  # resumed on the recovered id, and silent - no id of its own yet
+        session_id = None
+
+        def work(self, message, on_message=None):
+            return ""
+
+        def close(self):
+            pass
+
+    def factory(name, cwd, decide, *, model, effort, resume=None):
+        resumed.append(resume)
+        return MuteAgent()
+
+    desk = AgentDesk(Outbox(), agent_factory=factory, state_path=state)
+
+    assert desk.revive() == ["stray"]
+    assert resumed == ["sess-found"]
+    [kept] = json.loads(state.read_text(encoding="utf-8"))
+    assert kept["session_id"] == "sess-found"  # and the record heals with it
+    desk.close()
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

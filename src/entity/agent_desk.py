@@ -96,6 +96,24 @@ def landing_block_reason(stage, tool_name, tool_input):
     return LANDING_NOT_APPROVED if _LANDING_COMMAND.search(command) else None
 
 
+def newest_session_for(cwd, store=None):
+    """The id of the newest CLI session that ever ran in `cwd`, or None.
+
+    The fleet record is the desk's memory of which session is which agent - but the CLI keeps
+    its own store, one folder per working directory, a .jsonl per session. When the record
+    loses an id (see `revive`), the newest session in the agent's own worktree folder IS that
+    agent: nothing else ever runs there. `store` overrides the store's location for tests."""
+    if not cwd:
+        return None
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(cwd))
+    folder = (Path(store) if store is not None else Path.home() / ".claude" / "projects") / slug
+    try:
+        sessions = sorted(folder.glob("*.jsonl"), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return None
+    return sessions[-1].stem if sessions else None
+
+
 # What a restarted Entity says to an agent it found recorded mid-task. The resumed session
 # remembers everything, so the message is a nudge, not a re-briefing.
 CONTINUE_AFTER_RESTART = (
@@ -249,6 +267,13 @@ class AgentDesk:
         revived = []
         for entry in saved:
             name, session = entry.get("name"), entry.get("session_id")
+            if name and not session:
+                # The record can lose an id the CLI's own session store still knows: one boot
+                # persisted freshly-resumed agents before they had spoken - null over the known
+                # ids - and the next boot skipped the whole fleet ("no trace" of agents the user
+                # had watched work all afternoon). The store is per-cwd, so the newest session
+                # that ever ran in this agent's worktree is this agent's.
+                session = newest_session_for(entry.get("cwd"))
             if not name or not session:
                 continue
             model = entry.get("model") or self._model

@@ -30,7 +30,7 @@ from entity.memory import (
 )
 from entity.links import link_parts, offers, open_link
 from entity.mirror import SIDES, TranscriptModel, sessions
-from entity.tailing import LogTail, archive_dir, discover
+from entity.tailing import LogTail, archive_dir, discover, safe_name
 from entity.vocabulary import translations_in_force
 
 # The role keys are the transcript's own line format and never change; the NAMES are what the
@@ -165,6 +165,19 @@ class Agents:
         dated.sort(key=lambda entry: (entry[1] is not None, entry[1]), reverse=True)
         return [(name, when.strftime("%Y-%m-%d %H:%M") if when else "") for name, when in dated]
 
+    def rename_archived(self, name, to):
+        """An archived exchange under the name he gives it. The live ones are the desk's to
+        rename (it holds the session too); this is the same move for a log with no agent left."""
+        wanted = safe_name(to)
+        if not wanted or self._archive is None:
+            return ""
+        log = self._archive / f"{name}.log"
+        if not log.exists() or (self._archive / f"{wanted}.log").exists():
+            return ""
+        self._read.pop(("archived", name), None)
+        log.replace(self._archive / f"{wanted}.log")
+        return wanted
+
     def restore(self, name):
         """Bring an archived log back: moved into the live folder, it IS a tab again - the
         roster is the folder. The one road back out of the archive, and it is the same road in,
@@ -199,7 +212,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                profile_path=None, learned_path=None, translations_path=None, terms=(),
                persona_additions_path=None, agent_logs_dir=None, clock=None,
                on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None,
-               scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None):
+               scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None, on_rename=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
@@ -453,6 +466,23 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         # In an agent's thread the Entity is the one asking and the agent answers.
         return _thread(agents.entries(name), request.args.get("since", 0, type=int),
                        {"you": "Excephalon", "entity": name, "heads-up": "Excephalon · heads-up"})
+
+    @app.post("/agents/<name>/rename")
+    def rename_agent(name):
+        """His name for a running agent. The desk owns the live ones - it holds the session, the
+        log and the record - so the app hands the ask over rather than moving files behind it."""
+        wanted = request.form.get("to", "")
+        if on_rename is None or name not in agents.names():
+            return ("", 404)
+        renamed = on_rename(name, wanted)
+        return ({"name": renamed}, 200) if renamed else ("", 409)
+
+    @app.post("/agents/archived/<name>/rename")
+    def rename_archived_agent(name):
+        if name not in [kept for kept, _ in agents.archived_names()]:
+            return ("", 404)
+        renamed = agents.rename_archived(name, request.form.get("to", ""))
+        return ({"name": renamed}, 200) if renamed else ("", 409)
 
     @app.post("/agents/<name>/close")
     def close_agent(name):

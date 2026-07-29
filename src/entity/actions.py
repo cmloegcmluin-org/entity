@@ -24,6 +24,7 @@ from entity.memory import (append_enhancement, append_learned, append_persona_ad
                            forget_learned,
                            complete_enhancement_by_id, revise_enhancement)
 from entity.models import resolve as resolve_model
+from entity.tailing import safe_name
 from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
 SERVER = "entity"
@@ -33,7 +34,7 @@ SERVER = "entity"
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
                                 "file_improvement", "revise_enhancement", "check_off_enhancement", "update_persona", "remember", "forget_memory",
-                                "close_agent_tab", "mark_ready",
+                                "close_agent_tab", "mark_ready", "rename_agent",
                                 "record_verdict", "ask_foreman", "run_errand"))
 
 # What the app calls itself, in the words an item would use. An item naming one of these is about
@@ -99,19 +100,34 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
           "every constraint they stated. `enhancement` is optional: when this agent is taking on "
           "an item from the user's Enhancements list, pass that item's exact text so it ticks "
           "itself off the list when the work lands; leave it out for any other work.",
-          {"path": str, "task": str, "enhancement": str})
+          {"path": str, "task": str, "enhancement": str, "name": str})
     async def start_agent(args):
         paths = resolve(str(args["path"]))
         if not paths:
             return _say("I couldn't find any sessions to drive there.")
         enhancement = str(args.get("enhancement") or "").strip() or None
+        # The name he asked for, when he asked for one: "call it the auto-play fix". Only for a
+        # single agent - one name cannot cover a fan-out - and it labels the agent, never the
+        # worktree, which is git's to name.
+        asked = safe_name(str(args.get("name") or "")) if len(paths) == 1 else ""
+        started = []
         for path in paths:
             if not Path(path).exists():  # new work means a new worktree, cut from current origin/main
                 prepare(path)
-            desk.start(Path(path).name, path, str(args.get("task") or default_task),
+            name = asked or Path(path).name
+            desk.start(name, path, str(args.get("task") or default_task),
                        enhancement=enhancement)
-        names = ", ".join(Path(path).name for path in paths)
-        return _say(f"Started {names} on {desk.running_on()}.")
+            started.append(name)
+        return _say(f"Started {', '.join(started)} on {desk.running_on()}.")
+
+    @tool("rename_agent", "Call a running agent something else - the name the user gives it, used "
+          "everywhere the app names that agent from then on. For when they say 'call that one the "
+          "auto-play fix'.", {"name": str, "to": str})
+    async def rename_agent(args):
+        name, to = str(args["name"]).strip(), str(args["to"]).strip()
+        if not desk.rename(name, to):
+            return _say(f"Couldn't rename {name} - no agent by that name, or the new one is taken.")
+        return _say(f"{name} is now {safe_name(to)}.")
 
     @tool("tell_agent", "Say something more to an agent already running - a correction, an answer, "
           "a follow-up. `name` is the agent's name from the fleet briefing.",
@@ -245,7 +261,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
     tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
-             check_off_item_tool, run_errand, update_persona,
+             check_off_item_tool, run_errand, update_persona, rename_agent,
              remember, forget_memory, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 

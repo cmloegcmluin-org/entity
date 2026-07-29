@@ -11,6 +11,7 @@ class FakeDesk:
         self.told = []
         self.chosen = []
         self.retired = []
+        self.renamed = []
         self.presented = []
         self.verdicts = []
         self._known = set(known)
@@ -32,6 +33,10 @@ class FakeDesk:
     def retire(self, name):
         self.retired.append(name)
         return name in self._known
+
+    def rename(self, name, to):
+        self.renamed.append((name, to))
+        return True
 
     def present(self, name, steps):
         from entity.delivery import DeliveryError
@@ -450,3 +455,39 @@ def test_an_ordinary_self_improvement_still_files():
     _call(tools["file_improvement"], item="the voice should pause longer between sentences")
 
     assert len(filed) == 1
+
+
+def test_an_agent_can_be_started_under_the_name_he_asks_for(tmp_path):
+    # "I should be able to tell Excephalon initially what to name them" - so the name rides in
+    # with the ask, and the worktree keeps its own (git's) name.
+    desk = FakeDesk()
+    worktree = tmp_path / "inbox-auto-play-toggle"
+    worktree.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+
+    said = _call(tools["start_agent"], path=str(worktree), task="add the checkbox",
+                 name="the auto-play fix")
+
+    assert desk.started == [("the-auto-play-fix", str(worktree), "add the checkbox", None)]
+    assert "the-auto-play-fix" in said
+
+
+def test_without_a_name_an_agent_is_still_called_after_its_worktree(tmp_path):
+    desk = FakeDesk()
+    worktree = tmp_path / "fix-drive-link"
+    worktree.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+
+    _call(tools["start_agent"], path=str(worktree), task="fix it")
+
+    assert desk.started[0][0] == "fix-drive-link"
+
+
+def test_renaming_an_agent_by_voice_goes_through_the_desk():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["rename_agent"], name="gdoc-export", to="the Drive export")
+
+    assert desk.renamed == [("gdoc-export", "the Drive export")]
+    assert "the-Drive-export" in said

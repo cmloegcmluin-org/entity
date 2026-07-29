@@ -5,6 +5,7 @@ per file and appends whatever is new on each poll. Byte-offset tailing, same as 
 append-only files, no OS watchers, nothing to go wrong across threads.
 """
 
+import re
 from pathlib import Path
 
 
@@ -14,6 +15,17 @@ def discover(directory):
     if not path.is_dir():
         return []
     return sorted(child.stem for child in path.glob("*.log"))
+
+
+def safe_name(wanted):
+    """`wanted` as a name a log file can carry, or "" if nothing usable is left.
+
+    An agent's name IS a filename (its log) and a URL segment (its tab), so his own words are
+    trimmed to what both can hold - letters, digits, dashes - rather than refused outright for a
+    space or a capital he would reasonably type.
+    """
+    kept = re.sub(r"[^A-Za-z0-9]+", "-", str(wanted).strip()).strip("-")
+    return kept[:60]
 
 
 def archive_dir(live_dir):

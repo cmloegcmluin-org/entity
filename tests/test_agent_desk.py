@@ -45,7 +45,7 @@ class FakeAgent:
 
 def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None, run=None,
           state=None, law=None, complete=None):
-    outbox = outbox or Outbox()
+    outbox = Outbox() if outbox is None else outbox  # an empty one is falsy, not absent
     made = made if made is not None else []
 
     def factory(name, cwd, decide, **choice):
@@ -1312,4 +1312,42 @@ def test_a_landing_agents_silence_clock_keeps_running():
     assert monitor.finished == ["lander"]  # done() was NOT called a second time
     assert desk.retire("lander")
     assert monitor.finished == ["lander", "lander"]  # retirement is what stops the clock
+    desk.close()
+
+
+def test_an_agent_can_be_renamed_and_the_app_uses_the_new_name(tmp_path):
+    # "I should be able to rename these agents, and Excephalon should use the name I change them
+    # to." A name is a label: the desk's key, the log the window draws a tab from, the record a
+    # restart revives from, and the tag on news waiting to be spoken. All of it moves; the
+    # worktree keeps its own name, which is git's business.
+    logs = tmp_path / "agent-logs"
+    state = tmp_path / "agents.json"
+    desk, outbox, _ = _desk(log_dir=logs, state=state)
+    desk.start("entity-link-copy-fixes", "/wt/copy", "fix the copy buttons")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert desk.rename("entity-link-copy-fixes", "the copy fixes") is True
+
+    import json
+
+    assert (logs / "the-copy-fixes.log").exists()          # his name, filed
+    assert not (logs / "entity-link-copy-fixes.log").exists()
+    assert "the-copy-fixes" in desk.digest()               # and what the brain is told each turn
+    [kept] = json.loads(state.read_text(encoding="utf-8"))
+    assert (kept["name"], kept["cwd"]) == ("the-copy-fixes", "/wt/copy")
+    assert [news.about for news in outbox.drain()] == ["the-copy-fixes"]  # held news follows
+    desk.close()
+
+
+def test_a_rename_refuses_a_name_already_taken_or_no_name_at_all(tmp_path):
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("one", "/wt/one", "a task")
+    desk.start("two", "/wt/two", "another")
+    assert _wait_for(lambda: bool(outbox))
+
+    assert desk.rename("one", "two") is False    # a name in use would collide two tabs into one
+    assert desk.rename("one", "   ") is False    # nothing a file could carry
+    assert desk.rename("nobody", "three") is False
+    assert desk.rename("one", "one") is True     # the same name is not a failure, just a no-op
     desk.close()

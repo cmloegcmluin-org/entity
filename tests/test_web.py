@@ -861,3 +861,62 @@ def test_the_archive_lists_the_newest_first_and_says_when(tmp_path):
     order = [page.index(f'data-restore="{name}"') for name in ("zulu", "alpha", "mike")]
     assert order == sorted(order)  # newest first, not a-z
     assert page.count('class="when"') == 3  # and each says when it last spoke
+
+
+def test_a_tab_name_can_be_typed_in_and_the_desk_is_asked_to_move_it(tmp_path):
+    # The name on the tab is his to change; the desk owns the move (its key, its log, its record),
+    # so the page hands the ask over rather than renaming files behind it.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "fixer.log").write_text("[10:00:00] ENTITY> fix it" + chr(10), encoding="utf-8")
+    asked = []
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00",
+                     on_rename=lambda name, to: asked.append((name, to)) or "the-fix")
+
+    page = client.get("/agents").get_data(as_text=True)
+    assert 'class="rename" contenteditable="plaintext-only" data-agent="fixer"' in page
+
+    answer = client.post("/agents/fixer/rename", data={"to": "the fix"})
+
+    assert asked == [("fixer", "the fix")]
+    assert answer.get_json() == {"name": "the-fix"}
+    assert client.post("/agents/nobody/rename", data={"to": "x"}).status_code == 404
+
+
+def test_an_archived_exchange_can_be_renamed_too(tmp_path):
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "old-name.log").write_text("[10:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    answer = client.post("/agents/archived/old-name/rename", data={"to": "the early one"})
+
+    assert answer.get_json() == {"name": "the-early-one"}
+    assert (archive / "the-early-one.log").exists()
+    assert not (archive / "old-name.log").exists()
+
+
+def test_the_agents_rail_puts_the_dates_in_one_column_and_the_names_in_another(tmp_path):
+    # "Could we have all the dates aligned vertically and then the names aligned vertically."
+    # Every date is the same length, so a fixed first column lines up both.
+    import os
+
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "live-one.log").write_text("[10:00:00] ENTITY> go" + chr(10), encoding="utf-8")
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    log = archive / "older.log"
+    log.write_text("[09:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    os.utime(log, (1_760_000_000, 1_760_000_000))
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+    assert 'class="when"' in page and 'class="who"' in page
+    assert "page agents" in page  # its own shape, so only this rail is the wide one
+
+    css = client.get("/static/app.css").get_data(as_text=True)
+    rail = _rule_for(css, "#toc button[data-goes], #toc button[data-restore]")
+    assert "grid-template-columns" in rail  # one column of dates, one of names

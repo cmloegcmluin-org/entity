@@ -159,7 +159,17 @@ body.page .topbar, body.config .topbar {
 #toc .rail-none { margin: 0 0 4px; padding: 3px 8px; font-size: .78rem; color: var(--dim); }
 /* When an archived agent last spoke - under its name, quiet, so the list reads as the
    history it is rather than a filing cabinet. */
-#toc .when { display: block; font-size: .68rem; color: var(--dim); }
+/* Two columns down the rail: when it last spoke, then what it is called. The date column is a
+   fixed width - every date is the same length - so the dates line up under each other and so do
+   the names. An active agent has no date and keeps the column, so its name still lands in line. */
+#toc button[data-goes], #toc button[data-restore] { display: grid;
+    grid-template-columns: 8.4em 1fr; column-gap: 8px; align-items: baseline; }
+#toc .when { font-size: .68rem; color: var(--dim);
+             font-family: ui-monospace, "Cascadia Code", monospace; }
+#toc .who { overflow-wrap: anywhere; }
+/* The name on a tab, typed into in place - the same quiet edit the profile's rows have. */
+.section h2 .rename { padding: 0 4px; margin: 0 -4px; border-radius: 6px; outline: none; }
+.section h2 .rename:focus { background: rgba(127, 255, 0, .07); color: var(--fg); }
 .section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
                     background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
 .section h2 .shut:hover { color: #ff9b9b; }
@@ -398,6 +408,12 @@ h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-l
 /* The cards run long, so a rail beside them makes each one one click away - the same shape as
    the conversation's contents. Fixed, because the page itself is what scrolls. */
 body.config #content { margin-left: 180px; }
+/* The Agents rail carries two columns - a date and a name - so it is wider there, and
+   the page makes room for it. "I understand that this makes the sidebar wider. it's not
+   like the sidebar has a consistent width across the Conversation, Config, and Agents
+   tabs anyway." */
+body.agents #toc { width: 280px; }
+body.agents #content { margin-left: 300px; max-width: none; }
 #toc { position: fixed; left: 10px; top: 62px; width: 158px; background: var(--panel);
        border-radius: 10px; padding: 8px 0; }
 #toc button { display: block; width: 100%; text-align: left; font: inherit; font-size: .78rem;

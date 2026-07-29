@@ -41,6 +41,27 @@ if (location.hash) {
     ?.scrollIntoView({ block: "start" });
 }
 
+/* The name is his. Typing in a tab's heading and leaving it (or pressing Enter) saves it: the
+   desk moves the log, re-keys its own record and re-tags any news waiting to be spoken, so the
+   reload finds every mention of that agent under the new name. Escape puts back what was there. */
+for (const heading of document.querySelectorAll(".rename")) {
+  const was = heading.textContent.trim();
+  const save = async () => {
+    const wanted = heading.textContent.trim();
+    if (!wanted || wanted === was) { heading.textContent = was; return; }
+    const answer = await fetch(`/agents/${encodeURIComponent(was)}/rename`,
+                               { method: "POST", body: new URLSearchParams({ to: wanted }) });
+    if (!answer.ok) { heading.textContent = was; return; }
+    location.assign("/agents");
+    location.reload();
+  };
+  heading.addEventListener("blur", save);
+  heading.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); heading.blur(); }
+    if (event.key === "Escape") { heading.textContent = was; heading.blur(); }
+  });
+}
+
 /* Closing one archives its log, and the reload moves its name to the rail's Archived list - the
    archive is what makes the close stick: the roster is the log folder, so a log left in place
    comes back on the next poll. */

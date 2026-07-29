@@ -136,6 +136,18 @@ def _vocab_terms():
     return scan_terms(_project_roots()) | set(lexicon_terms(load_lexicon())) | {"Excephalon"}
 
 
+def _other_apps():
+    """His OTHER projects, by the folder names the vocabulary scan already finds. The Enhancements
+    list is for changes to Excephalon itself; a feature request for one of these belongs to an
+    agent in that project's own repo, and file_improvement refuses to file it (see
+    actions.names_another_app) - twice it was filed anyway, and twice the remedy was a written
+    instruction that held until it didn't."""
+    from entity.vocabulary import scan_terms
+
+    return sorted(name for name in scan_terms(_project_roots())
+                  if name.lower() not in ("excephalon", "entity"))
+
+
 def _agent_inbox_note(inbox):
     """Persona line telling the Entity how its agents reach the user - the exact absolute path, since
     the agents run in other projects' worktrees and can't guess where the Entity keeps its inbox."""
@@ -313,7 +325,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # The quiet errand hand: small local chores with no agent tab - "one agent per actual major
     # task", not one per little thing. Its outcomes take the news road like everything else.
     errands = ErrandRunner(RUNTIME_DIR, agent_events)
-    actions_server, _ = fleet_actions(desk, foreman, errands)
+    # The other apps he has, by their folder names - the same scan that teaches the ear his
+    # project names. file_improvement refuses a feature request naming one of them: the
+    # Enhancements list is for changes to Excephalon itself, and a request for another app
+    # belongs to an agent in that app's own repo.
+    actions_server, _ = fleet_actions(desk, foreman, errands, other_apps=_other_apps())
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,

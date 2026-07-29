@@ -59,6 +59,20 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=
             outbox, made)
 
 
+def _approved(desk, name, steps="look at it"):
+    """Walk one agent through the review loop to an approved verdict - the state a wrap-up is
+    now only legal from, since a tab closed over unruled work delivered a feature behind his
+    back. Tests about the wrap-up ITSELF start here rather than restating the loop.
+
+    The wait is for the landing instruction to have been DELIVERED and answered, not merely for
+    an idle state: approval dispatches on a thread of its own, and retiring while that thread is
+    still writing the agent's log cannot move the file on Windows."""
+    desk.present(name, steps)
+    desk.verdict(name, True)
+    agent = desk._desked[name].agent
+    _wait_for(lambda: len(agent.messages) >= 2 and desk._desked[name].state == "idle")
+
+
 def _wait_for(predicate, timeout=2.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -444,6 +458,7 @@ def test_retiring_a_finished_agent_closes_its_tab_by_moving_its_log_to_the_archi
     desk, outbox, _ = _desk(log_dir=logs)
     desk.start("fixer", "/tmp/wt", "a task")
     assert _wait_for(lambda: bool(outbox))  # finished: its work() returned
+    _approved(desk, "fixer")
 
     assert desk.retire("fixer") is True
 
@@ -495,6 +510,7 @@ def test_retiring_an_agent_ticks_off_the_enhancement_it_was_completing(tmp_path)
                             complete=lambda item: ticked.append(item) or True)
     desk.start("voice", "/tmp/wt", "wire up the better voice", enhancement="Better voice")
     assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "voice")
 
     assert desk.retire("voice") is True
 
@@ -529,6 +545,7 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
     first, outbox, _ = _desk(state=state, log_dir=logs)
     first.start("voice", "/wt/voice", "wire the voice", enhancement="Better voice")
     assert _wait_for(lambda: bool(outbox))
+    _approved(first, "voice")  # he saw it and signed off; the landing is what the record carries
 
     [saved] = json.loads(state.read_text(encoding="utf-8"))
     assert saved["enhancement"] == "Better voice"  # the tag is in the survival record
@@ -541,8 +558,7 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
                         complete_enhancement=lambda item: ticked.append(item) or True)
     revived.revive()
 
-    # Revival just asked this never-presented agent to show its work; let that exchange finish
-    # first - retire rightly refuses an agent that is still mid-reply.
+    # The revived agent carries the approved verdict across the restart, so its wrap-up is legal.
     assert _wait_for(lambda: revived._desked["voice"].state == "idle")
     assert revived.retire("voice") is True
     assert ticked == ["Better voice"]  # and the revived agent still ticks it
@@ -555,7 +571,8 @@ def test_a_tick_that_lands_nowhere_becomes_news_instead_of_a_silent_shrug(tmp_pa
     desk, outbox, _ = _desk(log_dir=logs, complete=lambda item: False)
     desk.start("fixer", str(tmp_path / "wt"), "make it green", enhancement="Better voice")
     assert _wait_for(lambda: bool(outbox))
-    outbox.drain()
+    _approved(desk, "fixer")
+    outbox.drain()  # the landing report; what follows is the tick's own miss
 
     assert desk.retire("fixer") is True
 
@@ -563,6 +580,46 @@ def test_a_tick_that_lands_nowhere_becomes_news_instead_of_a_silent_shrug(tmp_pa
     [news] = outbox.drain()
     assert "did not get checked off" in news
     assert news.about == "fixer"
+
+
+def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
+    # An agent built a feature, its tab was closed over the top, and he met the result as a fait
+    # accompli: "are you saying you delivered a feature without me verifying it first? Have you
+    # forgotten the absolute basics of how you are supposed to supervise new features?" A verdict
+    # is the only thing that makes a wrap-up legal - the same gate that already stops the push.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("builder", str(tmp_path / "wt"), "add the checkbox")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+
+    assert desk.retire("builder") is False  # never presented, never approved
+    desk.present("builder", "open the app and look at the player bar")
+    assert desk.retire("builder") is False  # presented, still waiting on him
+
+    builder = desk._desked["builder"].agent
+    desk.verdict("builder", True)
+    assert _wait_for(lambda: len(builder.messages) >= 2
+                     and desk._desked["builder"].state == "idle")
+
+    assert desk.retire("builder") is True  # approved: the wrap-up is the mechanical last leg
+    desk.close()
+
+
+def test_wrapping_an_agent_up_takes_its_undelivered_news_with_it(tmp_path):
+    # "I'm kind of surprised you have an update for that one, because that feature is already
+    # done." News queued about an agent whose work is closed arrives as a surprise, not an
+    # update - and after the spool it would survive a restart to do it again.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "lander.log").write_text("[10:00:00] ENTITY> land it" + chr(10), encoding="utf-8")
+    desk, outbox, _ = _desk(log_dir=logs)
+    outbox.push("lander has an update for you", about="lander")
+    outbox.push("someone else entirely", about="other")
+
+    assert desk.retire("lander") is True  # a leftover log with no agent behind it
+
+    assert [str(news) for news in outbox.drain()] == ["someone else entirely"]
 
 
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
@@ -609,6 +666,7 @@ def test_retiring_a_finished_agent_also_removes_its_worktree(tmp_path):
                             run=lambda cmd, **kw: ran.append(cmd))
     desk.start("fixer", "/wt/fixer", "a task")
     assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "fixer")
 
     assert desk.retire("fixer") is True
 
@@ -625,6 +683,7 @@ def test_a_worktree_that_will_not_remove_does_not_block_the_retirement(tmp_path)
     desk, outbox, _ = _desk(log_dir=logs, run=refuses)
     desk.start("fixer", "/wt/fixer", "a task")
     assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "fixer")
 
     assert desk.retire("fixer") is True
     assert not (logs / "fixer.log").exists()  # the tab still closed
@@ -657,6 +716,7 @@ def test_retiring_prunes_the_state_file(tmp_path):
     desk, outbox, _ = _desk(state=state, log_dir=tmp_path / "agent-logs")
     desk.start("fixer", "/wt/fixer", "a task")
     assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "fixer")
 
     desk.retire("fixer")
 
@@ -672,7 +732,7 @@ def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
     state.write_text(json.dumps([
         {"name": "fixer", "cwd": "/wt/fixer", "task": "fix the link",
          "session_id": "sess-1", "state": "idle",
-         "delivery": "presented", "steps": "open the page and click the link",
+         "delivery": "ready", "steps": "open the page and click the link",
          "model": "claude-opus-4-8", "effort": "high"},
         {"name": "builder", "cwd": "/wt/builder", "task": "build the thing",
          "session_id": "sess-2", "state": "working",
@@ -782,7 +842,7 @@ def test_a_revived_agents_recorded_session_survives_the_next_persist(tmp_path):
     state = tmp_path / "agents.json"
     state.write_text(json.dumps([
         {"name": "quiet", "cwd": "/wt/quiet", "task": "carry on", "session_id": "sess-q",
-         "state": "idle", "delivery": "presented", "steps": "look at it"},
+         "state": "idle", "delivery": "ready", "steps": "look at it"},
     ]), encoding="utf-8")
 
     class MuteAgent:  # resumed, and has not spoken this life - its own session_id is None
@@ -834,7 +894,7 @@ def test_revive_recovers_a_lost_session_id_from_the_store(tmp_path, monkeypatch)
     state = tmp_path / "agents.json"
     state.write_text(json.dumps([
         {"name": "stray", "cwd": "/wt/stray", "task": "carry on",
-         "session_id": None, "state": "idle", "delivery": "presented", "steps": "look"},
+         "session_id": None, "state": "idle", "delivery": "ready", "steps": "look"},
     ]), encoding="utf-8")
     resumed = []
 

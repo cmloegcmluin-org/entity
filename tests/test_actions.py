@@ -410,3 +410,43 @@ def test_checking_off_by_id_flips_the_tick_and_a_missing_id_is_said():
     assert ticked == [43, 999]
     assert "checked off" in said_yes
     assert "no item" in said_no.lower()
+
+
+def test_a_feature_request_for_another_app_is_not_filed_on_his_own_list():
+    # "No, you fucker. This is the second time you've done this. If I ask you for a feature on
+    # anything other than yourself, you're supposed to go out and do it with a Claude agent. The
+    # enhancements list is only for enhancements to yourself, Excephalon." Both times the remedy
+    # was a written instruction; the projects are known by name, so this one is decidable.
+    filed = []
+    tools = _tools(FakeDesk(), other_apps=("Highdeas", "Haglio"),
+                   file_enhancement=lambda item, stamp=None: filed.append(item) or True)
+
+    said = _call(tools["file_improvement"],
+                 item="there should be a checkbox in Highdeas's modal view of notes which "
+                      "disables the auto play of audio")
+
+    assert filed == []  # nothing reached the list
+    assert "Highdeas" in said and "start_agent" in said
+
+
+def test_an_item_naming_another_app_and_itself_is_still_his_own_list():
+    # "A funnel from Highdeas so new feature ideas get automatically picked up by Excephalon" is
+    # a change to Excephalon that happens to name another app - exactly what the list is for.
+    filed = []
+    tools = _tools(FakeDesk(), other_apps=("Highdeas",),
+                   file_enhancement=lambda item, stamp=None: filed.append(item) or True)
+
+    _call(tools["file_improvement"],
+          item="a funnel from Highdeas so new feature ideas are picked up by Excephalon")
+
+    assert len(filed) == 1
+
+
+def test_an_ordinary_self_improvement_still_files():
+    filed = []
+    tools = _tools(FakeDesk(), other_apps=("Highdeas",),
+                   file_enhancement=lambda item, stamp=None: filed.append(item) or True)
+
+    _call(tools["file_improvement"], item="the voice should pause longer between sentences")
+
+    assert len(filed) == 1

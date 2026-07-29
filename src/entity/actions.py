@@ -36,6 +36,10 @@ TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                                 "close_agent_tab", "mark_ready",
                                 "record_verdict", "ask_foreman", "run_errand"))
 
+# What the app calls itself, in the words an item would use. An item naming one of these is about
+# Excephalon, whatever else it also names.
+SELF_NAMES = ("excephalon", "entity", "yourself")
+
 DEFAULT_TASK = (
     "You are in a git worktree. Look at the branch name and the working tree, work out what "
     "this session is meant to be doing, and continue it. Report back in a few plain sentences: "
@@ -58,12 +62,31 @@ def _resolve(target):
     return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
+def names_another_app(item, others, selves=SELF_NAMES):
+    """The other project this item is a feature request for, or None.
+
+    The Enhancements list is for changes to Excephalon ITSELF. Twice a feature request for one of
+    his other apps was filed there instead of being handed to an agent - "The enhancements list is
+    only for enhancements to yourself... You were supposed to have learned your lesson from the
+    first time" - and both times the remedy was a written instruction, which held until it didn't.
+    The projects are known (their folder names already seed the transcriber's vocabulary), so this
+    is decidable rather than remembered. An item naming another app AND itself is left alone: that
+    is a change to how Excephalon handles that app, which is exactly what the list is for."""
+    words = re.findall(r"[a-z0-9]+", item.lower())
+    if any(name.lower() in words for name in selves):
+        return None
+    for name in others:
+        if name.lower() in words:
+            return name
+    return None
+
+
 def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
                   revise=revise_enhancement, check_off=complete_enhancement_by_id,
                   add_persona=append_persona_addition,
                   remember_fact=append_learned, forget_fact=forget_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
-                  clock=time.strftime):
+                  other_apps=(), clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
     tools themselves).
 
@@ -112,6 +135,12 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
           "the moment they ask for it. One call per item - and never re-file words already on "
           "the list; the tool refuses duplicates and says so.", {"item": str})
     async def file_improvement(args):
+        elsewhere = names_another_app(str(args["item"]), other_apps)
+        if elsewhere:
+            return _say(
+                f"Not filed: that is a feature request for {elsewhere}, and this list is only for "
+                f"changes to yourself. Put an agent on it in {elsewhere}'s own repo instead "
+                "(start_agent), and tell the user you have done that - not that you filed it.")
         if not file_enhancement(str(args["item"]), stamp=clock("%Y-%m-%d %H:%M")):
             return _say("That one is already on the list, still open - not filing a second copy.")
         return _say("Filed.")

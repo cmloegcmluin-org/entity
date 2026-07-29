@@ -18,7 +18,7 @@
 {#- The "(filed …)" stamp is not in the editable words: it rides on data-filed and shows as a link
     to that moment in the conversation (the window reads #at= and scrolls there). The row puts it
     back on save, so the file keeps the exact stamp it always did. -#}
-<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Go to where this was filed in the conversation">filed {{ item.filed }}</a>{% endif %}</li>
+<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
 {%- else -%}
 <li><span class="dot" aria-hidden="true">•</span><span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
 {%- endif %}

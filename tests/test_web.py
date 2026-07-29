@@ -1,6 +1,25 @@
+import subprocess
+
 from entity.memory import profile_sections
 from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
-from entity.web import create_app
+from entity.web import _windows_clipboard, create_app
+
+
+def test_the_clipboard_is_read_as_utf8_so_a_pasted_middot_survives():
+    # Copying "Excephalon · …" and pasting it back through the box's menu returned "Excephalon ú …":
+    # PowerShell writes stdout in the console's OEM codepage, and decoding that as the locale's ANSI
+    # codepage turned the middot's byte into ú. The read forces UTF-8 at both ends now - it tells
+    # PowerShell to emit UTF-8 and decodes the bytes as UTF-8, rather than trusting `text=True`.
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"], seen["kw"] = cmd, kw
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout="Excephalon · 2026-07-28 02:23:05\r\n".encode("utf-8"))
+
+    assert _windows_clipboard(run=fake_run) == "Excephalon · 2026-07-28 02:23:05"
+    assert any("OutputEncoding" in part and "UTF8" in part for part in seen["cmd"])
+    assert seen["kw"].get("text") is not True  # bytes, decoded here - not the locale's guess
 
 
 def _model(*lines):
@@ -52,6 +71,18 @@ def test_a_message_carries_a_full_dated_reference_the_copy_link_can_locate():
     whole = _client(model).get("/messages").get_json()["entries"]
     assert whole[1]["reference"] == "You · 2026-07-18 02:41:38"
     assert whole[0]["reference"] == ""  # the day break is a place, not a turn to point at
+
+
+def test_a_message_carries_the_bare_moment_the_link_button_builds_a_url_from():
+    # The link button copies an actual URL - http://<host>/#at=<moment> - that reopens the
+    # conversation at that turn, not the readable "Name · …" text. The server hands over the bare
+    # moment (date and time, no name) for the page to encode into that hash.
+    model = _model("===== 2026-07-18 =====", "[02:42:10] entity> Morning.")
+
+    entries = _client(model).get("/messages").get_json()["entries"]
+
+    assert entries[1]["moment"] == "2026-07-18 02:42:10"
+    assert entries[0]["moment"] == ""  # a break heads a place, not a moment to link to
 
 
 def test_a_poll_carries_only_what_the_page_has_not_drawn():
@@ -622,6 +653,10 @@ def test_a_filed_enhancement_shows_its_stamp_as_a_link_not_as_text_he_edits(tmp_
     assert 'class="filed"' in page
     assert 'href="/#at=2026-07-28%2002%3A23"' in page
     assert 'data-filed="2026-07-28 02:23"' in page
+    # The link shows the bare moment, not the word "filed", and says what it does on hover.
+    assert '>2026-07-28 02:23</a>' in page
+    assert '>filed 2026-07-28 02:23</a>' not in page
+    assert 'title="Links back to where this enhancement was identified in the conversation"' in page
 
 
 def test_the_draft_box_menu_copies_as_well_as_pastes():
@@ -641,6 +676,16 @@ def test_a_message_header_is_right_clickable_to_copy_its_dated_pointer():
 
     assert 'closest(".who")' in js
     assert "entry.reference" in js and "headerReference" in js
+
+
+def test_the_link_button_copies_a_url_not_the_reference_text():
+    # He asked for "an actual URL with an anchor hash", not the readable "Name · …" text - built
+    # from this instance's own origin and the message's bare moment.
+    js = _client().get("/static/window.js").get_data(as_text=True)
+
+    assert "location.origin" in js
+    assert "encodeURIComponent(entry.moment)" in js
+    assert "#at=" in js
 
 
 def test_closing_an_agent_archives_its_log_so_it_stays_closed(tmp_path):

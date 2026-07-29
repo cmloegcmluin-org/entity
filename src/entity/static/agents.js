@@ -20,13 +20,13 @@ if (threads.length) {
    UNARCHIVES the log - the reload redraws it as an ordinary tab - and the #hash carries which one
    to scroll to once it exists. The lists are server-drawn, so any change of membership (a close,
    a restore) reloads rather than patching the page by hand. */
-for (const goes of document.querySelectorAll("#toc button[data-goes]")) {
+for (const goes of document.querySelectorAll("#toc [data-goes]")) {
   goes.addEventListener("click", () => {
     document.getElementById(goes.dataset.goes)?.scrollIntoView({ block: "start" });
   });
 }
 
-for (const shelf of document.querySelectorAll("#toc button[data-restore]")) {
+for (const shelf of document.querySelectorAll("#toc [data-restore]")) {
   shelf.addEventListener("click", async () => {
     const name = shelf.dataset.restore;
     await fetch(`/agents/archived/${encodeURIComponent(name)}/restore`, { method: "POST" });
@@ -39,6 +39,15 @@ if (location.hash) {
   // The restore lands here: the freshly unarchived tab exists now - bring it into view.
   document.getElementById(decodeURIComponent(location.hash.slice(1)))
     ?.scrollIntoView({ block: "start" });
+}
+
+/* The rail's archive button does what the tab's ✕ does, from the list rather than the tab. */
+for (const put of document.querySelectorAll("#toc [data-archive]")) {
+  put.addEventListener("click", async () => {
+    await fetch(`/agents/${encodeURIComponent(put.dataset.archive)}/close`, { method: "POST" });
+    location.assign("/agents");
+    location.reload();
+  });
 }
 
 /* The name is his. Typing in a tab's heading and leaving it (or pressing Enter) saves it: the

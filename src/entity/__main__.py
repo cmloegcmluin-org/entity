@@ -9,6 +9,7 @@
 import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -600,7 +601,9 @@ def main(argv=None):
     # Claude CLI the brain runs was turning up as a second window on their desktop.
     silence_child_consoles(anyio)
 
-    for op, payload in past_messages(TRANSCRIPTS, current=session_record.path):
+    # Everything recorded so far. This session's own record does not exist yet - it is
+    # opened with the session, further down - and its messages arrive live on the feed.
+    for op, payload in past_messages(TRANSCRIPTS):
         feed.push(op, payload)  # yesterday's sessions, above the divider - no more amnesia
     feed.push("line", "───────  this session  ───────")
 

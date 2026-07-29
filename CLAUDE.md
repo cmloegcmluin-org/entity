@@ -363,7 +363,9 @@ and the keyboard hook run on workers, and the page's own poll is what drains the
 Nothing is assigned. Outstanding in the profile's Enhancements: the rest of hearing only the user's
 voice.
 
-**Hearing only the user.** The measuring half now exists: `voiceprint.py` learns the user's voice
+**Hearing only the user is DROPPED**, by his call after reading the measurements below: "let's drop this feature. It's not important right now and it seems like it's too difficult for you to accomplish effectively." Its two Enhancements items are off his list and the per-chunk scoring is unwired - `voiceprint.py`, the model and his enrollment stay on disk, read by nothing. Do not restart this without him asking; what follows is why, so the next attempt starts from the evidence rather than the idea.
+
+The measuring half exists: `voiceprint.py` learns the user's voice
 from one minute of them reading (`Learn my voice.bat` at the repo root records it, keeps the raw
 wav in `runtime/voice/` for future re-learning, saves the averaged speaker embedding) and scores
 any audio against it — sherpa-onnx CAM++ (`runtime/voice/wespeaker_en_voxceleb_CAM++.onnx`, 28 MB;

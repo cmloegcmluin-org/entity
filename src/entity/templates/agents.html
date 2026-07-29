@@ -21,8 +21,10 @@
             title="Archive {{ name }}" aria-label="Archive {{ name }}">
       <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#archive-icon"></use></svg></button>
     <span class="when">{{ when }}</span>
-    <button type="button" class="rail-name" data-goes="agent-{{ name }}"
-            title="{{ name }}">{{ name }}</button>
+    {#- One click goes to its exchange; a double-click renames it here, without the trip to its
+        card. Both, because losing the first to gain the second is a trade he did not ask for. -#}
+    <span class="rail-name" data-goes="agent-{{ name }}" data-rename="{{ name }}"
+          title="{{ name }} - double-click to rename">{{ name }}</span>
   </div>
   {%- else %}
   <p class="rail-none"><span>(none)</span></p>
@@ -40,7 +42,8 @@
             title="Unarchive {{ name }}" aria-label="Unarchive {{ name }}">
       <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#unarchive-icon"></use></svg></button>
     <span class="when">{{ when }}</span>
-    <span class="who" title="{{ name }}">{{ name }}</span>
+    <span class="who" data-rename="{{ name }}" data-archived="1"
+          title="{{ name }} - double-click to rename">{{ name }}</span>
   </div>
   {%- endfor %}
   {%- endif %}

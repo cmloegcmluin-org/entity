@@ -22,6 +22,8 @@ if (threads.length) {
    a restore) reloads rather than patching the page by hand. */
 for (const goes of document.querySelectorAll("#toc [data-goes]")) {
   goes.addEventListener("click", () => {
+    // Not while it is being typed into: the click that placed the caret must not also scroll.
+    if (goes.getAttribute("contenteditable")) return;
     document.getElementById(goes.dataset.goes)?.scrollIntoView({ block: "start" });
   });
 }
@@ -47,6 +49,34 @@ for (const put of document.querySelectorAll("#toc [data-archive]")) {
     await fetch(`/agents/${encodeURIComponent(put.dataset.archive)}/close`, { method: "POST" });
     location.assign("/agents");
     location.reload();
+  });
+}
+
+/* The same rename, from the rail: double-click a name, type, Enter or click away. An archived
+   log has no tab to edit its name on, so this is the only door for those - and for a live one it
+   saves the trip to its card. A single click still goes to the exchange. */
+for (const label of document.querySelectorAll("#toc [data-rename]")) {
+  const was = label.dataset.rename;
+  label.addEventListener("dblclick", () => {
+    label.setAttribute("contenteditable", "plaintext-only");
+    label.focus();
+    getSelection().selectAllChildren(label);
+  });
+  const save = async () => {
+    label.removeAttribute("contenteditable");
+    const wanted = label.textContent.trim();
+    if (!wanted || wanted === was) { label.textContent = was; return; }
+    const road = label.dataset.archived ? `/agents/archived/${encodeURIComponent(was)}/rename`
+                                       : `/agents/${encodeURIComponent(was)}/rename`;
+    const answer = await fetch(road, { method: "POST", body: new URLSearchParams({ to: wanted }) });
+    if (!answer.ok) { label.textContent = was; return; }
+    location.assign("/agents");
+    location.reload();
+  };
+  label.addEventListener("blur", save);
+  label.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); label.blur(); }
+    if (event.key === "Escape") { label.textContent = was; label.blur(); }
   });
 }
 

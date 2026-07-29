@@ -1017,3 +1017,39 @@ def test_a_tab_name_keeps_the_case_he_typed():
     css = _client().get("/static/app.css").get_data(as_text=True)
 
     assert "text-transform: none" in _rule_for(css, ".section h2 .rename")
+
+
+def test_a_name_can_be_renamed_from_the_rail_as_well_as_its_card(tmp_path):
+    # "I should be able to edit the agent names from the sidebar too." An archived log has no card
+    # to edit its name on, so the rail is the only door for those.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "live-one.log").write_text("[10:00:00] ENTITY> go" + chr(10), encoding="utf-8")
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "older.log").write_text("[09:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+    assert 'data-rename="live-one"' in page and 'data-rename="older"' in page
+    assert "double-click to rename" in page
+    # The live row keeps its go-to-the-exchange click alongside the rename.
+    assert 'data-goes="agent-live-one" data-rename="live-one"' in page
+
+    js = client.get("/static/agents.js").get_data(as_text=True)
+    assert "dblclick" in js and "/agents/archived/" in js
+
+
+def test_the_rail_aligns_a_date_and_its_name_on_one_baseline():
+    # "The names are so much lower than their corresponding dates that they almost look 1/3 of the
+    # day offset from them" - two different font sizes, centred boxes, so the words sat apart.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    assert "align-items: baseline" in _rule_for(css, "#toc .rail-row")
+
+
+def test_an_agent_cards_title_is_bigger_and_stands_off_its_exchange():
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    heading = _rule_for(css, "body.agents .section h2")
+    assert "font-size: 1rem" in heading and "margin-bottom: 14px" in heading

@@ -162,20 +162,27 @@ body.page .topbar, body.config .topbar {
    it is called. The date column is a fixed width - every date is the same length - so the dates
    line up under each other and so do the names. An active agent has no date and keeps the
    column, so its name still lands in line, and (none) sits at the same left edge as the rest. */
+/* Baseline, not centre: the date and the name are different sizes, and centring their boxes
+   left the words themselves at different heights - "the names are so much lower than their
+   corresponding dates that they almost look 1/3 of the day offset from them". */
 #toc .rail-row { display: grid; grid-template-columns: 20px 4.7rem 1fr; column-gap: 4px;
-                 align-items: center; }
-#toc .when { font-size: .68rem; color: var(--dim);
+                 align-items: baseline; }
+#toc .when { font-size: .68rem; color: var(--dim); padding: 5px 0;
              font-family: ui-monospace, "Cascadia Code", monospace; }
 /* A long name is cut with an ellipsis rather than wrapped: the rows stay one line each, and the
    whole name is in the tooltip. */
 #toc .rail-row .who, #toc .rail-row .rail-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                              font-size: .78rem; color: var(--dim); }
 #toc .rail-row .who { padding: 5px 0; }
-#toc .rail-row .rail-name { text-align: left; background: none; border: 0; padding: 5px 0; width: 100%;
-                  cursor: pointer; font-family: inherit; }
+#toc .rail-row .rail-name { padding: 5px 0; cursor: pointer; }
+/* Being typed into, a name is not a label: it takes the caret and shows that it has focus. */
+#toc .rail-row [contenteditable="plaintext-only"] { background: rgba(127, 255, 0, .07);
+                  color: var(--fg); cursor: text; border-radius: 4px; padding: 5px 4px;
+                  margin: 0 -4px; outline: none; text-overflow: clip; }
 #toc .rail-row .rail-name:hover { color: var(--fg); }
 /* The row's one action, on its left - a button that looks like one and takes the pointer. */
-#toc .rail-row .rail-do { display: flex; align-items: center; justify-content: center; width: 20px;
+#toc .rail-row .rail-do { display: flex; align-items: center; justify-content: center;
+                align-self: center; width: 20px;
                 height: 20px; padding: 0; background: none; border: 0; color: var(--dim);
                 cursor: pointer; }
 #toc .rail-row .rail-do svg { width: 13px; height: 13px; }
@@ -433,6 +440,10 @@ body.config #content { margin-left: 180px; }
    the page makes room for it. "I understand that this makes the sidebar wider. it's not
    like the sidebar has a consistent width across the Conversation, Config, and Agents
    tabs anyway." */
+/* An agent's card is titled by its NAME, which he reads and edits - so it carries more than a
+   section label's whisper, and the exchange below it starts further down. */
+body.agents .section h2 { font-size: 1rem; margin-bottom: 14px; letter-spacing: .02em;
+                          text-transform: none; }
 body.agents #toc { width: 340px; }
 body.agents #content { margin-left: 360px; max-width: none; }
 #toc { position: fixed; left: 10px; top: 62px; width: 158px; background: var(--panel);

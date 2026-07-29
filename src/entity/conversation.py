@@ -314,7 +314,7 @@ class Conversation:
         one - two readers on one mic corrupt each other. A voice hiccup is logged, not fatal - a
         failed utterance must never crash the loop (it did, and they lost the whole run)."""
         if self._interrupted():
-            self._console.spoke("(left unsaid - they had cut in)")
+            self._console.aside("(left unsaid - they had cut in)")
             return
         if not known:
             # They are about to hear this as the Entity speaking, and the brain did not write it -
@@ -330,10 +330,10 @@ class Conversation:
             # only the difference between what is on the screen and what a person would say aloud.
             self._tts.speak(as_spoken(text), interrupt=self._interrupt)
         except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
-            self._console.spoke(f"(voice failed: {exc!r})")
+            self._console.aside(f"(voice failed: {exc!r})")
         else:
             if self._interrupted():  # the utterance was killed partway - the record must say so,
-                self._console.spoke("(cut off mid-utterance)")  # or a silenced line looks delivered
+                self._console.aside("(cut off mid-utterance)")  # or a silenced line looks delivered
         finally:
             if stop_watching is not None:
                 stop_watching()
@@ -705,7 +705,7 @@ class Conversation:
             self._console.reply(said)
             reply.done()  # then wait out the rest of the audio
             if self._interrupted():  # the audio was cut partway - the record must say so
-                self._console.spoke("(cut off mid-utterance)")
+                self._console.aside("(cut off mid-utterance)")
         else:
             spoken_parts.append(said)  # the floor's script: the whole reply is about to be audible
             self._speak_reply(said, known=True)  # if they hit Enter while it talks, this is cut off

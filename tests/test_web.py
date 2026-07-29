@@ -839,3 +839,25 @@ def test_an_old_log_is_converted_once_and_read_as_messages_after(tmp_path):
 
     again = past_messages(tmp_path)  # and the second read comes off the record, unchanged
     assert [payload for _, payload in again] == [payload for _, payload in ops]
+
+
+def test_the_archive_lists_the_newest_first_and_says_when(tmp_path):
+    # "Archived agent logs should be sorted by date, not alphabetically, jesus... and show the
+    # timestamp for them too." An archive is a history; alphabetical it read as a filing cabinet.
+    import os
+
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    for name, when in (("alpha", 1_760_000_000), ("zulu", 1_770_000_000), ("mike", 1_750_000_000)):
+        log = archive / f"{name}.log"
+        log.write_text("[10:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+        os.utime(log, (when, when))
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+
+    order = [page.index(f'data-restore="{name}"') for name in ("zulu", "alpha", "mike")]
+    assert order == sorted(order)  # newest first, not a-z
+    assert page.count('class="when"') == 3  # and each says when it last spoke

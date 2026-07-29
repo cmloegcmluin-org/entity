@@ -281,3 +281,34 @@ def test_every_narration_carries_the_same_conduct_a_reply_does():
     assert _wait_for(outbox)
     assert "the desk" in asked[0] and "never" in asked[0]  # named, not merely a category
     assert "the feature" in asked[0]  # and told to name the work in his own words
+
+
+def test_work_that_has_not_landed_is_never_narrated_as_deployed():
+    # "The feature should be there in Highdeas waiting" - said about work still being built, and
+    # he went looking for it. The stage rides in as a fact, and a line that claims deployment
+    # anyway is dropped for the plain notice, which claims nothing.
+    class Brain:
+        def respond(self, prompt, remember=True):
+            return "The auto-play checkbox is deployed - go and try it in Highdeas."
+
+    outbox = Outbox()
+    Narrator(Brain(), outbox, stage_of=lambda agent: "building").tell(
+        "finished", "toggle", "built the checkbox")
+
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert "deployed" not in str(news)
+    assert news.composed is False  # app-authored, so the ledger reads it back to the brain
+
+
+def test_the_same_words_stand_once_the_work_has_landed():
+    class Brain:
+        def respond(self, prompt, remember=True):
+            return "The auto-play checkbox is deployed - it is in Highdeas now."
+
+    outbox = Outbox()
+    Narrator(Brain(), outbox, stage_of=lambda agent: "landing").tell(
+        "died", "toggle", "landed it")
+
+    assert _wait_for(outbox)
+    assert "deployed" in str(outbox.drain()[0])

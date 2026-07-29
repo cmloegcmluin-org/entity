@@ -267,6 +267,18 @@ class AgentDesk:
         revived = []
         for entry in saved:
             name, session = entry.get("name"), entry.get("session_id")
+            if name and self._already_retired(name):
+                # Its log is in the archive: this agent was wrapped up, whatever the record still
+                # says. The record is written on the way down, so an agent wrapped up from outside
+                # the app (or after the last persist) comes back from the dead - and everything
+                # built to keep him informed then dutifully re-raises work he has already ruled
+                # on: "can you get it to stop talking about this thing, which I've already told
+                # it twice is finished? this is the third time it's pestered me." News about it
+                # goes the same way.
+                drop = getattr(self._outbox, "drop", None)
+                if drop is not None:
+                    drop(name)
+                continue
             if name and not session:
                 # The record can lose an id the CLI's own session store still knows: one boot
                 # persisted freshly-resumed agents before they had spoken - null over the known
@@ -305,6 +317,14 @@ class AgentDesk:
                 self._dispatch(name, PRESENT_AFTER_RESTART)
         self._persist()
         return revived
+
+    def _already_retired(self, name):
+        """Has this agent's log been moved to the archive? That move IS the wrap-up's record, and
+        it outlives any fleet file: a live agent always has its log in the live folder."""
+        if self._log_dir is None or self._archive_dir is None:
+            return False
+        return ((self._archive_dir / f"{name}.log").exists()
+                and not (self._log_dir / f"{name}.log").exists())
 
     def choose(self, model=None, effort=None):
         """Put the NEXT agent on this model, at this effort, and say what it will be. Either half

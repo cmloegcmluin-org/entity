@@ -273,7 +273,10 @@ line format and every internal role key stay `entity`: renaming those breaks par
 transcripts for a word nobody hears. `links.py` decides what a message names that can be
 opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets), streams the whole exchange into its log, records the fleet in
-`runtime/agents.json` and revives it on startup — each agent resumed by CLI session id, one caught
+`runtime/agents.json` and revives it on startup — an agent whose log is already in the archive is
+NOT brought back (the record is written on the way down, so one wrapped up from outside the app
+would otherwise rise from the dead and have its old news re-raised: "this is the third time it's
+pestered me"), each surviving agent resumed by CLI session id, one caught
 mid-task told to pick back up, one recorded mid-landing told to settle the merge NOW and watch it
 in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
 the merged report never existed) — its digest also names tabs whose log files linger with no agent

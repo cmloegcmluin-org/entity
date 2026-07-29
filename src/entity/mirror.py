@@ -62,8 +62,17 @@ class TranscriptModel:
         continuations parsed as status asides, and a long submission he watched land as one green
         bubble came back after a restart as one bubble plus a column of small dim grey lines. A
         bare line right after a message is that message still going, so it rejoins it; a stamped
-        EMPTY line there is the paragraph break it was. The console's own asides all start with
-        "(" or "[" ("(thinking…)", "[think 2.3s…]"), which is how they stay asides."""
+        EMPTY line there is the paragraph break it was.
+
+        Its STAMP is what says so. One message is written in one call, so every line of it carries
+        the same second; a line the app spoke later - "I've got an update on X when you're ready",
+        recorded bare because the terminal did not show it - carries its own. Judged on the prefix
+        alone, that offer was swallowed into the bubble above it, and a restart redrew the history
+        without a message he had just been given: "the conversation history had been rewritten.
+        this is terrifying". Nothing was ever lost from the file; the reader was.
+
+        (The console's own asides also start with "(" or "[" - "(thinking…)", "[think 2.3s…]" -
+        which keeps them asides even inside a message's own second.)"""
         parsed = parse_line(line)
         previous = self.entries[-1] if self.entries else None
         continuable = (previous is not None and previous.get("historical")
@@ -73,7 +82,8 @@ class TranscriptModel:
                 previous["text"] += "\n"  # a blank line inside the message: its paragraph break
             return
         role, stamp, text = parsed
-        if role == "status" and continuable and not text.startswith(("(", "[")):
+        if (role == "status" and continuable and stamp == previous["stamp"]
+                and not text.startswith(("(", "["))):
             previous["text"] += "\n" + text  # a paragraph break above already left its newline
             return
         self._add(role, text, stamp=stamp, historical=True)

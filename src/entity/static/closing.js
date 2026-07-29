@@ -6,19 +6,29 @@
 
 const veil = document.getElementById("veil");
 const keep = document.getElementById("keep-open");
+const closing = document.getElementById("closing");
+const updating = document.getElementById("updating");
+/* Set the moment a restart is asked for: the veil then says what is happening and stops being
+   dismissable. A question can be waved away; a window already on its way out cannot. */
+let leaving = false;
 
 /* Called by the app when the X is pressed (see desktop.Controls.asked_to_close). */
 function askToClose() {
+  if (leaving) return;
   veil.hidden = false;
   keep.focus();
 }
 
-keep.addEventListener("click", () => { veil.hidden = true; });
+function dismiss() {
+  if (!leaving) veil.hidden = true;
+}
+
+keep.addEventListener("click", dismiss);
 addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !veil.hidden) veil.hidden = true;
+  if (event.key === "Escape" && !veil.hidden) dismiss();
 });
 veil.addEventListener("pointerdown", (event) => {
-  if (event.target === veil) veil.hidden = true;   // a click off the dialog keeps the window
+  if (event.target === veil) dismiss();   // a click off the dialog keeps the window
 });
 
 document.getElementById("really-close").addEventListener("click", () => {
@@ -29,6 +39,10 @@ document.getElementById("really-close").addEventListener("click", () => {
    goodbye, agents recorded - and its last act is to start a fresh one on the current code. */
 const restart = document.getElementById("restart");
 restart.addEventListener("click", () => {
+  leaving = true;
+  closing.hidden = true;
+  updating.hidden = false;
+  veil.hidden = false;   // said BEFORE the request, so the wait is never a blank one
   fetch("/restart", { method: "POST" });
 });
 

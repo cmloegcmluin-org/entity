@@ -286,73 +286,13 @@ function turnAt(pointer) {
 }
 
 
-/* ---- the right-click menus ---------------------------------------------------------------- */
+/* No right-click menus are built here. The window turns Edge's own menus back on
+   (desktop.turn_on_context_menus), so every scrap of text on the page answers a right-click
+   the way the rest of Windows does - Cut, Copy, Paste, and the spelling suggestions under a
+   red squiggle. Bespoke menus were built for two boxes and cancelled the real one there:
+   "why does right clicking selected date text give me the standard Windows context menu, but
+   right-clicking [the header] and the message box text etc required you to build these
+   proprietary context menus... I had misspelled 'proprietary' here and Windows had marked it
+   with a jagged red underline... I don't get that option here, but I should." A message's
+   dated pointer is the one thing no native menu can know, and it keeps its hover button. */
 
-/* One little menu, shaped once and used twice: the draft box's (Paste and Copy) and a message
-   header's (Copy). Items are [label, action]; it opens at the cursor and is torn down on any click
-   away or Escape. The embedded browser offers no menu of its own here, and writing the clipboard
-   is allowed even where reading it needs a permission nobody is there to grant - so Copy runs in
-   the page while Paste asks the app (which runs on this same machine) to read it back. */
-function popupMenu(items) {
-  const menu = document.createElement("div");
-  menu.className = "popmenu";
-  menu.hidden = true;
-  for (const [label, action] of items) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.append(label);
-    button.addEventListener("click", () => { menu.hidden = true; action(); });
-    menu.append(button);
-  }
-  document.body.append(menu);
-  return menu;
-}
-
-function openMenu(menu, event) {
-  event.preventDefault();
-  menu.hidden = false;  // shown first, so its measured height keeps it clear of the bottom edge
-  menu.style.left = `${Math.min(event.clientX, innerWidth - menu.offsetWidth - 8)}px`;
-  menu.style.top = `${Math.min(event.clientY, innerHeight - menu.offsetHeight - 8)}px`;
-}
-
-/* The draft box: paste what the app reads off the clipboard, or copy what is picked out of the box
-   (or the whole box, if nothing is selected). */
-async function pasteIntoDraft() {
-  const { text } = await (await fetch("/clipboard")).json();
-  if (!text) return;
-  draft.focus();
-  draft.setRangeText(text, draft.selectionStart, draft.selectionEnd, "end");
-  draft.dispatchEvent(new Event("input"));  // the kept-draft store must see the paste too
-}
-function copyFromDraft() {
-  const picked = draft.value.slice(draft.selectionStart, draft.selectionEnd) || draft.value;
-  if (picked) navigator.clipboard.writeText(picked);
-}
-const draftMenu = popupMenu([["Paste", pasteIntoDraft], ["Copy", copyFromDraft]]);
-draft.addEventListener("contextmenu", (event) => openMenu(draftMenu, event));
-
-/* A message header ("You · 05:01:59"): right-click to copy the same dated pointer the link button
-   copies - the useful thing to paste back at Entity, since the header on screen shows only the
-   time. The header is selectable too (see .who in app.css), so a plain drag-select still works. */
-let headerReference = "";
-const headerMenu = popupMenu([["Copy", () => headerReference
-  && navigator.clipboard.writeText(headerReference)]]);
-thread.addEventListener("contextmenu", (event) => {
-  const said = event.target.closest(".who")?.closest(".said");
-  const entry = said && said.dataset.at !== undefined ? latest[Number(said.dataset.at)] : null;
-  if (!entry || !entry.reference) return;   // not a datable message header - leave the default menu
-  headerReference = entry.reference;
-  openMenu(headerMenu, event);
-});
-
-/* Any click away, or Escape, puts every open menu away. */
-addEventListener("pointerdown", (event) => {
-  for (const menu of document.querySelectorAll(".popmenu")) {
-    if (!menu.contains(event.target)) menu.hidden = true;
-  }
-});
-addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    for (const menu of document.querySelectorAll(".popmenu")) menu.hidden = true;
-  }
-});

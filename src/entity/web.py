@@ -180,28 +180,8 @@ class Agents:
         return model.entries
 
 
-def _windows_clipboard(run=None):
-    """The machine's clipboard, read by the app itself. The embedded browser gives the draft box
-    no paste menu of its own, and reading the clipboard IN the page needs a browser permission
-    nobody is there to grant - while this server already runs on the same machine as the text.
-
-    Read as UTF-8 at both ends. PowerShell writes stdout in the console's OEM codepage by default,
-    and decoding that as the locale's ANSI codepage turned a middot (·) into ú when he pasted a
-    copied "Excephalon · …" back in - so the output encoding is forced to UTF-8 and the bytes are
-    decoded the same way here, rather than trusting `text=True` to guess right."""
-    if run is None:
-        from entity.worktrees import run_hidden
-        run = run_hidden
-    done = run(["powershell", "-NoProfile", "-Command",
-                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"],
-               capture_output=True)
-    if done.returncode != 0:
-        return ""
-    return done.stdout.decode("utf-8", "replace").rstrip("\r\n")
-
-
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
-               opener=open_link, mirror=None, clipboard=_windows_clipboard,
+               opener=open_link, mirror=None,
                profile_path=None, learned_path=None, translations_path=None, terms=(),
                persona_additions_path=None, agent_logs_dir=None, clock=None,
                on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None,
@@ -273,11 +253,6 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         if on_auto_listen is not None:
             on_auto_listen(request.form["on"] == "true")
         return ("", 204)
-
-    @app.get("/clipboard")
-    def clipboard_text():
-        """What the clipboard holds, for the draft's own right-click Paste (see window.js)."""
-        return {"text": clipboard() if clipboard is not None else ""}
 
     @app.post("/open")
     def open_what_was_clicked():

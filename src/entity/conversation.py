@@ -119,6 +119,49 @@ OFFERED_NOTICE = (
 )
 
 
+def _goodbye_sentence(farewell):
+    """The app's closing line as a STANDALONE sentence, wherever it lands in a reply - never the
+    same words inside a longer one ("I'll be seeing you at the demo" is the brain talking).
+    Substitute with the first group to keep the sentence boundary the match consumed."""
+    core = re.escape(farewell.rstrip(".!?… ").strip())
+    return re.compile(r"(^|[.!?…]\s+|\n\s*)" + core + r"(?:[.!?…]+\s*|\s*$)", re.IGNORECASE)
+
+
+class _FarewellGate:
+    """Forwards a streamed reply to the voice, dropping any sentence that is the goodbye.
+
+    The goodbye is the app's own closing line; the brain writing it mid-conversation is a
+    misfire the user had to correct out loud ("Wait, why did you say be seeing you? I thought
+    you only say that when I'm closing you.") - and the standing instruction filed against it
+    is exactly the duty-shaped rule the fast tier keeps missing. So the code holds the door.
+    Text is released a completed sentence at a time - which costs the voice nothing, since it
+    already synthesizes only completed sentences - and a sentence that IS the goodbye is
+    dropped instead of fed to it. Mid-sentence uses ("be seeing you around") pass untouched:
+    only the standalone closing line is the misfire."""
+
+    _SENTENCE_END = re.compile(r"(?<=[.!?…])")
+
+    def __init__(self, forward, farewell):
+        self._forward = forward
+        core = re.escape(farewell.rstrip(".!?… ").strip())
+        self._goodbye = re.compile(r"\W*" + core + r"[.!?…]*\W*", re.IGNORECASE)
+        self._held = ""
+
+    def feed(self, piece):
+        *done, self._held = self._SENTENCE_END.split(self._held + piece)
+        for sentence in done:
+            self._pass(sentence)
+
+    def flush(self):
+        """The reply is complete: whatever is still held is its last (unterminated) sentence."""
+        held, self._held = self._held, ""
+        self._pass(held)
+
+    def _pass(self, sentence):
+        if sentence and not self._goodbye.fullmatch(sentence):
+            self._forward(sentence)
+
+
 class _ThinkInterrupted(Exception):
     """Internal signal that a barge-in cancelled the brain call - the turn is abandoned and the
     loop goes straight back to listening, with no reply and no error spoken."""
@@ -226,6 +269,9 @@ class Conversation:
         self._suspends = frozenset(_canonical(s) for s in suspends)
         self._resumes = frozenset(_canonical(r) for r in resumes)
         self.farewell_reply = farewell_reply
+        # The closing line as a stray sentence in an ordinary reply - the misfire the gate and
+        # the record-scrub both remove, so it is only ever heard when the app itself closes.
+        self._stray_goodbye = _goodbye_sentence(farewell_reply)
         self.error_reply = error_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
@@ -591,9 +637,13 @@ class Conversation:
         # that is what is audible and therefore what a leak transcribes.
         spoken_parts = []
 
-        def carry(piece):
+        def audible(piece):
             spoken_parts.append(piece)
             reply.add(piece)
+
+        # The gate between the brain and the voice: a stray goodbye sentence is dropped before
+        # it can sound, so the closing line is only ever heard when the app actually closes.
+        gate = _FarewellGate(audible, self.farewell_reply) if reply is not None else None
 
         release_floor = self._hold_the_floor(
             script=lambda: as_spoken("".join(spoken_parts)),
@@ -601,7 +651,7 @@ class Conversation:
         think_start = time.monotonic()
         try:
             said = self._think(self._with_system_notes(heard, offered),
-                               on_text=carry if reply is not None else None)
+                               on_text=gate.feed if gate is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
@@ -620,6 +670,11 @@ class Conversation:
             self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
+        if gate is not None:
+            gate.flush()  # the last sentence may have ended without punctuation
+        # The record matches the ear: a stray goodbye the gate kept out of the voice comes off
+        # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn.
+        said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
         if not said.strip():
             # Nothing to say - the turn completed silently. A blank "entity>" line or an empty
             # utterance would be noise.

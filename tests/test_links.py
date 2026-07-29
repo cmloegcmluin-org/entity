@@ -119,6 +119,25 @@ def test_a_bare_localhost_address_opens_in_the_browser_with_its_scheme_restored(
     assert opened == ["http://localhost:5200"]
 
 
+def test_exact_identifiers_are_spoken_as_their_kind_not_read_out():
+    # "Never speak exact identifiers aloud - file paths, hashes, precise strings; transcription
+    # mangles them. Put them on screen instead." The screen already shows the real thing; only
+    # the audio takes the stand-in, the same trade a path already makes.
+    assert as_spoken("Landed as 859e704 just now.") == "Landed as a commit id just now."
+    assert as_spoken("The full one is 76247f7d2c1e4b0a9f31c05582ee9640aa11bc3d.") ==         "The full one is a commit id."
+    assert as_spoken("Your session is 3538dae8-79e2-4aab-a70f-0921f2d6fc5f, saved.") ==         "Your session is an id, saved."
+    assert as_spoken("The task's number is 1207770000000001 there.") ==         "The task's number is an id there."
+
+
+def test_ordinary_words_and_small_numbers_are_not_mistaken_for_identifiers():
+    # Hex-shaped WORDS ("deadline"; even all-hex "cafebabe", which carries no digit) and the
+    # numbers of everyday speech stay exactly as written - eating real words to protect him
+    # from hashes would be the worse trade.
+    assert as_spoken("The deadline is 2026, decade of decaf.") ==         "The deadline is 2026, decade of decaf."
+    assert as_spoken("cafebabe is a word to me.") == "cafebabe is a word to me."
+    assert as_spoken("Chapter 1234567 reads oddly.") == "Chapter an id reads oddly."
+
+
 def test_a_bare_localhost_address_is_spoken_as_written():
     # He liked hearing "localhost 5200" - it IS the natural spoken form, unlike a full URL.
     assert as_spoken("It's live at localhost:5200 now.") == "It's live at localhost:5200 now."

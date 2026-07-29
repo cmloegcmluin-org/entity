@@ -255,7 +255,7 @@ def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
 
     sections = profile_sections(path.read_text(encoding="utf-8"))
     assert "- better voice" in sections["Enhancements you want (roadmap, not now)"]
-    assert "- [ ] speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
+    assert "- [ ] #1 speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
     assert sections["Something after"] == "- untouched"  # later sections undisturbed
 
 
@@ -274,7 +274,7 @@ def test_an_enhancement_is_filed_under_a_heading_that_merely_starts_with_the_wor
     append_enhancement("speaker enrollment", path=path)
 
     sections = profile_sections(path.read_text(encoding="utf-8"))
-    assert "- [ ] speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
+    assert "- [ ] #1 speaker enrollment" in sections["Enhancements you want (roadmap, not now)"]
     assert list(sections) == ["Goals", "Enhancements you want (roadmap, not now)"]
 
 
@@ -289,7 +289,7 @@ def test_a_filed_enhancement_lands_as_an_unticked_box(tmp_path):
     append_enhancement("speaker enrollment", path=path)
 
     body = profile_sections(path.read_text(encoding="utf-8"))["Enhancements"]
-    assert "- [ ] speaker enrollment" in body
+    assert "- [ ] #1 speaker enrollment" in body  # numbered as it lands, so he can name it
 
 
 def test_completing_an_enhancement_ticks_it_and_leaves_it_there(tmp_path):
@@ -448,7 +448,7 @@ def test_an_item_filed_while_the_page_sat_open_survives_the_next_thing_he_types(
                    drawn=drawn)
 
     assert profile_sections(path.read_text(encoding="utf-8"))["Enhancements"] == (
-        "- [ ] better voice, Cartesia\n- [ ] filed while they typed"
+        "- [ ] better voice, Cartesia\n- [ ] #1 filed while they typed"
     )
 
 
@@ -592,7 +592,7 @@ def test_a_filed_enhancement_carries_its_filing_time(tmp_path):
     filed = append_enhancement("speak slower", path, stamp="2026-07-27 00:12")
 
     assert filed is True
-    assert "- [ ] speak slower (filed 2026-07-27 00:12)" in path.read_text(encoding="utf-8")
+    assert "- [ ] #1 speak slower (filed 2026-07-27 00:12)" in path.read_text(encoding="utf-8")
 
 
 def test_a_filed_stamp_is_split_off_so_the_page_can_link_it_instead_of_showing_text():
@@ -639,7 +639,8 @@ def test_the_same_words_already_ticked_do_file_anew(tmp_path):
     filed = append_enhancement("fix the auto-listen bug", path)
 
     assert filed is True
-    assert "- [ ] fix the auto-listen bug" in path.read_text(encoding="utf-8")
+    # And the next number after the highest in use, so it never collides with the ticked one.
+    assert "- [ ] #5 fix the auto-listen bug" in path.read_text(encoding="utf-8")
 
 
 def test_an_enhancement_can_be_rewritten_in_place_by_its_id(tmp_path):
@@ -754,3 +755,20 @@ def test_reconcile_lexicon_adds_and_removes_his_terms_but_never_scanned_ones(tmp
     assert "highdeas" not in kept                # scanned, never the lexicon's to hold
     assert "# his working vocabulary" in kept
     assert set(lexicon_terms(kept)) == {"Notecraft", "Excephalon"}
+
+
+def test_an_enhancement_filed_by_the_app_carries_its_number_at_once(tmp_path):
+    # "When Excephalon files an Enhancement ticket itself, it still has the bug where the ID is
+    # missing from it initially." The number is how he refers to an item - and the one he had
+    # just been told about was the one he could not name back until the page happened to save.
+    from entity.memory import append_enhancement, checklist_items, profile_sections
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Enhancements" + chr(10) + "- [ ] #4 better voice" + chr(10)
+                    + "- [x] #9 old news" + chr(10), encoding="utf-8")
+
+    append_enhancement("a checkbox for auto-play", path=path)
+
+    items = checklist_items(profile_sections(path.read_text(encoding="utf-8"))["Enhancements"])
+    filed = [item for item in items if item["text"].startswith("a checkbox")]
+    assert [item["id"] for item in filed] == [10]  # the next number, not a gap and not a clash

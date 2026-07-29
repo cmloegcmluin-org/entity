@@ -527,6 +527,11 @@ def append_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEA
         insert_at = len(lines)
     while insert_at > 0 and not lines[insert_at - 1].strip():
         insert_at -= 1  # tuck the bullet against the section's last line, not after its blank gap
+    # With its number, from the moment it lands. Filed bare, the item had no #id until the page
+    # happened to save the section - so the one he had just been told about was the one he could
+    # not name back ("when Excephalon files an Enhancement ticket itself, it still has the bug
+    # where the ID is missing from it initially").
+    item = f"#{_next_id(standing)} {item}"
     lines.insert(insert_at, UNTICKED + item)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

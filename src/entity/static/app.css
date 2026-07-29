@@ -157,6 +157,9 @@ body.page .topbar, body.config .topbar {
                    text-transform: uppercase; letter-spacing: .06em; }
 #toc .rail-label:first-child { margin-top: 0; }
 #toc .rail-none { margin: 0 0 4px; padding: 3px 8px; font-size: .78rem; color: var(--dim); }
+/* When an archived agent last spoke - under its name, quiet, so the list reads as the
+   history it is rather than a filing cabinet. */
+#toc .when { display: block; font-size: .68rem; color: var(--dim); }
 .section h2 .shut { float: right; font: inherit; font-size: 1rem; line-height: 1; color: var(--dim);
                     background: transparent; border: 0; padding: 0 2px; cursor: pointer; }
 .section h2 .shut:hover { color: #ff9b9b; }

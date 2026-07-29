@@ -20,8 +20,11 @@
   {%- endfor %}
   {%- if archived %}
   <p class="rail-label">Archived</p>
-  {%- for name in archived %}
-  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view">{{ name }}</button>
+  {#- Newest first, each with the day it last said anything: an archive is a history, and
+      alphabetical it read as a filing cabinet. -#}
+  {%- for name, when in archived %}
+  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view">{{ name }}
+    <span class="when">{{ when }}</span></button>
   {%- endfor %}
   {%- endif %}
 </aside>

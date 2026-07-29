@@ -12,6 +12,7 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, redirect, render_template, request
@@ -146,10 +147,23 @@ class Agents:
         return sorted(discover(self._directory)) if self._directory else []
 
     def archived_names(self):
-        """Every retired agent's log, reopenable. Closing a tab moves the log to the archive
-        rather than deleting it - but with no way back in, "archived" read as "thrown away" the
-        day a stranded task's only record went to the archive unverified."""
-        return sorted(discover(self._archive)) if self._archive else []
+        """Every retired agent's log, reopenable, NEWEST FIRST and dated - (name, when).
+
+        Alphabetical, an archive reads as a filing cabinet: "archived agent logs should be sorted
+        by date, not alphabetically, jesus... and show the timestamp for them too". The date is
+        the log's own last write, which is when that agent last said anything."""
+        if not self._archive:
+            return []
+        dated = []
+        for name in discover(self._archive):
+            log = self._archive / f"{name}.log"
+            try:
+                when = datetime.fromtimestamp(log.stat().st_mtime)
+            except OSError:
+                when = None
+            dated.append((name, when))
+        dated.sort(key=lambda entry: (entry[1] is not None, entry[1]), reverse=True)
+        return [(name, when.strftime("%Y-%m-%d %H:%M") if when else "") for name, when in dated]
 
     def restore(self, name):
         """Bring an archived log back: moved into the live folder, it IS a tab again - the
@@ -427,7 +441,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         # An archived log is not read in place - restoring moves it back to the live folder,
         # where it is an ordinary tab again. The static /archived/ segment outranks the live
         # route's converter, so the two namespaces never collide.
-        if name not in agents.archived_names():  # never touch a path that did not come from the archive
+        if name not in [kept for kept, _ in agents.archived_names()]:  # only a name from the archive
             return ("", 404)
         agents.restore(name)
         return ("", 204)

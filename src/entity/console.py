@@ -90,6 +90,14 @@ class Console:
         self._line(text, show=False)
         self._messages("entity", text)  # they heard it, so a conversation view shows it
 
+    def aside(self, text):
+        """Something the APP noticed, in its own voice - "(cut off mid-utterance)", a voice
+        error. He hears none of it; it is a note about the turn. Kept in the record and shown
+        in the conversation as the quiet grey line it is: ""(cut off mid-utterance)" should not
+        appear in a blue word bubble, because it\'s not something Excephalon says"."""
+        self._line(text, show=False)
+        self._messages("status", text)
+
     def heads_up(self, text):
         self._line(f"entity (heads-up)> {text}\n")  # marked so an unprompted line isn't mistaken for a reply
         self._messages("heads-up", text)

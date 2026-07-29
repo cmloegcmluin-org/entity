@@ -32,6 +32,23 @@ NARRATE_DEADLINE = 120.0
 # conduct that governs a reply reaches only replies. "The agent reported the feature is working
 # ... but it's already wrapped up at the desk" was a narration: jargon he had to ask about twice,
 # in a sentence that named no feature.
+# Where the work actually stands, stated as a fact in the prompt rather than left to a rule the
+# model has to recall. "The feature should be there in Highdeas waiting" was said about work still
+# being built - "never claim in heads-up statements that a feature is available or deployed in an
+# app when it is still under development or awaiting merge".
+STAGE_FACT = {
+    "building": ("\n\n[Fact, from the app: this work is still BEING BUILT. It is not deployed, not "
+                 "live, not shipped, not available anywhere he could go and use it. Saying or "
+                 "implying otherwise is false.]"),
+    "ready": ("\n\n[Fact, from the app: this work is BUILT AND WAITING FOR HIS VERDICT. It is not "
+              "deployed, not live, not shipped, and not in the app he uses - a demo he can look "
+              "at is not the thing being live. Saying or implying otherwise is false.]"),
+}
+
+# Words that can only be a claim of deployment. Kept tiny and unambiguous on purpose: presentation
+# news legitimately says "the demo is live on that port", so "live" is not on this list.
+CLAIMS_DEPLOYED = ("deployed", "shipped", "in production", "already in ", "should be there")
+
 NARRATION_CONDUCT = (
     "\n\n[Standing conduct for this line, same as any reply: no internal vocabulary EVER - never "
     "'the desk', 'the fleet', 'the outbox', 'the roster', 'marked ready', 'the delivery stage', "
@@ -118,6 +135,15 @@ PROMPTS = {
 }
 
 
+def _claims_deployed(said, stage):
+    """Does this line say the work is out there, when the app knows it is not? Only for work that
+    has not landed - once it has, saying so is the news."""
+    if stage not in STAGE_FACT:
+        return False
+    lowered = said.lower()
+    return any(claim in lowered for claim in CLAIMS_DEPLOYED)
+
+
 class Narrator:
     """Turns one agent event into one brain-composed interjection, off-thread, never lost."""
 
@@ -139,8 +165,9 @@ class Narrator:
     def _narrate(self, kind, agent, report):
         if kind == "finished" and self._stage_of(agent) == "landing":
             kind = "landing"
+        stage = self._stage_of(agent)
         prompt = (PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
-                  + NARRATION_CONDUCT)
+                  + STAGE_FACT.get(stage, "") + NARRATION_CONDUCT)
         # One claim on delivering this event: whichever of the two threads takes it speaks, the
         # other stays silent. Without it, a reply landing just as the deadline runs out would be
         # spoken AND covered by the notice - the same news twice.
@@ -171,7 +198,11 @@ class Narrator:
                     return
                 said = stripped
             if take():
-                if said.strip():
+                if said.strip() and _claims_deployed(said, stage):
+                    # It said the work is out there when it is not. The plain notice carries the
+                    # news without the claim; a sentence he would act on must not be a guess.
+                    self._outbox.push(notice(agent, report), about=agent)
+                elif said.strip():
                     self._outbox.push(said.strip(), about=agent, composed=True)
                 else:
                     # The brain could not answer; the capped plain notice still carries the news,

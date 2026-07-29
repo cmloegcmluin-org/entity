@@ -159,3 +159,18 @@ def test_an_empty_listening_notice_says_nothing_at_all():
     console.listening()
 
     assert lines == [] and recorded == []
+
+
+def test_an_apps_own_aside_is_not_a_message_from_excephalon():
+    # ""(cut off mid-utterance)" should not appear in a blue word bubble, because it's not
+    # something Excephalon says. it can be grey text in the middle." A note the app made about
+    # the turn is a status line; only what he HEARS is Excephalon's own message.
+    said, kept = [], []
+    console = Console(echo=lambda line: None, record=kept.append,
+                      messages=lambda role, text: said.append((role, text)))
+
+    console.spoke("Both agents are green.")
+    console.aside("(cut off mid-utterance)")
+
+    assert said == [("entity", "Both agents are green."), ("status", "(cut off mid-utterance)")]
+    assert kept == ["Both agents are green.", "(cut off mid-utterance)"]  # both kept, as always

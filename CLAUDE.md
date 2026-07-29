@@ -123,6 +123,10 @@ These are user requirements, learned through failures somebody had to sit throug
 enforces some; code enforces the rest, and where only the persona enforces something, treat that as
 a known weakness rather than a solution.
 
+- **An app aside is not Excephalon speaking.** "(cut off mid-utterance)", a voice error, a
+  note about the turn: those are the app's own, and they go out as status lines
+  (`Console.aside`) rather than as messages in its voice - "it's not something Excephalon
+  says". Only what he HEARS is a message.
 - **Insulate the user from agents.** An agent's own words never reach them — not commit hashes, not
   test counts, not "I reran the suite myself". Every agent event (finished, died, wrote, quiet) goes
   through `narrator.py`: one trip through the brain, which composes the one or two sentences the
@@ -322,7 +326,11 @@ output as the machinery under them, capped at both ends with what was dropped co
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and it says which one a reply just named. `narrator.py` is how any agent event becomes
 speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
-words each one as its own sentence (composed news skips the unwritten-lines ledger - the brain
+words each one as its own sentence - carrying the same conduct a reply carries (a narration is a
+line he HEARS, and the standing conduct reached only replies, which is how "the desk" got to him),
+plus where the work actually STANDS as a fact, since "the feature should be there in Highdeas
+waiting" was said about work still being built; a composed line that calls unlanded work deployed
+or shipped is dropped for the plain notice, which claims nothing (composed news skips the unwritten-lines ledger - the brain
 remembers what it wrote), and the plain capped notice is the fallback when the brain cannot answer
 - or answers too late: each narration's wait is bounded, because one hung narration once held the
 brain's lock with the merge report and the quiet warning queued behind it until the app closed and

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %} · Agents{% endblock %}
 
+{% block shape %}page agents{% endblock %}
+
 {% block content %}
 {#- One home for the agents, however many are being driven at once. Each exchange reads the way
     the conversation does - who asked, who answered, and when - rather than as a wall of log
@@ -14,17 +16,19 @@
 <aside id="toc" aria-label="Agent logs">
   <p class="rail-label">Active</p>
   {%- for name in names %}
-  <button type="button" data-goes="agent-{{ name }}">{{ name }}</button>
+  <button type="button" data-goes="agent-{{ name }}"><span class="when"></span><span
+      class="who">{{ name }}</span></button>
   {%- else %}
   <p class="rail-none">none</p>
   {%- endfor %}
   {%- if archived %}
   <p class="rail-label">Archived</p>
   {#- Newest first, each with the day it last said anything: an archive is a history, and
-      alphabetical it read as a filing cabinet. -#}
+      alphabetical it read as a filing cabinet. Two columns, so the dates line up under each
+      other and the names do too - worth the wider rail. -#}
   {%- for name, when in archived %}
-  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view">{{ name }}
-    <span class="when">{{ when }}</span></button>
+  <button type="button" data-restore="{{ name }}" title="Reopen {{ name }} in the main view"><span
+      class="when">{{ when }}</span><span class="who">{{ name }}</span></button>
   {%- endfor %}
   {%- endif %}
 </aside>
@@ -34,7 +38,9 @@
   <section class="section" id="agent-{{ name }}">
     {#- Closing one archives its log, which is what makes it stay closed: the roster IS the log
         folder, so a log left in it comes straight back on the next poll. -#}
-    <h2>{{ name }}
+    {#- The name is his to change: type in it and it saves, everywhere the app uses a name. -#}
+    <h2><span class="rename" contenteditable="plaintext-only" data-agent="{{ name }}"
+              title="Rename this agent">{{ name }}</span>
       <button type="button" class="shut" data-agent="{{ name }}"
               title="Close {{ name }}" aria-label="Close {{ name }}">✕</button>
     </h2>

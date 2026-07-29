@@ -28,7 +28,7 @@ from entity.delivery import Delivery, DeliveryError
 from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from entity.relay import notice
 from entity.steps import SAID, render
-from entity.tailing import archive_dir
+from entity.tailing import archive_dir, safe_name
 from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
@@ -249,6 +249,39 @@ class AgentDesk:
         return (f"\n\nThe user's machine-wide engineering law is in {self._law_path} - read "
                 "that file before you begin, and follow it as strictly as this repo's own "
                 "CLAUDE.md.")
+
+    def rename(self, name, to):
+        """Call an agent something else - his word for it, everywhere the app uses a name.
+
+        A name is a LABEL: the desk's key, the log file the window draws a tab from, the roster,
+        the survival record, and the tag on any news waiting to be spoken. The worktree and the
+        branch keep their own names, which are git's business and not his.
+
+        False when there is no such agent, when the new name is already taken, or when it is not
+        a name a file can carry - a rename that half-lands would leave a tab pointing at nothing.
+        """
+        wanted = safe_name(to)
+        if not wanted:
+            return False
+        with self._lock:
+            if name not in self._desked:
+                return False
+            if wanted == name:
+                return True  # the name it already has: nothing to move, and no failure either
+            if wanted in self._desked:
+                return False  # a name in use would collide two agents into one tab
+            entry = self._desked.pop(name)
+            self._desked[wanted] = entry
+        if self._log_dir is not None:
+            log = self._log_dir / f"{name}.log"
+            if log.exists():
+                log.replace(self._log_dir / f"{wanted}.log")
+            entry.log = self._open_log(wanted)  # further lines go to the file under the new name
+        retag = getattr(self._outbox, "retag", None)
+        if retag is not None:
+            retag(name, wanted)  # news already queued is about the same agent, by its new name
+        self._persist()
+        return True
 
     def revive(self):
         """Reopen every agent the last process recorded, each resumed on its old session.

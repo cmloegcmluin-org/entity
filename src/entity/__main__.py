@@ -44,6 +44,7 @@ from entity.polish import mend
 from entity.relay import notice
 from entity.shutdown import consolidate
 from entity.stt_console import ConsoleSTT
+from entity.tailing import safe_name
 from entity.transcript import MessageLog, Transcript, recent_turns
 from entity.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from entity.tts_system import NullTTS, SystemTTS
@@ -326,6 +327,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # The quiet errand hand: small local chores with no agent tab - "one agent per actual major
     # task", not one per little thing. Its outcomes take the news road like everything else.
     errands = ErrandRunner(RUNTIME_DIR, agent_events)
+    if hooks is not None:
+        # His name for an agent, from the page's own heading - the desk owns the key, the log and
+        # the record, so the window asks it rather than moving files behind its back.
+        hooks["rename_agent"] = desk.rename
     # The other apps he has, by their folder names - the same scan that teaches the ear his
     # project names. file_improvement refuses a feature request naming one of them: the
     # Enhancements list is for changes to Excephalon itself, and a request for another app
@@ -614,6 +619,11 @@ def main(argv=None):
     # What the session hands back for the page to drive live - today the transcriber's retune,
     # so a saved translation is in force for the very next chunk.
     hooks = running["hooks"] = {}
+
+    def _rename_agent(name, to):
+        renamed = hooks.get("rename_agent", lambda *_: False)(name, to)
+        return safe_name(to) if renamed else ""
+
     _REPO = Path(__file__).resolve().parents[2]
     booted_from = head_commit(_REPO)
     from entity.memory import reconcile_lexicon
@@ -668,6 +678,9 @@ def main(argv=None):
         terms=_vocab_terms(),
         agent_logs_dir=AGENT_LOGS,
         on_quit=ask_quit, on_restart=ask_restart,
+        # The page's rename: the desk does it, and the name it settled on comes back so the
+        # heading shows what was actually taken rather than what was typed.
+        on_rename=_rename_agent,
         # The (paraphone) rows: the live lexicon joins the folder-scanned terms on the page, his
         # edits reconcile back into the lexicon alone, and the running ear retunes at once.
         scanned_terms=sorted(scanned_now),

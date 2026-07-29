@@ -76,6 +76,19 @@ class Outbox:
         with self._lock:
             return {getattr(item, "about", None) for item in self._items}
 
+    def retag(self, about, to):
+        """Held news about a renamed agent is about the same agent - under his name for it now, so
+        a roll call reads out what he called it rather than what the app happened to name it."""
+        with self._lock:
+            self._items = deque(News(str(item), to, item.composed)
+                                if getattr(item, "about", None) == about else item
+                                for item in self._items)
+            kept = self._spooled()
+            for held in kept:
+                if held.get("about") == about:
+                    held["about"] = to
+            self._write(kept)
+
     def drop(self, about):
         """Forget every queued item about one agent - it is finished with, and news about work
         already closed lands as a surprise rather than an update."""

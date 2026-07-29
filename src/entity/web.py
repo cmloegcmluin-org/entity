@@ -129,6 +129,29 @@ def _heading(found, stem):
     return next((head for head in found if head.lower().startswith(stem.lower())), None)
 
 
+def _started(log):
+    """The day this agent's log was opened, read off its own first date header.
+
+    The day the agent was STARTED, not the day it stopped - "the date should be when the agent was
+    started, not when it finished" - which is the first line the desk ever wrote to it. A log with
+    no header falls back to the file's own last write, the only other date there is."""
+    from entity.transcript import day_of
+
+    try:
+        with open(log, "r", encoding="utf-8", errors="replace") as lines:
+            for line in lines:
+                day = day_of(line.rstrip())
+                if day is not None:
+                    return datetime.strptime(day, "%Y-%m-%d")
+                break  # the header is the first line the desk writes, or there is none
+    except OSError:
+        return None
+    try:
+        return datetime.fromtimestamp(log.stat().st_mtime)
+    except OSError:
+        return None
+
+
 class Agents:
     """Every agent's log, read back as the exchange it is rather than as lines.
 
@@ -146,25 +169,33 @@ class Agents:
     def names(self):
         return sorted(discover(self._directory)) if self._directory else []
 
+    def live_names(self):
+        """Every open tab, newest first, with the day its agent was STARTED - (name, when)."""
+        return self._dated(self._directory)
+
     def archived_names(self):
-        """Every retired agent's log, reopenable, NEWEST FIRST and dated - (name, when).
+        """Every retired agent's log, reopenable, newest first and dated - (name, when).
 
         Alphabetical, an archive reads as a filing cabinet: "archived agent logs should be sorted
-        by date, not alphabetically, jesus... and show the timestamp for them too". The date is
-        the log's own last write, which is when that agent last said anything."""
-        if not self._archive:
+        by date, not alphabetically, jesus... and show the timestamp for them too"."""
+        return self._dated(self._archive)
+
+    def _dated(self, folder):
+        """The logs in `folder` as (name, day started), newest first.
+
+        The day the agent was STARTED, not the day it stopped - "the date should be when the agent
+        was started, not when it finished" - which is the first line the desk ever wrote to it, and
+        every log opens with its own date header. A log with no header falls back to the file's
+        own last write, which is the only other date there is."""
+        if not folder:
             return []
         dated = []
-        for name in discover(self._archive):
-            log = self._archive / f"{name}.log"
-            try:
-                when = datetime.fromtimestamp(log.stat().st_mtime)
-            except OSError:
-                when = None
-            dated.append((name, when))
+        for name in discover(folder):
+            log = folder / f"{name}.log"
+            dated.append((name, _started(log)))
         dated.sort(key=lambda entry: (entry[1] is not None, entry[1]), reverse=True)
-        # The day, not the minute: it buys room for the names beside it, and an archive is
-        # remembered by which day the work happened on.
+        # The day, not the minute: it buys room for the names beside it, and a run is remembered
+        # by the day it happened on.
         return [(name, when.strftime("%Y-%m-%d") if when else "") for name, when in dated]
 
     def rename_live(self, name, to):
@@ -462,7 +493,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.get("/agents")
     def show_agents():
-        return render_template("agents.html", here="/agents", names=agents.names(),
+        return render_template("agents.html", here="/agents", names=agents.live_names(),
                                archived=agents.archived_names())
 
     @app.post("/agents/archived/<name>/restore")

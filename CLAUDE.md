@@ -248,7 +248,9 @@ recorded before the record existed are converted once (`messages_from_log`, whic
 bare line of its own was something the app SPOKE) and never guessed at again. An agent's log is
 a different archive with its own door (`apply("log", …)`), since the desk prefixes every line
 of it; `web.py` serves it, `templates/` and `static/` are the
-pages (three: the conversation, Config — one page holding what were the Profile, Memory, Persona
+pages (Ctrl+F works on all three, from one shared `finder.js` - the embedded browser has no find
+bar of its own, and the two pages with the most to read through had no search at all while it
+lived inside Config's script) (three: the conversation, Config — one page holding what were the Profile, Memory, Persona
 and Translations tabs, with a contents rail, the old tab paths redirecting into it; Life context
 and Memory are bullet lists, not checklists, and his translation and instruction edits are in
 force immediately — translations swap into the running ear on save, instructions ride the
@@ -391,6 +393,15 @@ it. What was measured and still holds:
 - And it still ate the user's speech live. So that sample did not generalise, the margin above its
   worst (0.583) was 0.017, and no bar fitted to one recording should be trusted. Whatever comes next
   needs paired captures across several sessions and volumes, and must fail toward hearing the user.
+
+**And the speaker scores now say the same thing, from real sessions.** 3,258 chunks are logged.
+Labelled against the transcripts - a chunk whose words became a submitted turn is HIS, a chunk
+whose words match a line the app spoke is ITS OWN voice leaking back - the two distributions sit
+on top of each other: his median 0.18, its own 0.24, and 17 of the 19 leaked chunks score at or
+above his 10th percentile. The print separates his long sentences well (0.75-0.85 on the longest)
+and says nothing about short ones ("Yeah.", "Okay." at -0.10), so the length of the chunk, not
+the bar, is the first thing any future gate has to reckon with. On this evidence the switch stays
+off: a threshold today would eat his speech, which is the one failure this feature may not have.
 
 Speaker enrollment is untouched. A voiceprint is personal: `runtime/`, never the source, and
 bootstrapping is free — the chunks that became submitted turns in past sessions are labelled samples

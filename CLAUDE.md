@@ -146,6 +146,14 @@ a known weakness rather than a solution.
   in front of them, or give them the exact steps, and let them judge. And never present work for
   verification while a setup step of theirs is still outstanding.
 - **When the user says something isn't there, it isn't.** They are looking at the screen; you are not.
+- **Finish the ticket, not just the code.** Diagnosing that an agent's work merged is half the job;
+  its Enhancements item has to be ticked, its log archived and its worktree removed in the SAME
+  turn you find it. Twice the diagnosis was right and the chore was handed back to him instead
+  ("tell Excephalon to check #114 off"), leaving him with a list that called his finished work
+  open — and he had to notice it himself, which is the whole failure. A closed app is not a
+  reason to hand it over: `python -m entity.cards tick <n>` and
+  `python -m entity.cards retire <agent> --tick <n>` go through the app's own savers with no
+  window running.
 
 ## Failure patterns that have recurred here
 
@@ -286,9 +294,11 @@ lock: a stream once died without raising, held the lock from inside a narration,
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
 frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Entity has learned, and the lexicon. `cards.py` is the
-cards' command-line door - `python -m entity.cards drop-instruction "<unique fragment>"` /
-`tick <number>` - the same savers the app's pages use, for when the window isn't up; a fragment
-matching zero or several rows refuses the whole edit rather than guessing.
+cards' and the fleet's command-line door - `drop-instruction "<unique fragment>"`, `tick <number>`,
+`retire <agent> [--tick <number>]` - the same savers the app's pages use, for when the window isn't
+up; a fragment matching zero or several rows refuses the whole edit rather than guessing, and
+retire's tick runs FIRST, because a wrap-up that leaves the ticket open is how finished work came
+to read as thrown away.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump

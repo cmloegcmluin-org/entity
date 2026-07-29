@@ -452,15 +452,22 @@ def save_checklist(path, heading, items, *, drawn, number=False, boxes=True):
     same task piled up here in half-finished copies. Splitting both sides the way the file stores
     them also absorbs the `- x` -> `- [ ] x` upgrade, since the words are unchanged by it.
 
-    With `number`, brand-new rows (no id yet) are handed the next number as they are written."""
+    With `number`, brand-new rows (no id yet) are handed the next number as they are written.
+
+    The heading is resolved by STEM before anything is read or written, exactly as every reader
+    resolves it (`find_heading`): the profile's own headings carry gloss ("Projects (long-term)"),
+    and a write that matched exactly while the read matched by stem forked the file - the page
+    read the glossed section, saved to the bare stem, and a rival "## Projects" appeared at the
+    bottom holding the edit while the card kept showing the section it had always read."""
+    resolved = find_heading(profile_sections(_read(path)), heading)
     seen = _stored_lines(item["text"] for item in items) | _stored_lines(drawn)
     sent_ids = {item["id"] for item in items if item.get("id") is not None}
-    gained = [item for item in checklist_items(profile_sections(_read(path)).get(heading, ""))
+    gained = [item for item in checklist_items(profile_sections(_read(path)).get(resolved, ""))
               if (item["id"] is None or item["id"] not in sent_ids) and item["text"] not in seen]
     merged = items + gained
     if number:
         _assign_ids(merged)
-    save_section(path, heading, checklist_markdown(merged, boxes=boxes))
+    save_section(path, resolved, checklist_markdown(merged, boxes=boxes))
 
 
 def _same_ask(one, another):

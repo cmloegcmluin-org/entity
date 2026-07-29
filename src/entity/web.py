@@ -48,8 +48,9 @@ SECTIONS = (
     ("Enhancements", "Enhancements", "checklist",
      "The construction roadmap for this partner itself - file an ask and an agent can be put "
      "on it; done items keep their record in the fold below."),
-    ("Goals", "Goals", "checklist",
-     "The life-goal work you're pairing on - ticked when reached."),
+    # The Goals card is retired by his call: every goal was reworded as an accomplishable
+    # Project ("rework all Goals as Projects i.e. those with measurable outcomes") and moved
+    # into Projects, the way Memories became Instructions.
     ("Projects", "Projects", "checklist",
      "Things to accomplish."),
     ("Context", "Life context", "bullets",

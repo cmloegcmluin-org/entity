@@ -106,12 +106,22 @@ def _widest(words, index, exists):
 # objected to hearing less than what was written.
 SPOKEN_ADDRESS = "the link"
 
+# Identifiers nobody should hear read out: transcription mangles them, and the user's standing
+# instruction is to put them on screen instead - which the screen already does; only the AUDIO
+# takes the stand-in. A hash is hex with at least one digit (pure words like "deadline" are
+# words), seven characters up (git's short form); an id is a UUID or a long run of digits.
+_COMMIT_HASH = re.compile(r"(?=[0-9a-f]*\d)[0-9a-f]{7,40}", re.IGNORECASE)
+_LONG_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{7,}",
+                      re.IGNORECASE)
+
 
 def as_spoken(text):
     """`text` as it should be SAID - the written form stays on screen untouched.
 
     Nobody reads an address out character by character, and a Windows path read aloud is a minute
-    of "backslash". What is on screen is still the real thing, so it can be read and clicked."""
+    of "backslash". Exact identifiers get the same treatment - "859e704" spoken is a mangled
+    transcription waiting to happen, and the standing instruction is screen, not voice. What is
+    on screen is still the real thing, so it can be read and clicked."""
     return " ".join(_said_aloud(word) for word in text.split())
 
 
@@ -121,9 +131,13 @@ def _said_aloud(word):
     lead = word[:len(word) - len(core)]
     kept = len(core.rstrip(_TRAILING))
     core, trail = core[:kept], core[kept:]
-    if link_in(core) is None:
-        return word
-    return lead + _stand_in(core) + trail
+    if link_in(core) is not None:
+        return lead + _stand_in(core) + trail
+    if _LONG_ID.fullmatch(core):
+        return lead + "an id" + trail
+    if _COMMIT_HASH.fullmatch(core):
+        return lead + "a commit id" + trail
+    return word
 
 
 def _stand_in(target):

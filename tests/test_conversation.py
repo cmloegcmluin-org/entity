@@ -1279,6 +1279,58 @@ def test_a_streaming_voice_speaks_the_reply_as_the_brain_writes_it():
     assert turn.said == "Both are green. The drive one wants a decision."
 
 
+def test_a_stray_goodbye_in_a_streamed_reply_never_reaches_the_voice_or_the_screen():
+    # "Wait, why did you say be seeing you? I thought you only say that when I'm closing you."
+    # The instruction filed against it is exactly the duty-shaped rule the fast tier keeps
+    # missing, so the code holds the door: the goodbye sentence is dropped from the audio as
+    # it streams and from the record after, and is only ever heard when the app closes.
+    tts = StreamingTTS()
+    brain = StreamingBrain("Both agents are green. Be seeing you.")
+    convo = Conversation(FakeSTT(["how's it going"]), brain, tts)
+
+    turn = convo.turn()
+
+    [reply] = tts.replies
+    assert "".join(reply.deltas) == "Both agents are green."
+    assert turn.said == "Both agents are green."
+
+
+def test_a_reply_that_is_only_the_stray_goodbye_becomes_a_silent_turn():
+    # The incident's exact shape: mid-conversation, the whole reply was "Be seeing you."
+    tts = StreamingTTS()
+    convo = Conversation(FakeSTT(["thanks"]), StreamingBrain("Be seeing you."), tts)
+
+    turn = convo.turn()
+
+    assert turn.said == ""
+    assert not any(tts.spoken)  # nothing sounded, and no goodbye reached the record
+
+
+def test_the_goodbye_mid_sentence_is_not_the_misfire_and_passes(): 
+    # Only the standalone closing line is the misfire - the words inside a real sentence are
+    # the brain talking, and eating them would garble it.
+    tts = StreamingTTS()
+    brain = StreamingBrain("I'll be seeing you at the demo tomorrow.")
+    convo = Conversation(FakeSTT(["ok"]), brain, tts)
+
+    turn = convo.turn()
+
+    assert turn.said == "I'll be seeing you at the demo tomorrow."
+    [reply] = tts.replies
+    assert "".join(reply.deltas) == turn.said
+
+
+def test_the_real_farewell_still_says_its_line():
+    # The gate is for STRAY goodbyes; the app's own closing line on a real goodbye is untouched.
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts)
+
+    turn = convo.turn()
+
+    assert turn.farewell is True
+    assert convo.farewell_reply in tts.spoken
+
+
 def test_a_streamed_reply_speaks_paths_the_way_a_person_would():
     # The one sanctioned difference between ear and screen, carried over from the one-shot path:
     # the screen shows the real path (it is what gets clicked); the voice says its filename.

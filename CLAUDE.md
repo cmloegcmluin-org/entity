@@ -285,7 +285,10 @@ are where Opus-tier work happens. Its every ask is bounded, and so is waiting fo
 lock: a stream once died without raising, held the lock from inside a narration, and everything
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
-frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Entity has learned, and the lexicon.
+frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Entity has learned, and the lexicon. `cards.py` is the
+cards' command-line door - `python -m entity.cards drop-instruction "<unique fragment>"` /
+`tick <number>` - the same savers the app's pages use, for when the window isn't up; a fragment
+matching zero or several rows refuses the whole edit rather than guessing.
 `chord.py` hears the modifier beside the spacebar + Enter, which no window on this machine can be
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump

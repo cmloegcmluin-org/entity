@@ -548,6 +548,23 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
     assert ticked == ["Better voice"]  # and the revived agent still ticks it
 
 
+def test_a_tick_that_lands_nowhere_becomes_news_instead_of_a_silent_shrug(tmp_path):
+    # Work merged, log archived, ticket still open, nobody told - "as far as I know it's still
+    # open work." The tick's miss report used to be thrown away; now it is queued to be said.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs, complete=lambda item: False)
+    desk.start("fixer", str(tmp_path / "wt"), "make it green", enhancement="Better voice")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+
+    assert desk.retire("fixer") is True
+
+    assert _wait_for(lambda: bool(outbox))
+    [news] = outbox.drain()
+    assert "did not get checked off" in news
+    assert news.about == "fixer"
+
+
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
     outbox = Outbox()
     roster = tmp_path / "active-agents.txt"

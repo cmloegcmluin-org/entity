@@ -446,8 +446,18 @@ class AgentDesk:
                 self._run(["git", "-C", entry.cwd, "worktree", "remove", entry.cwd], check=True)
             except Exception:
                 pass  # dirty or locked: the sweep's business later, not a failed retirement
-            if entry.state == "idle" and entry.enhancement and self._complete_enhancement:
-                self._complete_enhancement(entry.enhancement)  # its ask is now answered
+            if entry.enhancement:
+                # The tick's own miss report used to be thrown away, and the user met the result
+                # cold: work merged, log archived, and the ticket still open with nobody told -
+                # "as far as I know it's still open work." A tick that cannot land (or is
+                # rightly withheld from a died agent) is NEWS, not a silent shrug.
+                ticked = (entry.state == "idle" and self._complete_enhancement is not None
+                          and self._complete_enhancement(entry.enhancement))
+                if not ticked:
+                    self._outbox.push(
+                        f"{name} is wrapped up, but its Enhancements item did not get checked "
+                        "off - settle that item by hand (check_off_enhancement by its number, "
+                        "or tell the user why it stays open).", about=name)
             self._finished(name)  # a landing agent's clock runs until here; a retired one is off it
             self._persist()
         return True

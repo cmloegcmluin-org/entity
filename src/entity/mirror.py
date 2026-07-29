@@ -10,6 +10,7 @@ same id and there must be one definition of it rather than a copy in the install
 """
 
 import queue
+import re
 import time
 
 from entity.transcript import parse_line
@@ -46,15 +47,36 @@ class TranscriptModel:
             role, text = payload
             self._add(role, text)
         elif op == "history":
-            parsed = parse_line(payload)
-            if parsed is not None:
-                role, stamp, text = parsed
-                self._add(role, text, stamp=stamp, historical=True)
+            self._history(payload)
         elif op == "line":
             if str(payload).strip():
                 self._add("status", str(payload))
         elif op == "overwrite":
             self._overwrite(payload)
+
+    def _history(self, line):
+        """One recorded line back into the conversation - with a multi-line message made whole.
+
+        The session file stamps every line it writes, but only a message's FIRST line carries its
+        "you said:" or "entity>" prefix - the rest are bare. Read back one line at a time, those
+        continuations parsed as status asides, and a long submission he watched land as one green
+        bubble came back after a restart as one bubble plus a column of small dim grey lines. A
+        bare line right after a message is that message still going, so it rejoins it; a stamped
+        EMPTY line there is the paragraph break it was. The console's own asides all start with
+        "(" or "[" ("(thinking…)", "[think 2.3s…]"), which is how they stay asides."""
+        parsed = parse_line(line)
+        previous = self.entries[-1] if self.entries else None
+        continuable = (previous is not None and previous.get("historical")
+                       and previous["role"] in ("you", "entity", "heads-up"))
+        if parsed is None:
+            if continuable and re.fullmatch(r"\[[^\]]*\]\s*", line.strip()):
+                previous["text"] += "\n"  # a blank line inside the message: its paragraph break
+            return
+        role, stamp, text = parsed
+        if role == "status" and continuable and not text.startswith(("(", "[")):
+            previous["text"] += "\n" + text  # a paragraph break above already left its newline
+            return
+        self._add(role, text, stamp=stamp, historical=True)
 
     def _add(self, role, text, *, stamp=None, historical=False):
         self._counter = None

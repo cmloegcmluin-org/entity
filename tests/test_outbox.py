@@ -90,3 +90,19 @@ def test_dropping_the_last_item_clears_the_waiting_signal(tmp_path):
     outbox.drop("one")
 
     assert not outbox and not outbox.arrived.is_set()
+
+
+def test_news_that_survived_a_restart_is_app_authored_to_the_new_brain(tmp_path):
+    # `composed` means "the brain that will be asked about this wrote it" - and the brain that
+    # wrote it died with the last process. Carried over as composed, a spooled line skipped the
+    # unwritten-lines ledger and the new brain denied it to his face: "I don't see that statement
+    # in our conversation - I didn't say the feature was already in Highdeas", about a line it had
+    # spoken verbatim eighteen minutes earlier.
+    spool = tmp_path / "outbox.json"
+    first = Outbox(spool=spool)
+    first.push("The feature should be there in Highdeas waiting.", about="toggle", composed=True)
+
+    [restored] = Outbox(spool=spool).drain()
+
+    assert restored.composed is False
+    assert restored.about == "toggle"  # still known to be about that agent

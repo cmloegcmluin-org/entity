@@ -975,6 +975,23 @@ def test_an_agent_whose_log_is_archived_is_not_brought_back(tmp_path):
     desk.close()
 
 
+def test_startup_forgets_held_news_about_agents_with_no_tab(tmp_path):
+    # The fleet record can be empty while the spool still holds four reports about an agent that
+    # was wrapped up - which is how work he had twice called finished came back a third time,
+    # jargon and all, three seconds after a launch. No live log means no tab means it is over.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "still-going.log").write_text("[10:00:00] ENTITY> carry on" + chr(10), encoding="utf-8")
+    outbox = Outbox()
+    outbox.push("the finished one is ready for your eyes", about="all-done")
+    outbox.push("the live one needs a decision", about="still-going")
+    desk, _, _ = _desk(outbox=outbox, state=tmp_path / "agents.json", log_dir=logs)
+
+    desk.revive()
+
+    assert [str(news) for news in outbox.drain()] == ["the live one needs a decision"]
+
+
 def test_revive_with_no_state_file_is_a_quiet_no_op(tmp_path):
     desk, _, _ = _desk(state=tmp_path / "missing.json")
 

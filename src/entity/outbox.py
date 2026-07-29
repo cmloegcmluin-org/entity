@@ -47,7 +47,13 @@ class Outbox:
         self._spool = spool
         self.arrived = threading.Event()  # set while something is waiting to be spoken
         for held in self._spooled():  # last life's undelivered news, back in the queue
-            self._items.append(News(held["message"], held.get("about"), held.get("composed")))
+            # NOT composed, whoever wrote it: `composed` means "the brain that will be asked about
+            # this wrote it", and the brain that wrote it died with the last process. Carried over
+            # as composed, a spooled line skipped the unwritten-lines ledger and the new brain
+            # denied saying it - to his face, about a line he had watched it say ("I don't see
+            # that statement in our conversation - I didn't say the feature was already in
+            # Highdeas", about a heads-up it had spoken verbatim 18 minutes earlier).
+            self._items.append(News(held["message"], held.get("about")))
         if self._items:
             self.arrived.set()
 
@@ -64,6 +70,11 @@ class Outbox:
             self._items.clear()
             self.arrived.clear()
         return items
+
+    def waiting_about(self):
+        """Every agent the queue is holding news about - who a startup sweep has to judge."""
+        with self._lock:
+            return {getattr(item, "about", None) for item in self._items}
 
     def drop(self, about):
         """Forget every queued item about one agent - it is finished with, and news about work

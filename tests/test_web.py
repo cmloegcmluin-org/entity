@@ -3,10 +3,20 @@ from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
 from entity.web import create_app
 
 
-def _model(*lines):
+def _model(*said):
+    """A conversation drawn from recorded MESSAGES - what the window replays. Each is
+    ("message", role, stamp, text), or ("day", date) / ("session",) for a break."""
+    model = TranscriptModel(clock=lambda: "12:00:00")
+    for message in said:
+        model.apply("history", message)
+    return model
+
+
+def _logged(*lines):
+    """An AGENT's log, which is still lines with prefixes - a different archive, its own door."""
     model = TranscriptModel(clock=lambda: "12:00:00")
     for line in lines:
-        model.apply("history", line)
+        model.apply("log", line)
     return model
 
 
@@ -24,9 +34,9 @@ def _rule_for(css, selector):
 
 
 def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
-    model = _model("===== 2026-07-18 =====",
-                   "[02:41:38] you said: morning",
-                   "[02:42:10] entity> Morning.")
+    model = _model(("day", "2026-07-18"),
+                   ("message", "you", "02:41:38", "morning"),
+                   ("message", "entity", "02:42:10", "Morning."))
 
     shown = _client(model).get("/messages").get_json()
 
@@ -41,9 +51,9 @@ def test_a_message_carries_a_full_dated_reference_the_copy_link_can_locate():
     # day, which "could be any fucking day". Each message now carries a reference with the date of
     # the break above it, and it is worked out from the whole thread so it stays right even when
     # the poll starts past that break. A break is a place, not a moment, so it carries none.
-    model = _model("===== 2026-07-18 =====",
-                   "[02:41:38] you said: morning",
-                   "[02:42:10] entity> Morning.")
+    model = _model(("day", "2026-07-18"),
+                   ("message", "you", "02:41:38", "morning"),
+                   ("message", "entity", "02:42:10", "Morning."))
 
     shown = _client(model).get("/messages?since=2").get_json()
 
@@ -58,7 +68,7 @@ def test_a_message_carries_the_bare_moment_the_link_button_builds_a_url_from():
     # The link button copies an actual URL - http://<host>/#at=<moment> - that reopens the
     # conversation at that turn, not the readable "Name · …" text. The server hands over the bare
     # moment (date and time, no name) for the page to encode into that hash.
-    model = _model("===== 2026-07-18 =====", "[02:42:10] entity> Morning.")
+    model = _model(("day", "2026-07-18"), ("message", "entity", "02:42:10", "Morning."))
 
     entries = _client(model).get("/messages").get_json()["entries"]
 
@@ -68,9 +78,9 @@ def test_a_message_carries_the_bare_moment_the_link_button_builds_a_url_from():
 
 def test_a_poll_carries_only_what_the_page_has_not_drawn():
     # Four times a second against every session ever recorded, so it cannot hand back the lot.
-    model = _model("===== 2026-07-18 =====",
-                   "[02:41:38] you said: morning",
-                   "[02:42:10] entity> Morning.")
+    model = _model(("day", "2026-07-18"),
+                   ("message", "you", "02:41:38", "morning"),
+                   ("message", "entity", "02:42:10", "Morning."))
     client = _client(model)
 
     shown = client.get("/messages?since=2").get_json()
@@ -83,9 +93,9 @@ def test_a_poll_carries_only_what_the_page_has_not_drawn():
 def test_every_session_break_is_named_where_it_stands():
     # The breaks are identical dicts, so anything locating one by value found the first of them
     # and sent every row of the contents to the same place.
-    model = _model("===== 2026-07-18 =====", "[02:41:38] you said: morning",
-                   "===== session =====", "[16:30:34] you said: back",
-                   "===== session =====", "[18:00:00] you said: evening")
+    model = _model(("day", "2026-07-18"), ("message", "you", "02:41:38", "morning"),
+                   ("session",), ("message", "you", "16:30:34", "back"),
+                   ("session",), ("message", "you", "18:00:00", "evening"))
 
     shown = _client(model).get("/messages").get_json()
 
@@ -595,7 +605,8 @@ def test_a_message_naming_a_path_hands_it_over_as_something_to_open():
     # Entity names paths and addresses constantly, and reading one off the screen to retype it is
     # exactly what this saves. The rules live in links.py; the page only draws what it is handed.
     named = r"C:\ada\runtime\task.md"
-    model = _model(rf"[10:00:00] entity> Filed it at {named}, see https://ex.com/x")
+    model = _model(("message", "entity", "10:00:00",
+                    rf"Filed it at {named}, see https://ex.com/x"))
 
     parts = _client(model).get("/messages").get_json()["entries"][0]["parts"]
 
@@ -774,50 +785,57 @@ def test_saving_the_enhancements_hands_back_each_rows_number():
     assert "- [ ] #8 a brand new ask" in profile.read_text(encoding="utf-8")
 
 
-def test_a_multi_line_submission_reads_back_as_one_bubble():
-    # He watched a long submission land as one green bubble, restarted, and found everything
-    # after its first line rendered as a column of small dim grey status lines: the file stamps
-    # every line, but only a message's first line carries its prefix, so the continuations came
-    # back as asides. A bare stamped line right after a message is that message still going.
+def test_the_conversation_is_replayed_from_what_was_said_not_parsed_back_out_of_prose(tmp_path):
+    # "How fucking complicated can it be? It's just a fucking transcript!" It was complicated
+    # because the window read messages back OUT of the prose log: which prefix, whose line, is
+    # this bare line a continuation or something the app spoke aloud. Two rules, two rewrites of
+    # his history in front of him. The record now holds the role each message was given as it was
+    # said, so a reload is a replay - his long submission stays one bubble and a line the app
+    # spoke stays Excephalon's, because nothing is being decided.
+    from datetime import datetime
+
+    from entity.transcript import MessageLog, past_messages
+
+    kept = MessageLog(tmp_path / "session-20260729-021500.jsonl",
+                      clock=lambda: datetime(2026, 7, 29, 2, 15, 0))
+    kept.keep("you", "The demo is good to ship.\n\nI have lots of feedback on the other one:")
+    kept.keep("entity", "Landing it.")
+    kept.keep("entity", "I've got an update on the copy fixes when you're ready.")
+    kept.keep("status", "(thinking\u2026)")
+
     model = TranscriptModel(clock=lambda: "12:00:00")
-    for line in ("[17:39:09] you said: The demo is good to ship.",
-                 "[17:39:09] ",
-                 "[17:39:09] I have lots of feedback on the other one:",
-                 "[17:39:09] * The links should not say filed.",
-                 "[17:39:09] (thinking…)",
-                 "[17:40:11] entity> Landing it.",
-                 "[17:40:44]   [think 61.6s · speak 33.0s]"):
-        model.apply("history", line)
+    for op, payload in past_messages(tmp_path):
+        model.apply(op, payload)
 
-    roles = [entry["role"] for entry in model.entries]
-    assert roles == ["you", "status", "entity", "status"]  # continuations folded into the bubble
-    assert model.entries[0]["text"] == ("The demo is good to ship." + chr(10) + chr(10)
-                                        + "I have lots of feedback on the other one:" + chr(10)
-                                        + "* The links should not say filed.")
-    # The console's own asides keep their shape: they start with "(" or "[".
-    assert model.entries[1]["text"] == "(thinking…)"
+    assert [entry["role"] for entry in model.entries] == ["day", "you", "entity", "entity",
+                                                          "status"]
+    assert model.entries[1]["text"].count("\n") == 2  # his paragraphs, whole
+    assert model.entries[3]["text"].startswith("I've got an update")  # spoken, and his to see
 
 
-def test_a_line_spoken_later_is_not_swallowed_by_the_message_above_it():
-    # "I just clicked Restart to Upgrade and when I came back, the conversation history had been
-    # rewritten. This is terrifying." The app records what it SAYS without a prefix - the update
-    # offer, an acknowledgement - so a reader that folded every bare line into the bubble above
-    # it ate a message he had just been given. One message is written in one call and carries one
-    # second on every line; a line spoken later carries its own, and that is the test.
-    model = TranscriptModel(clock=lambda: "12:00:00")
-    for line in ("[17:25:10] entity (heads-up)> The link fix is ready for your eyes.",
-                 "[17:28:29] I've got an update on fix-instructions-enter when you're ready."):
-        model.apply("history", line)
+def test_an_old_log_is_converted_once_and_read_as_messages_after(tmp_path):
+    # Every session recorded before the message log is all there is for those days, so they are
+    # converted rather than lost - and written down, so the guesswork runs once and never again.
+    # A bare line of its own is something the app SPOKE without printing (an update offer), which
+    # is Excephalon talking; only its own asides, which open with "(" or "[", are asides.
+    from entity.transcript import past_messages
 
-    assert [entry["role"] for entry in model.entries] == ["heads-up", "status"]
-    assert model.entries[1]["text"].startswith("I've got an update")
-    assert "update" not in model.entries[0]["text"]  # and it did not join the bubble above
+    (tmp_path / "session-20260718-024138.log").write_text(
+        "===== 2026-07-18 =====\n"
+        "[02:41:38] you said: morning\n"
+        "[02:41:38] and one more thing\n"
+        "[02:42:10] entity> Morning.\n"
+        "[02:44:02] I've got an update on the copy fixes when you're ready.\n"
+        "[02:44:10] (thinking\u2026)\n", encoding="utf-8")
 
+    ops = past_messages(tmp_path)
 
-def test_a_bare_line_with_no_message_above_it_stays_a_status_line():
-    # The continuation rule needs a message to continue; a stray unprefixed line at the top of
-    # a file (or after an aside has broken the run) is still just a line.
-    model = TranscriptModel(clock=lambda: "12:00:00")
-    model.apply("history", "[10:00:00] some stray line")
+    assert (tmp_path / "session-20260718-024138.jsonl").exists()  # converted, once
+    said = [payload for _, payload in ops if payload[0] == "message"]
+    assert [message[1] for message in said] == ["you", "entity", "entity", "status"]
+    assert said[0][3] == "morning\nand one more thing"   # one submission, not two lines
+    assert said[2][3].startswith("I've got an update")     # spoken aloud: Excephalon's own
+    assert said[3][3] == "(thinking\u2026)"                # an aside stays an aside
 
-    assert [entry["role"] for entry in model.entries] == ["status"]
+    again = past_messages(tmp_path)  # and the second read comes off the record, unchanged
+    assert [payload for _, payload in again] == [payload for _, payload in ops]

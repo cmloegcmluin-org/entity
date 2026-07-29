@@ -258,6 +258,9 @@ class AgentDesk:
         told to pick back up; one that was idle is reattached and left in peace. An entry with no
         session id was never heard from, so there is nothing to resume - it is skipped. Returns
         the names brought back."""
+        # Before the record is even read: held news is judged by the tabs, not by the fleet
+        # file, which can be empty while four stale reports are still queued.
+        self._forget_finished_news()
         if self._state_path is None or not self._state_path.exists():
             return []
         try:
@@ -317,6 +320,19 @@ class AgentDesk:
                 self._dispatch(name, PRESENT_AFTER_RESTART)
         self._persist()
         return revived
+
+    def _forget_finished_news(self):
+        """Drop held news about any agent with no live log - it has been wrapped up, whatever the
+        fleet record says, and an update about closed work arrives as a surprise. The record can
+        be empty while the spool still holds four reports, which is how a wrap-up he had twice
+        called finished came back a third time, jargon and all, three seconds after a launch."""
+        held = getattr(self._outbox, "waiting_about", None)
+        drop = getattr(self._outbox, "drop", None)
+        if held is None or drop is None or self._log_dir is None:
+            return
+        for name in held():
+            if name and not (self._log_dir / f"{name}.log").exists():
+                drop(name)
 
     def _already_retired(self, name):
         """Has this agent's log been moved to the archive? That move IS the wrap-up's record, and

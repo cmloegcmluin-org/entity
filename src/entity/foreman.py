@@ -20,6 +20,7 @@ import threading
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
 
 from entity.models import FAMILIES
+from entity.narrator import _HANDLED_LEAD
 from entity.sdk_session import SdkSession
 
 # Smarter than the talker by definition, whatever the working agents happen to run on - the whole
@@ -82,7 +83,11 @@ class Foreman:
             # failed, which beats an agent silently stuck behind a foreman who never answered.
             self._outbox.push(f"The foreman couldn't take {agent}'s problem: {exc}", about=agent)
             return
-        if said.strip().rstrip(".!").lower() in ("handled", ""):
+        # The same strip the narrator uses: "handled" is the swallow-word, and it has reached him
+        # at the head of a longer sentence - "Handled." and then a paragraph of its own,
+        # which is how the swallow-word reached him three seconds after a launch.
+        said = _HANDLED_LEAD.sub("", said.strip()) if said.strip() else ""
+        if not said.strip():
             return  # settled with the agent directly; there is no news to interrupt anyone with
         self._outbox.push(said.strip(), about=agent)  # app-authored: the ledger informs the brain
 

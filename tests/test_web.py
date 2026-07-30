@@ -956,6 +956,71 @@ def test_a_rename_onto_a_name_already_in_use_is_still_refused(tmp_path):
     assert (logs / "one.log").exists()  # nothing moved
 
 
+def test_changing_only_the_capitals_of_a_name_is_a_rename_windows_can_make(tmp_path):
+    # "The changes are back to failing to persist, now from both locations." Windows holds one file
+    # under one name in ANY case, so `inbox-AUTO-play-toggle` -> `inbox-auto-play-toggle` looked
+    # like a collision with itself and was refused - and fixing the capitals an all-caps heading
+    # had led him to type is exactly the rename he had reason to make.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "inbox-AUTO-play-toggle.log").write_text("[10:00:00] ENTITY> go" + chr(10),
+                                                    encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00", on_rename=lambda name, to: "")
+
+    answer = client.post("/agents/inbox-AUTO-play-toggle/rename",
+                         data={"to": "inbox-auto-play-toggle"})
+
+    assert answer.get_json() == {"name": "inbox-auto-play-toggle"}
+    assert [log.name for log in logs.iterdir()] == ["inbox-auto-play-toggle.log"]
+
+
+def test_a_refused_rename_says_why_rather_than_putting_the_old_name_back_in_silence(tmp_path):
+    # A rename that quietly reverts is indistinguishable from a broken app - "they simply get
+    # silently rejected" - so every refusal comes back as a sentence the window can show him.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    for name in ("one", "two"):
+        (logs / f"{name}.log").write_text("[10:00:00] ENTITY> go" + chr(10), encoding="utf-8")
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "old.log").write_text("[09:00:00] ENTITY> done" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00", on_rename=lambda name, to: "")
+
+    taken = client.post("/agents/one/rename", data={"to": "two"})
+    same = client.post("/agents/one/rename", data={"to": "one"})
+    nothing = client.post("/agents/one/rename", data={"to": "!!!"})
+    archived = client.post("/agents/archived/old/rename", data={"to": "!!!"})
+
+    assert taken.status_code == 409 and "already called that" in taken.get_json()["why"]
+    assert same.status_code == 409 and "name it already has" in same.get_json()["why"]
+    assert nothing.status_code == 409 and "nothing a file can be named" in nothing.get_json()["why"]
+    assert archived.status_code == 409 and archived.get_json()["why"]
+
+    script = client.get("/static/agents.js").get_data(as_text=True)
+    assert "complain(" in script and "refused" in script  # and the window puts it on screen
+
+
+def test_an_instruction_opens_with_its_name_in_bold(tmp_path):
+    # "Modify each Instruction so that it begins with a bolded name - 3 words tops." The name is
+    # markdown in the file and bold on the page: he should not have to read past asterisks.
+    persona = tmp_path / "persona.md"
+    persona.write_text("- **No internal jargon** Never use system words when speaking to him." + chr(10)
+                       + "- An older instruction with no name at all." + chr(10), encoding="utf-8")
+    client = _client(persona_additions_path=persona)
+
+    page = client.get("/config").get_data(as_text=True)
+
+    assert '<strong class="lede" contenteditable="plaintext-only">No internal jargon</strong>' in page
+    assert "Never use system words when speaking to him." in page
+    assert "**" not in page  # the asterisks are the file's business, not his to read
+    assert "An older instruction with no name at all." in page  # unnamed lines are unchanged
+
+    css = client.get("/static/app.css").get_data(as_text=True)
+    assert "font-weight: 600" in _rule_for(css, ".checklist li .lede")
+    script = client.get("/static/writing.js").get_data(as_text=True)
+    assert "`**${lede.textContent.trim()}** ${words.trim()}`" in script  # and saving puts them back
+
+
 def test_ctrl_f_reaches_every_page_not_just_the_lists():
     # "We have a Ctrl+F search feature on the Config tab, but can we get that on both the
     # Conversation and Agents tabs too?" It lived inside the Config page's own script, which left

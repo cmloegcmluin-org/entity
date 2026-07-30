@@ -150,7 +150,12 @@ const itemsOf = (list) => rowsOf(list).map((row) => ({
    the words, never inside them, so no keystroke can edit or lose it. */
 function storedText(row) {
   const words = wordsOf(row).textContent;
-  return row.dataset.filed ? `${words} (filed ${row.dataset.filed})` : words;
+  // A named bullet keeps its markdown in the file and its bold on the page: the asterisks go back
+  // on here, so no keystroke in the words can lose them and no edit of his is stored as markup.
+  const lede = row.querySelector(".lede");
+  const said = lede && lede.textContent.trim() ? `**${lede.textContent.trim()}** ${words.trim()}`
+                                               : words;
+  return row.dataset.filed ? `${said} (filed ${row.dataset.filed})` : said;
 }
 
 /* A fresh, empty row shaped like an existing one. A new item carries none of the id the row it was

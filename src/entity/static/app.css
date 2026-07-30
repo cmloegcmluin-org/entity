@@ -478,8 +478,12 @@ body.agents #content { margin-left: 360px; max-width: none; }
 #finder input { font: inherit; background: transparent; color: var(--fg); border: none;
                 outline: none; width: 180px; }
 #finder .count { font-size: .75rem; color: var(--dim); align-self: center; }
-/* The name an instruction opens with: three words, bold, read down the list at a glance. */
+/* The name an instruction opens with: three words, bold, read down the list at a glance.
+   A column of its own, fixed - so every rule begins at the same place however long the name
+   is, and a name too long for the column wraps inside it rather than shoving the rule right. */
 .checklist li .lede { color: var(--fg); font-weight: 600; }
+.checklist li.named { display: grid; grid-template-columns: 12px 12rem 1fr; column-gap: 9px; }
+.checklist li.named .lede { overflow-wrap: break-word; }
 /* Why a rename was refused, beside the name he typed - never a silent revert. */
 .refused { color: #ff9a9a; font-size: .72rem; grid-column: 2 / -1; }
 

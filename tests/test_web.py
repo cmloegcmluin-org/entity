@@ -1017,6 +1017,12 @@ def test_an_instruction_opens_with_its_name_in_bold(tmp_path):
 
     css = client.get("/static/app.css").get_data(as_text=True)
     assert "font-weight: 600" in _rule_for(css, ".checklist li .lede")
+    # "Give the bolded name part of instructions a fixed width and wrap long ones": a column of its
+    # own, so every rule begins at the same place and a long name wraps inside the column.
+    assert '<li class="named">' in page
+    column = _rule_for(css, ".checklist li.named")
+    assert "grid-template-columns: 12px 12rem 1fr" in column
+    assert "break-word" in _rule_for(css, ".checklist li.named .lede")
     script = client.get("/static/writing.js").get_data(as_text=True)
     assert "`**${lede.textContent.trim()}** ${words.trim()}`" in script  # and saving puts them back
 

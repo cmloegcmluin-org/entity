@@ -24,7 +24,7 @@
     instructions can be read down rather than through. It is stored in the file as markdown
     (`**name** the rule`); the page shows it as the bold words it means and puts the asterisks
     back on save, the same contract the "(filed …)" stamp above has. -#}
-<li><span class="dot" aria-hidden="true">•</span>{% if item.lede %}<strong class="lede" contenteditable="plaintext-only">{{ item.lede }}</strong>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+<li{% if item.lede %} class="named"{% endif %}><span class="dot" aria-hidden="true">•</span>{% if item.lede %}<strong class="lede" contenteditable="plaintext-only">{{ item.lede }}</strong>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
 {%- endif %}
 {%- endmacro %}
 

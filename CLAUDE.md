@@ -293,7 +293,12 @@ excephalon", with "hey entity" kept working because the transcriber only sometim
 coined word — it is in the vocabulary to help) — while the repo, the module, the transcript
 line format and every internal role key stay `entity`: renaming those breaks parsers of past
 transcripts for a word nobody hears. `links.py` decides what a message names that can be
-opened, and opens it. `agent_desk.py` holds each agent as a live session in-process (handles
+opened, and opens it. A rename never fails in silence: a refused one comes back as a sentence
+the rail shows under the name ("another log is already called that"), because a name quietly
+put back reads as a broken app - and a name differing only in CASE is not a collision but this
+same log, which Windows renames happily once the exists() check stops reading it as another
+file ("inbox-AUTO-play-toggle" -> "inbox-auto-play-toggle" was refused for months of
+capitals an all-caps heading had put there). `agent_desk.py` holds each agent as a live session in-process (handles
 used to be lost to context resets), streams the whole exchange into its log,
 answers to the name HE gives it (`rename` moves the desk's key, the log the window
 draws a tab from, the survival record and the tag on any queued news - the worktree and branch

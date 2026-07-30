@@ -478,6 +478,11 @@ body.agents #content { margin-left: 360px; max-width: none; }
 #finder input { font: inherit; background: transparent; color: var(--fg); border: none;
                 outline: none; width: 180px; }
 #finder .count { font-size: .75rem; color: var(--dim); align-self: center; }
+/* The name an instruction opens with: three words, bold, read down the list at a glance. */
+.checklist li .lede { color: var(--fg); font-weight: 600; }
+/* Why a rename was refused, beside the name he typed - never a silent revert. */
+.refused { color: #ff9a9a; font-size: .72rem; grid-column: 2 / -1; }
+
 /* A match, wherever it was found - a checklist item, a message, a row in the rail. */
 .found { outline: 2px solid rgba(127, 255, 0, .55); border-radius: 6px; }
 .found-here { outline-color: var(--accent, #7fff00); background: rgba(127, 255, 0, .08); }

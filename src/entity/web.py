@@ -12,6 +12,7 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -129,6 +130,22 @@ def _heading(found, stem):
     return next((head for head in found if head.lower().startswith(stem.lower())), None)
 
 
+# The bullet marker and nothing else: stripping "-* " as a character set ate the leading `**`
+# of the name itself, so every instruction lost its bold on the way to the page.
+_BULLET = re.compile(r"^\s*[-*+]\s+")
+_NAMED = re.compile(r"^\*\*(?P<lede>[^*]+)\*\*\s*(?P<rest>.*)$", re.S)
+
+
+def _named(line):
+    """One instruction as a name and the rule under it - {"lede": ..., "text": ...}.
+
+    "modify each Instruction so that it begins with a bolded name - 3 words tops": the name is
+    stored in the file as markdown, and shown as the bold word it is rather than as asterisks he
+    has to read past. A line with no name is all rule, and shows exactly as it always did."""
+    found = _NAMED.match(line)
+    return {"lede": found["lede"].strip(), "text": found["rest"].strip()} if found else {"text": line}
+
+
 def _started(log):
     """The day this agent's log was opened, read off its own first date header.
 
@@ -213,17 +230,28 @@ class Agents:
         return self._move(self._archive, name, to)
 
     def _move(self, folder, name, to):
-        """One log renamed inside its own folder, or "" when that cannot be done cleanly."""
+        """One log renamed inside its folder - (new name, "") - or ("", why it could not be).
+
+        The refusal comes back as a sentence because a rename that quietly puts the old name back
+        is indistinguishable from a broken app: "the changes are back to failing to persist"."""
         wanted = safe_name(to)
         if not wanted or folder is None:
-            return ""
+            return "", "that leaves nothing a file can be named"
         log = folder / f"{name}.log"
-        if not log.exists() or (folder / f"{wanted}.log").exists():
-            return ""
+        if not log.exists():
+            return "", "there is no log under that name any more"
+        if wanted == name:
+            return "", "that is the name it already has"
+        # Windows keeps one file under one name in ANY case, so a name differing from this log's
+        # only in case IS this log: "inbox-AUTO-play-toggle" -> "inbox-auto-play-toggle" read as a
+        # collision with itself and was refused, and fixing the capitals an all-caps heading had
+        # led him to type was exactly the rename he tried. The move itself changes the case fine.
+        if (folder / f"{wanted}.log").exists() and wanted.lower() != name.lower():
+            return "", "another log is already called that"
         self._read.pop(name, None)
         self._read.pop(("archived", name), None)
         log.replace(folder / f"{wanted}.log")
-        return wanted
+        return wanted, ""
 
     def restore(self, name):
         """Bring an archived log back: moved into the live folder, it IS a tab again - the
@@ -394,8 +422,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                    for term in set(scanned_terms) | set(lexicon_now)],
                 key=lambda swap: (swap["said"].casefold(), swap["heard"].casefold())),
             memories=memories,
-            instructions=[line.lstrip("-* ").strip() for line in _persona_additions().splitlines()
-                          if line.strip()],
+            instructions=[_named(_BULLET.sub("", line).strip())
+                          for line in _persona_additions().splitlines() if line.strip()],
         )
 
     # The tabs this page replaced still answer, so a window standing open across the update lands
@@ -525,16 +553,17 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         # rename to make. A tab whose agent it no longer holds is a log and nothing else, and
         # moving that log is the whole job - which is why the ask never fails silently now.
         renamed = on_rename(name, wanted) if on_rename is not None else ""
-        if not renamed:
-            renamed = agents.rename_live(name, wanted)
-        return ({"name": renamed}, 200) if renamed else ("", 409)
+        if renamed:
+            return ({"name": renamed}, 200)
+        renamed, why = agents.rename_live(name, wanted)
+        return ({"name": renamed}, 200) if renamed else ({"why": why}, 409)
 
     @app.post("/agents/archived/<name>/rename")
     def rename_archived_agent(name):
         if name not in [kept for kept, _ in agents.archived_names()]:
             return ("", 404)
-        renamed = agents.rename_archived(name, request.form.get("to", ""))
-        return ({"name": renamed}, 200) if renamed else ("", 409)
+        renamed, why = agents.rename_archived(name, request.form.get("to", ""))
+        return ({"name": renamed}, 200) if renamed else ({"why": why}, 409)
 
     @app.post("/agents/<name>/close")
     def close_agent(name):

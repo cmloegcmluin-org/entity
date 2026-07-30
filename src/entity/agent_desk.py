@@ -268,7 +268,11 @@ class AgentDesk:
                 return False
             if wanted == name:
                 return True  # the name it already has: nothing to move, and no failure either
-            if wanted in self._desked:
+            # Its own name in another case is not a collision - it is this same agent, and the
+            # rename is the case change. Another agent's name in any case IS one, because on
+            # Windows both tabs would want the one log file.
+            if any(wanted.lower() == held.lower() for held in self._desked
+                   if held.lower() != name.lower()):
                 return False  # a name in use would collide two agents into one tab
             entry = self._desked.pop(name)
             self._desked[wanted] = entry

@@ -1315,6 +1315,21 @@ def test_a_landing_agents_silence_clock_keeps_running():
     desk.close()
 
 
+def test_an_agent_keeps_its_log_when_only_the_capitals_of_its_name_change(tmp_path):
+    # On Windows one file answers to its name in any case, so a case change is a rename of THIS
+    # log, not a collision with another tab - and it is the rename an all-caps heading provoked.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("inbox-AUTO-play-toggle", "/wt/auto", "a task")
+    assert _wait_for(lambda: bool(outbox))  # the log exists once it has spoken
+
+    assert desk.rename("inbox-AUTO-play-toggle", "inbox-auto-play-toggle") is True
+
+    assert [log.name for log in logs.glob("*.log")] == ["inbox-auto-play-toggle.log"]
+    assert "inbox-auto-play-toggle" in desk.digest()
+    desk.close()
+
+
 def test_an_agent_can_be_renamed_and_the_app_uses_the_new_name(tmp_path):
     # "I should be able to rename these agents, and Excephalon should use the name I change them
     # to." A name is a label: the desk's key, the log the window draws a tab from, the record a

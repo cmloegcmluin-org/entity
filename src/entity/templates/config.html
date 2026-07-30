@@ -20,7 +20,11 @@
     back on save, so the file keeps the exact stamp it always did. -#}
 <li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
 {%- else -%}
-<li><span class="dot" aria-hidden="true">•</span><span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+{#- A bullet may open with a NAME - three words at most, bold - so a wall of standing
+    instructions can be read down rather than through. It is stored in the file as markdown
+    (`**name** the rule`); the page shows it as the bold words it means and puts the asterisks
+    back on save, the same contract the "(filed …)" stamp above has. -#}
+<li><span class="dot" aria-hidden="true">•</span>{% if item.lede %}<strong class="lede" contenteditable="plaintext-only">{{ item.lede }}</strong>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
 {%- endif %}
 {%- endmacro %}
 
@@ -90,7 +94,7 @@
     <h2>Instructions</h2>
     <p class="note">How you've told it to behave, plus anything it files here itself.</p>
     <ul class="checklist" id="instructions">
-      {% for line in instructions %}{{ row({"text": line}, "bullets") }}
+      {% for instruction in instructions %}{{ row(instruction, "bullets") }}
       {% else %}{{ row({}, "bullets") }}
       {% endfor %}
     </ul>

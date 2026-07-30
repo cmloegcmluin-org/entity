@@ -16,6 +16,20 @@ if (threads.length) {
   setInterval(follow, 1000);  // an agent writes as it works, but not four times a second
 }
 
+/* A refused rename says so where it was refused. Putting the old name back without a word is
+   how a rename he had every reason to expect came to read as a broken app - "the changes are back
+   to failing to persist" - so the reason stands beside the name until he has read it. */
+async function complain(where, answer) {
+  const why = await answer.json().then((said) => said.why).catch(() => "");
+  if (!where) return;
+  where.querySelector(".refused")?.remove();
+  const note = document.createElement("span");
+  note.className = "refused";
+  note.textContent = why || "that rename could not be made";
+  where.append(note);
+  setTimeout(() => note.remove(), 12000);  // long enough to be read, not long enough to litter
+}
+
 /* The rail: every log one click away. An active name scrolls its tab into view; an archived name
    UNARCHIVES the log - the reload redraws it as an ordinary tab - and the #hash carries which one
    to scroll to once it exists. The lists are server-drawn, so any change of membership (a close,
@@ -59,8 +73,13 @@ for (const label of document.querySelectorAll("#toc [data-rename]")) {
   const was = label.dataset.rename;
   label.addEventListener("dblclick", () => {
     label.setAttribute("contenteditable", "plaintext-only");
-    label.focus();
-    getSelection().selectAllChildren(label);
+    // Focus on the NEXT turn of the loop, not in this handler: the browser's own double-click
+    // word-selection runs after us, and taking the caret before it settled left the box focused
+    // but deaf - he double-clicked, typed a whole name, and not one character landed in it.
+    setTimeout(() => {
+      label.focus();
+      getSelection().selectAllChildren(label);
+    }, 0);
   });
   const save = async () => {
     label.removeAttribute("contenteditable");
@@ -69,7 +88,7 @@ for (const label of document.querySelectorAll("#toc [data-rename]")) {
     const road = label.dataset.archived ? `/agents/archived/${encodeURIComponent(was)}/rename`
                                        : `/agents/${encodeURIComponent(was)}/rename`;
     const answer = await fetch(road, { method: "POST", body: new URLSearchParams({ to: wanted }) });
-    if (!answer.ok) { label.textContent = was; return; }
+    if (!answer.ok) { label.textContent = was; await complain(label.closest(".rail-row"), answer); return; }
     location.assign("/agents");
     location.reload();
   };
@@ -90,7 +109,7 @@ for (const heading of document.querySelectorAll(".rename")) {
     if (!wanted || wanted === was) { heading.textContent = was; return; }
     const answer = await fetch(`/agents/${encodeURIComponent(was)}/rename`,
                                { method: "POST", body: new URLSearchParams({ to: wanted }) });
-    if (!answer.ok) { heading.textContent = was; return; }
+    if (!answer.ok) { heading.textContent = was; await complain(heading.parentElement, answer); return; }
     location.assign("/agents");
     location.reload();
   };

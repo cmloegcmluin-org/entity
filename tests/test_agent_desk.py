@@ -1366,3 +1366,30 @@ def test_a_rename_refuses_a_name_already_taken_or_no_name_at_all(tmp_path):
     assert desk.rename("nobody", "three") is False
     assert desk.rename("one", "one") is True     # the same name is not a failure, just a no-op
     desk.close()
+
+
+def test_the_state_that_allows_a_wrap_up_is_the_state_that_ticks_its_item(tmp_path):
+    # retire() used to read the agent's state twice - once to judge the wrap-up legal, and again,
+    # a lock and a `git worktree remove` later, to decide whether the Enhancements item may be
+    # ticked. A dispatch landing in that gap (a revived landing agent picking its merge back up
+    # is dispatched on a thread, so the gap is real) left the two readings disagreeing: the
+    # wrap-up went ahead on "idle" and the tick was withheld on "working", and he met a finished
+    # feature whose ticket was still open with a "settle it by hand" notice for company. One
+    # judgement, taken once, decides both.
+    ticked = []
+    entry = {}
+
+    def run_and_move_the_state(*args, **kwargs):
+        # The window itself: whatever the desk does between judging and ticking, the agent may
+        # start working again under it.
+        entry["desked"].state = "working"
+
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs", run=run_and_move_the_state,
+                            complete=lambda item: ticked.append(item) or True)
+    desk.start("voice", str(tmp_path / "wt"), "wire the voice", enhancement="Better voice")
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "voice")
+    entry["desked"] = desk._desked["voice"]
+
+    assert desk.retire("voice") is True
+    assert ticked == ["Better voice"]

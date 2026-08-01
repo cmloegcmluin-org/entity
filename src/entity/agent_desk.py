@@ -516,6 +516,15 @@ class AgentDesk:
             if (entry is not None and entry.state == "idle"
                     and entry.delivery.stage != "landing"):
                 return False
+            # Judged and taken off the desk in ONE hold, and the judgement carried out rather than
+            # re-read. The state was read twice - here, and again after a `git worktree remove` -
+            # and a dispatch landing in that gap (a revived landing agent picks its merge back up
+            # on a thread) left the two readings disagreeing: the wrap-up went ahead on "idle" and
+            # the tick was withheld on "working". Off the desk, a dispatch that has not started
+            # finds nothing and stands down, so nothing can move under the rest of this.
+            finished_cleanly = entry is not None and entry.state == "idle"
+            if entry is not None:
+                self._desked.pop(name, None)
         log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
         if entry is None and (log is None or not log.exists()):
             return False
@@ -530,8 +539,6 @@ class AgentDesk:
         if drop is not None:
             drop(name)
         if entry is not None:
-            with self._lock:
-                self._desked.pop(name, None)
             try:
                 entry.agent.close()  # the session first: nothing may hold the worktree open
             except Exception:
@@ -545,7 +552,7 @@ class AgentDesk:
                 # cold: work merged, log archived, and the ticket still open with nobody told -
                 # "as far as I know it's still open work." A tick that cannot land (or is
                 # rightly withheld from a died agent) is NEWS, not a silent shrug.
-                ticked = (entry.state == "idle" and self._complete_enhancement is not None
+                ticked = (finished_cleanly and self._complete_enhancement is not None
                           and self._complete_enhancement(entry.enhancement))
                 if not ticked:
                     self._outbox.push(

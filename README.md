@@ -12,17 +12,33 @@ source: the Entity learns your name, your context and your vocabulary from files
 
 ## Run it
 
+It needs Python 3.11+, and the [Claude Code CLI](https://code.claude.com/docs) on your PATH —
+that CLI is the brain, and the Entity runs it on your own Claude subscription, so sign in with
+`claude` once before the first conversation.
+
 ```
 python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m pip install -e ".[dev]"      # macOS/Linux: .venv/bin/python
 
-.venv/Scripts/pythonw -m entity --gui   # the window (or double-click Entity.bat)
+.venv/Scripts/pythonw -m entity --gui   # the window (or double-click Excephalon.bat)
 .venv/Scripts/python  -m entity         # speak to it in a terminal, hear spoken replies
 .venv/Scripts/python  -m entity --text  # type instead of speaking
 ```
 
+Every path below is written the Windows way. On a Mac the interpreter is `.venv/bin/python`
+(there is no separate `pythonw` — nothing there opens a console to hide), and `PortAudio` has to
+be there for the microphone: `brew install portaudio`.
+
 `--mute` shows replies without speaking them; `--no-timings` hides the per-turn think/speak
-readout. `tools/install-start-menu.ps1` adds a Start Menu entry with the app's icon.
+readout. To launch it the way the rest of the machine launches things — an icon, a name, its own
+button — run `tools/install-start-menu.ps1` on Windows, or `tools/install-app-bundle.sh` on a
+Mac, which builds `~/Applications/Excephalon.app`. Use the Mac one rather than starting the app
+from a terminal: macOS credits a microphone permission to the application that asked for it, and
+only inside the bundle is that application Excephalon rather than your terminal.
+
+The two big local models are fetched once, on the first run that needs them: ~2.4 GB of Parakeet
+for hearing you, and Kokoro for the voice. Neither is small over a hotel connection, and the
+startup blocks on them by design — until they are in, there is nothing to talk to.
 
 In the window the mic is a **state**, not a walkie-talkie: turn it on and everything you say is
 transcribed into an editable draft, which you send with Submit. In a terminal, say **"over"** to
@@ -149,3 +165,10 @@ display.
 ```
 .venv/Scripts/python -m pytest
 ```
+
+The suite is green on both desks and needs neither of them: the four things that genuinely
+differ between Windows and macOS — what opens a folder, which robot voice serves as the
+fallback, whether a child process needs shielding from a console window, and how the app
+relaunches itself — each ask `entity.machine`, and each is tested from whichever machine you are
+on. Add a fifth only when a thing is truly different; anything that can be written to work the
+same on both should be.

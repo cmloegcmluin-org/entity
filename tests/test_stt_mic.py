@@ -106,7 +106,7 @@ def test_a_bare_over_ends_an_empty_turn_but_is_flagged_as_terminated():
 
 
 def test_an_empty_turn_without_a_terminator_is_not_flagged():
-    # a lull yield (the Entity has queued news) returns "" with no terminator - must NOT look like "over".
+    # a lull yield (Excephalon has queued news) returns "" with no terminator - must NOT look like "over".
     interrupt = threading.Event()
     interrupt.set()
     stt = MicSTT(FakeTranscriber("unused"), FakeMic([_sil()] * 3), pause_frames=3, threshold=0.01, interrupt=interrupt)
@@ -140,7 +140,7 @@ class FlushableMic:
 
 
 def test_listen_flushes_stale_audio_before_reading_this_turn():
-    # between turns the background mic buffers the Entity's own reply and room noise; drop it before
+    # between turns the background mic buffers Excephalon's own reply and room noise; drop it before
     # a new listen so it isn't transcribed as their next turn.
     mic = FlushableMic([_sp()] * 4 + [_sil()] * 3)
     stt = MicSTT(FakeTranscriber("hi over"), mic, pause_frames=3, threshold=0.01)
@@ -180,7 +180,7 @@ def test_catch_stop_ignores_ordinary_speech():
 
 
 def test_catch_stop_ignores_a_stop_word_buried_in_flowing_speech():
-    # From the real session: the TV said "Wait, what do you do about it?" while the Entity was
+    # From the real session: the TV said "Wait, what do you do about it?" while Excephalon was
     # speaking, and the buried "wait" silently killed the utterance - they were then told an offer
     # "on the screen only" that was in fact spoken and cut off at the first syllable. A deliberate
     # stop is a BARK; a stop word inside a sentence is the room, not them.
@@ -359,7 +359,7 @@ def test_listen_aborts_without_transcribing_when_stop_is_set():
 
 def test_a_lull_with_something_queued_yields_immediately_without_transcribing():
     interrupt = threading.Event()
-    interrupt.set()  # the Entity has word from an agent to pass on, and they aren't talking
+    interrupt.set()  # Excephalon has word from an agent to pass on, and they aren't talking
     transcriber = FakeTranscriber("should never run")
     stt = MicSTT(transcriber, FakeMic([_sil()] * 3), pause_frames=3, threshold=0.01, interrupt=interrupt)
 
@@ -461,7 +461,7 @@ def test_every_captured_frame_is_recorded_to_disk():
 
 
 def test_covered_by_recognizes_the_scripts_own_words_arriving_back():
-    # The measured mark of the Entity's leak: it transcribes near-verbatim ("Here, ready to go.
+    # The measured mark of Excephalon's leak: it transcribes near-verbatim ("Here, ready to go.
     # What can I do for you?" came back word for word as the user's draft). Words the script
     # contains are its voice; keep treating them as such.
     from entity.stt_mic import covered_by

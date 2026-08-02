@@ -1,7 +1,7 @@
 [project]
 name = "entity"
 version = "0.1.0"
-description = "The Entity — a local, voice-in/voice-out, memory-persistent Claude pairing partner."
+description = "Excephalon — a local, voice-in/voice-out, memory-persistent Claude pairing partner."
 requires-python = ">=3.11"
 dependencies = [
     "claude-agent-sdk>=0.2",     # persistent Claude session on the Max plan (the brain)

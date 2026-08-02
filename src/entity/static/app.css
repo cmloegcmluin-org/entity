@@ -2,7 +2,7 @@
 
    System font, hairline outline buttons that take the accent on
    hover, one accent and one danger colour — so the two apps read as the same hand. What is
-   Entity's own is the thread: a message is a box that hugs its own words, and there are two
+   Excephalon's own is the thread: a message is a box that hugs its own words, and there are two
    sides to the conversation.
 
    A bubble's width is `max-width` and its height is its text. That is the whole of what the Tk
@@ -18,7 +18,7 @@
   --dim: #7a7a7a;
   --past: #8f8f8f;      /* a message from an earlier session, half a step back */
   --mine: #2b3a1a;      /* the user's messages, right — a warm dark green */
-  --its: #22262b;       /* Entity's, left — a cool dark slate */
+  --its: #22262b;       /* Excephalon's, left — a cool dark slate */
   --accent: #7fff00;
   --bubble: 55%;        /* of the thread a message may take — about half, as a thread reads */
 }
@@ -416,7 +416,7 @@ body.page .topbar, body.config .topbar {
 #mic.speaking { color: var(--fg); }
 
 /* The second copy button: a LINK to the message - its header line, the pointer he pastes back
-   at Entity ("as you can see per Entity · 10:12:59...") - riding just under the copy button. */
+   at Excephalon ("as you can see per Entity · 10:12:59...") - riding just under the copy button. */
 .copylink { margin-top: 2px; }
 
 

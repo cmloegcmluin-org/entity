@@ -46,18 +46,18 @@ _BACKCHANNEL = {
 # the phrase; "thank you for doing that" is a sentence and stays.
 _STOCK_PHRASES = {"thank you", "thanks"}
 
-# Any of these, said aloud while the Entity is talking, cuts it off (see MicSTT.catch_stop).
+# Any of these, said aloud while Excephalon is talking, cuts it off (see MicSTT.catch_stop).
 STOP_WORDS = ("stop", "shut up", "quiet", "enough", "wait")
 
 # What fraction of the heard words must appear in the script before the chunk counts as the
-# Entity's own voice arriving back through the mic. The measured leak (two captured incidents)
+# Excephalon's own voice arriving back through the mic. The measured leak (two captured incidents)
 # transcribed near-verbatim - coverage ~1.0 - while someone else's words against an unrelated
 # sentence sit near 0, so the middle is a wide gap, not a fitted bar.
 _COVERED = 0.5
 
 
 def covered_by(text, script):
-    """Whether `text`, heard while the Entity was speaking, is the Entity's own voice - judged by
+    """Whether `text`, heard while Excephalon was speaking, is Excephalon's own voice - judged by
     its words being the words of `script`, the text actually being spoken.
 
     Containment is checked against the script with its spaces squashed out, because the
@@ -85,7 +85,7 @@ def rms(frame):
 def _is_stop_bark(text, words):
     """A deliberate stop is a BARK: one short burst that is essentially just the stop word
     ("stop", "okay stop stop"). A stop word buried in a flowing sentence is the TV or the room -
-    matching those silently killed the Entity's own speech mid-utterance, which read to the user as
+    matching those silently killed Excephalon's own speech mid-utterance, which read to the user as
     it never speaking at all. Whole words only, and no more than a few of them."""
     said = [w for w in re.findall(r"[a-z]+", text.lower())]
     if not said or len(said) > 3:
@@ -106,7 +106,7 @@ def carries_speech(voiced, min_run=MIN_VOICED_RUN):
 
     Continuity is what separates the two, not loudness: speech carries syllables, ~150 ms of sound
     that does not let up, while noise hovering near the bar sputters - isolated frames scattered
-    through silence. Across two replayed sessions nothing actually spoken (their voice, the Entity's
+    through silence. Across two replayed sessions nothing actually spoken (their voice, Excephalon's
     own through the room) ran under 6 frames, and the invented chunks sat at 1-4.
     """
     run = 0
@@ -261,7 +261,7 @@ class MicSTT:
         self.caught_terminator = False
 
     def _flush_mic(self):
-        """Drop whatever the background mic buffered between turns (the Entity's own reply, room
+        """Drop whatever the background mic buffered between turns (Excephalon's own reply, room
         noise), so listening starts from now. Mics without a flush() - tests, console - just skip it."""
         flush = getattr(self._mic, "flush", None)
         if flush is not None:
@@ -283,7 +283,7 @@ class MicSTT:
             speech = self._is_speech(level)
             if not started:
                 if self._interrupt is not None and self._interrupt.is_set():
-                    return ""  # a lull, and the Entity has something to say - yield so it can
+                    return ""  # a lull, and Excephalon has something to say - yield so it can
                 if speech:
                     started = True
                 else:
@@ -323,10 +323,10 @@ class MicSTT:
         return None
 
     def catch_stop(self, active, words=STOP_WORDS):
-        """While `active()` is true - i.e. the Entity is talking - listen for them barking a stop
+        """While `active()` is true - i.e. Excephalon is talking - listen for them barking a stop
         word and return True the moment one lands, so the caller can cut the voice off. Returns
         False when `active()` goes false (the reply finished on its own). Bark-only (see
-        _is_stop_bark), so neither the Entity's own voice bleeding into the mic nor a TV sentence
+        _is_stop_bark), so neither Excephalon's own voice bleeding into the mic nor a TV sentence
         that happens to contain "wait" can silence the reply."""
         floor = NoiseFloor()  # its own room-level, independent of a listen() in progress
         self._flush_mic()  # watch only what they say over the reply, not audio buffered before it

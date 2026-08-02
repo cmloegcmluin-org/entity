@@ -1,4 +1,4 @@
-/* The pages that are edited in place: the profile's lists, what Entity has learned, and the words
+/* The pages that are edited in place: the profile's lists, what Excephalon has learned, and the words
    it swaps.
 
    There is no Save button, because a document you have to remember to save is one you lose. It
@@ -232,7 +232,7 @@ function caretIn(words) {
    beneath it. So the unit here is the <section>, not a <ul>: a save gathers every row under it,
    and an edit in either list writes the whole thing back. */
 for (const section of document.querySelectorAll(".section[data-heading], .section[data-save]")) {
-  /* What the page believes the file holds, so a save can tell their own edit from an item Entity
+  /* What the page believes the file holds, so a save can tell their own edit from an item Excephalon
      filed into the same section while the window sat open. It is what was last SENT rather than
      what was first drawn, because the file rewrites `- x` as `- [ ] x` the moment anything saves
      it, and a stale answer here files a second copy of everything they have edited since. */

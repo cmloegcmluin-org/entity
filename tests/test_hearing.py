@@ -114,7 +114,7 @@ def test_a_reading_interrupted_by_a_pause_is_not_carried_into_the_next_burst():
 
 def test_a_line_that_was_never_up_does_not_come_down():
     # Every pause ends a burst, including the ones nobody was listening to - the room while the mic
-    # is off, the Entity's own voice. A line that is not on screen has nothing to take off it, and
+    # is off, Excephalon's own voice. A line that is not on screen has nothing to take off it, and
     # saying so anyway crosses the feed into the window for no reason at all.
     shown = []
     hearing = Hearing(None, shown.append)

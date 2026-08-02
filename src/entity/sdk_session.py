@@ -19,7 +19,7 @@ from claude_agent_sdk import ClaudeSDKClient, ResultMessage
 
 
 def extract_text(messages):
-    """The spoken reply is the FINAL thing the Entity says, not its running narration.
+    """The spoken reply is the FINAL thing Excephalon says, not its running narration.
 
     A tool-using turn emits text between every step ("Now let me read that file...", "Found it,
     let me check..."); only the last message is the actual answer. Reading all of it aloud dumps the
@@ -178,7 +178,7 @@ class SdkSession:
 
         A real task takes many minutes, and nothing at all used to be visible until the very end -
         so an agent hard at work and an agent that had died looked exactly the same, and the user
-        sat watching an empty log for fourteen minutes while Entity declared it dead one minute
+        sat watching an empty log for fourteen minutes while Excephalon declared it dead one minute
         before it answered.
 
         Whole, and not boiled down to its text first: a message carries what the agent RAN as well

@@ -231,7 +231,7 @@ AGENT_DID = "WORK> "  # what it ran, and what came back - the machinery under it
 
 
 # Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
-# desk's). "you" is whoever opened the exchange - them in their own thread, the Entity in an agent's.
+# desk's). "you" is whoever opened the exchange - them in their own thread, Excephalon in an agent's.
 _ROLE_PREFIXES = (
     ("you said: ", "you"),
     ("entity (heads-up)> ", "heads-up"),
@@ -253,7 +253,7 @@ def recent_turns(directory, keep=16):
     """The tail of the newest session, as (their words, the reply) pairs - the seed that lets a
     restarted process pick the conversation back up instead of greeting them as a stranger.
 
-    "There should be a way to reload Entity so that it gets any fixes but without breaking the
+    "There should be a way to reload Excephalon so that it gets any fixes but without breaking the
     current session." The half of a restart that breaks the session is the lost thread; the
     transcript already holds it. Only the newest file: continuity is with the conversation they
     just had, and the older history is already in learned.md. A question with no reply under it

@@ -161,7 +161,7 @@ def test_lines_that_are_not_conversation_read_back_as_nothing():
 
 
 def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
-    # "There should be a way to reload Entity so that it gets any fixes but without breaking the
+    # "There should be a way to reload Excephalon so that it gets any fixes but without breaking the
     # current session." The half that breaks is the thread of the conversation: a fresh process
     # started with no memory of five minutes ago. The transcript already holds those turns; this
     # reads them back as (their words, the reply) pairs so a restarted brain can be seeded with them.

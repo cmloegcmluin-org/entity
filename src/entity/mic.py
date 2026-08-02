@@ -1,7 +1,7 @@
 """The real microphone: a 16 kHz mono float32 input stream, read in fixed-size frames.
 
 Picking the RIGHT input device matters: Windows often defaults to a dead virtual mic (an idle
-headset's silent input, "Sound Mapper", etc.), which hands back pure silence - so the Entity hears
+headset's silent input, "Sound Mapper", etc.), which hands back pure silence - so Excephalon hears
 nothing and just sits there. `choose_input_device` avoids that by taking the liveliest real input,
 or an explicit override. Hardware I/O only; the segmentation/transcription it feeds is tested
 without a mic.
@@ -55,7 +55,7 @@ class BackgroundMicrophone:
     second or more) nothing was draining PortAudio, so it overflowed and dropped whatever they said in
     that window. Here a dedicated thread keeps reading no matter what the main thread is doing, and
     `frames()` hands over the buffered audio. `flush()` throws away audio captured between turns (the
-    Entity's own spoken reply, room noise) so it isn't replayed as their next turn.
+    Excephalon's own spoken reply, room noise) so it isn't replayed as their next turn.
     """
 
     def __init__(self, source, *, max_frames=MAX_BUFFERED_FRAMES):

@@ -5,7 +5,7 @@ it to do, rather than more like one agent per actual major task." The fast brain
 no file tools - that is part of why it answers in a breath - so the little jobs go to another
 part of the brain: one quiet helper session with file tools and nothing else, no desk entry, no
 tab, no worktree. It does the chore, reports one sentence, and the narrator words the outcome in
-Entity's own voice like any other news.
+Excephalon's own voice like any other news.
 
 Real work still goes to real agents: this runs errands, it does not build features.
 """
@@ -20,7 +20,7 @@ from entity.sdk_session import SdkSession
 ERRAND_MODEL = FAMILIES["haiku"]  # fetch-and-carry work: the smallest, fastest tier
 
 PROMPT = (
-    "[Errand from Entity on the user's behalf - no user is in this exchange. Do this small local "
+    "[Errand from Excephalon on the user's behalf - no user is in this exchange. Do this small local "
     "chore now, using your tools, and reply with ONE short plain sentence saying what you did - "
     "or exactly what stopped you:\n{chore}]"
 )
@@ -50,7 +50,7 @@ class ErrandRunner:
 
     def run(self, chore):
         """Take one chore. Returns at once; the outcome arrives as an "errand" event, worded by
-        the narrator - so the user hears one sentence in Entity's voice, not a tool transcript."""
+        the narrator - so the user hears one sentence in Excephalon's voice, not a tool transcript."""
         threading.Thread(target=self._work, args=(chore,), daemon=True).start()
 
     def _work(self, chore):

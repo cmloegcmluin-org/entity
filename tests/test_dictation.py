@@ -19,7 +19,7 @@ def _sil():
 
 
 class FakeMic:
-    """A scripted mic. A callable in the script is an event mid-stream - the Entity starting or
+    """A scripted mic. A callable in the script is an event mid-stream - Excephalon starting or
     finishing a reply while the pump is running - executed in sequence, never yielded."""
 
     def __init__(self, frames):
@@ -149,7 +149,7 @@ def test_words_reach_the_window_while_they_are_still_being_said():
 
 
 def test_the_live_line_never_puts_the_entitys_own_voice_up_as_the_users_words():
-    # Their draft box once opened with "I do for you" - the tail of Entity's own greeting, heard back
+    # Their draft box once opened with "I do for you" - the tail of Excephalon's own greeting, heard back
     # through their speakers. A line that printed as it listened would put that on screen a word at a
     # time, and faster.
     ears = Ears()
@@ -412,7 +412,7 @@ def _speaking_scripted(texts, script, **kwargs):
 
 
 def test_its_voice_is_not_drafted_even_when_the_burst_outlives_the_reply():
-    # THE LEAK he hit live: Entity's reply started a burst, the burst's closing pause came after
+    # THE LEAK he hit live: Excephalon's reply started a burst, the burst's closing pause came after
     # end_speaking - and the whether-to-draft decision looked at the CURRENT state, so its own
     # sentence became his draft: "you said: Here, ready to go. That doesn't really sound like...".
     # A burst is judged by the state it was captured in, not the state at its closing pause.
@@ -457,8 +457,8 @@ def test_what_he_says_after_the_reply_still_lands():
 
 
 def test_his_words_from_before_the_reply_are_kept_when_it_starts_talking():
-    # He was mid-sentence when the Entity opened its mouth (news at a lull): what he had said is
-    # his, finished as dictation - only what comes after is the Entity's sound.
+    # He was mid-sentence when Excephalon opened its mouth (news at a lull): what he had said is
+    # his, finished as dictation - only what comes after is Excephalon's sound.
     ears = Ears()
     dictation = _speaking_scripted(
         ["as I was saying", "Heads up from the fixer agent."],
@@ -472,7 +472,7 @@ def test_his_words_from_before_the_reply_are_kept_when_it_starts_talking():
 
 
 def test_nothing_is_drafted_while_the_entity_is_speaking():
-    # Their draft box opened with "I do for you" - the tail of Entity's own spoken greeting, heard
+    # Their draft box opened with "I do for you" - the tail of Excephalon's own spoken greeting, heard
     # through their speakers. Its own voice must never become their words.
     ears = Ears()
     dictation = Dictation(FakeTranscriber("I'm ready. What can I do for you?"),
@@ -591,7 +591,7 @@ def test_turning_the_mic_off_keeps_the_sentence_he_had_just_finished_saying():
 def test_it_reports_whether_they_are_part_way_through_a_sentence():
     # The loop asks this before ever speaking up on its own. Being ARMED must not read as talking:
     # they leave the mic armed for a whole conversation, and taking that for "they are speaking" left
-    # the Entity unable to say anything unprompted for the entire session.
+    # Excephalon unable to say anything unprompted for the entire session.
     ears = Ears()
     held = []
     seen = []
@@ -768,7 +768,7 @@ def test_a_stop_bark_while_it_merely_thinks_still_cuts_the_turn():
 
 
 def test_submitting_puts_the_mic_down_like_saying_over_does():
-    # "Auto-listen bug: Entity drops to listening mode after speaking even when auto-listen is
+    # "Auto-listen bug: Excephalon drops to listening mode after speaking even when auto-listen is
     # unchecked." The mic survived a button/chord submit, so the next reply ended with the ear
     # already open and he read it as auto-listen. A submit is the whole gesture, whichever way
     # it is made: turn handed over, mic down. Auto-listening re-arms at end_speaking, as built.

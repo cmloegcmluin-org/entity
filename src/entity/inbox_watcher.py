@@ -1,7 +1,7 @@
-"""Watch an inbox directory for word from the agents the Entity is driving, and hand it to the
-outbox so the Entity can pass it on to the user.
+"""Watch an inbox directory for word from the agents Excephalon is driving, and hand it to the
+outbox so Excephalon can pass it on to the user.
 
-This is how an agent reaches the user without them watching its screen: the Entity tells each agent to
+This is how an agent reaches the user without them watching its screen: Excephalon tells each agent to
 write any question or "ready for review" note as a line to `runtime/agent-inbox/<name>.txt`. A
 background thread tails those files; each complete new line becomes an outbox message, spoken at the
 next lull. Deliberately dumb - plain file polling, byte-offset per file, no OS-specific watching -

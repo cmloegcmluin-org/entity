@@ -47,7 +47,7 @@ def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
 
 
 def test_a_message_carries_a_full_dated_reference_the_copy_link_can_locate():
-    # The copy-link pointer he pastes back at Entity was only "You · 05:01:59" - a time with no
+    # The copy-link pointer he pastes back at Excephalon was only "You · 05:01:59" - a time with no
     # day, which "could be any fucking day". Each message now carries a reference with the date of
     # the break above it, and it is worked out from the whole thread so it stays right even when
     # the poll starts past that break. A break is a place, not a moment, so it carries none.
@@ -491,7 +491,7 @@ def test_an_agents_exchange_reads_as_a_conversation_with_the_speakers_swapped(tm
     assert 'data-agent="fixer"' in client.get("/agents").get_data(as_text=True)
 
     shown = client.get("/agents/fixer").get_json()
-    # In an agent's thread the Entity is the one asking and the agent answers - the speakers are
+    # In an agent's thread Excephalon is the one asking and the agent answers - the speakers are
     # swapped, so neither reads as the user talking to themselves.
     assert [(entry["name"], entry["text"]) for entry in shown["entries"]] == [
         ("Excephalon", "fix the drive link"), ("fixer", "Found it - repointed."),
@@ -602,7 +602,7 @@ def test_an_agent_that_is_not_in_the_log_folder_is_not_a_path_to_read(tmp_path):
 
 
 def test_a_message_naming_a_path_hands_it_over_as_something_to_open():
-    # Entity names paths and addresses constantly, and reading one off the screen to retype it is
+    # Excephalon names paths and addresses constantly, and reading one off the screen to retype it is
     # exactly what this saves. The rules live in links.py; the page only draws what it is handed.
     named = r"C:\ada\runtime\task.md"
     model = _model(("message", "entity", "10:00:00",

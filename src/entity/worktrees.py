@@ -1,4 +1,4 @@
-"""Cutting and finding the git worktrees the Entity's agents work in.
+"""Cutting and finding the git worktrees Excephalon's agents work in.
 
 New work means a NEW worktree, cut from CURRENT origin/main - never a stale local branch that
 has fallen behind whatever else has merged. `run` is injected so the git calls can be exercised

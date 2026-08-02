@@ -1,6 +1,6 @@
 <img src="assets/excephalon.png" alt="the Chaosphere: a brain in a spiked wire cage" width="128" align="right">
 
-# The Entity
+# Excephalon
 
 A local, voice-in/voice-out, memory-persistent partner you *pair* with on your life. You talk;
 it listens, thinks with Claude, and talks back — and it keeps a durable memory so it doesn't
@@ -8,12 +8,12 @@ lose the thread across days or months. It can also put Claude Code agents on rea
 and tell you, in one sentence, when they need something.
 
 Everything personal lives in a gitignored `runtime/` directory. Nothing about you is in this
-source: the Entity learns your name, your context and your vocabulary from files you write.
+source: Excephalon learns your name, your context and your vocabulary from files you write.
 
 ## Run it
 
 It needs Python 3.11+, and the [Claude Code CLI](https://code.claude.com/docs) on your PATH —
-that CLI is the brain, and the Entity runs it on your own Claude subscription, so sign in with
+that CLI is the brain, and Excephalon runs it on your own Claude subscription, so sign in with
 `claude` once before the first conversation.
 
 ```
@@ -32,7 +32,7 @@ be there for the microphone: `brew install portaudio`.
 `--mute` shows replies without speaking them; `--no-timings` hides the per-turn think/speak
 readout. To launch it the way the rest of the machine launches things — an icon, a name, its own
 button — run `tools/install-start-menu.ps1` on Windows, or `tools/install-app-bundle.sh` on a
-Mac, which builds `~/Applications/Excephalon.app`. Use the Mac one rather than starting the app
+Mac, which builds `/Applications/Excephalon.app`. Use the Mac one rather than starting the app
 from a terminal: macOS credits a microphone permission to the application that asked for it, and
 only inside the bundle is that application Excephalon rather than your terminal.
 
@@ -42,8 +42,8 @@ startup blocks on them by design — until they are in, there is nothing to talk
 
 In the window the mic is a **state**, not a walkie-talkie: turn it on and everything you say is
 transcribed into an editable draft, which you send with Submit. In a terminal, say **"over"** to
-hand the turn back (silence detection was too flaky). To end, say or type **"goodbye entity"** or
-**"quit"** — in voice mode that's "goodbye entity over" (or Ctrl-C).
+hand the turn back (silence detection was too flaky). To end, say or type **"goodbye Excephalon"** or
+**"quit"** — in voice mode that's "goodbye Excephalon over" (or Ctrl-C).
 
 **Cut it off** — while it's *speaking* or *thinking* — by pressing **Enter** or saying **"stop"**
 ("shut up" / "quiet" / "enough" / "wait" also work); it drops the reply and goes back to listening.
@@ -51,7 +51,7 @@ Replies are spoken **as they are written**, sentence by sentence — first words
 seconds, one stop silencing everything still queued — with no stock phrases around them: no
 acknowledgement line, no "I'll get back to you on that", no length gate.
 
-**The ear stays open** (window mode). While Entity is only *thinking*, nothing is coming out of
+**The ear stays open** (window mode). While Excephalon is only *thinking*, nothing is coming out of
 the speakers, so whatever you say lands in your draft as usual. While its voice is *sounding*,
 what you say is judged against the words it is speaking: its own voice arriving back through the
 mic is dropped, your words are kept in the draft — talking over it doesn't mean being unheard —
@@ -61,8 +61,8 @@ and a barked stop word cuts the audio, while a sentence from the TV never can.
 
 | File | What it is |
 |---|---|
-| `profile.md` | Your standing profile, in `## ` sections. Its `# ` title line is what the Entity calls you. |
-| `learned.md` | Facts the Entity captured itself, appended at the end of each session. Yours to edit. |
+| `profile.md` | Your standing profile, in `## ` sections. Its `# ` title line is what Excephalon calls you. |
+| `learned.md` | Facts Excephalon captured itself, appended at the end of each session. Yours to edit. |
 | `lexicon.md` | Your working vocabulary — coined names, domain terms, the people you work with. |
 | `lexicon-path.txt` | Optional: one line naming the lexicon file, if you keep it somewhere shared. |
 | `mic.txt` | Optional: a device-name substring to force a specific microphone. |
@@ -86,7 +86,7 @@ makes it feel live:
   nothing it does mid-turn can take longer than a breath; what it knows about the fleet arrives
   as text in the turn (the desk's briefing), so "how's it going" is answered in the breath it
   was asked.
-- `setting_sources=[]` loads **none** of your user/project/local settings, so the Entity never
+- `setting_sources=[]` loads **none** of your user/project/local settings, so Excephalon never
   inherits your global coding `CLAUDE.md` or hooks. (Loading them made it answer in quoted-block
   reply format and fire that format's Stop hook every turn, which exploded latency to ~50s.)
 - Acting goes through **typed in-process tools** (`entity.actions`) — `start_agent`, `tell_agent`,
@@ -116,7 +116,7 @@ hear is its own sentence about what it set in motion — never a control phrase:
 - `tell_agent(name, message)` — say something more to an agent already running; an undeliverable
   message comes back as a failure it has to tell you about, never a claimed delivery.
 - `file_improvement(item)` — file an enhancement into your profile, visible in the window at once.
-- `update_persona(instruction)` / `remember(fact)` — Entity editing itself: a standing change to
+- `update_persona(instruction)` / `remember(fact)` — Excephalon editing itself: a standing change to
   how it behaves lands in its persona overlay, a durable fact in what it has learned. Both take
   hold next start, and both are editable by hand on the Persona and Memory pages.
 - `mark_ready(name, steps)` / `record_verdict(name, verdict, feedback)` — the delivery loop as
@@ -133,12 +133,12 @@ Each agent is a live session the desk can always reach, its roster is a file tha
 context reset, and the fleet itself survives a restart: the desk records every agent's CLI
 session in `runtime/agents.json` — including where each piece of work stands in the loop — and on
 startup it resumes each one; an agent caught mid-task
-is told to pick up where it left off. Once you've signed off on an agent's work, Entity wraps it
+is told to pick up where it left off. Once you've signed off on an agent's work, Excephalon wraps it
 up on its own: the log is archived, the session ends, the worktree is removed. The whole exchange
 is written to `runtime/agent-logs/<name>.log` — which the window tails as its own tab. Not just what the agent says: every command it runs and what came
 back, every edit and its diff, with a failure marked as one, so what an agent did can be read
 rather than taken on trust. Agents reach you by writing a line into `runtime/agent-inbox/`; the
-Entity speaks it at the next lull, and flags an agent that has gone quiet for too long. When
+Excephalon speaks it at the next lull, and flags an agent that has gone quiet for too long. When
 several are ready at once it reads out their names, numbered, and waits — say a number or any word
 of a name and you get that one, then what is still waiting.
 

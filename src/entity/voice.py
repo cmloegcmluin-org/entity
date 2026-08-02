@@ -89,7 +89,7 @@ class Reply:
         self._spoken = []
         # Whether this reply's sound is in the air RIGHT NOW - one span from the first play to
         # drained, not flapping between sentences. The mic asks: while the brain merely thinks,
-        # what it hears is the user (keep it); while this is True, it is mostly the Entity itself.
+        # what it hears is the user (keep it); while this is True, it is mostly Excephalon itself.
         self.sounding = False
         self._sentences = SentenceStream(self._queue.put)
         self._worker = threading.Thread(target=self._pump, daemon=True)

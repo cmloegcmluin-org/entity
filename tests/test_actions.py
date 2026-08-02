@@ -201,7 +201,7 @@ def test_filing_an_improvement_lands_it_in_the_profile():
 
 
 def test_updating_the_persona_records_a_standing_instruction():
-    # The gap this closes: Entity could file an enhancement but had no lever to change how it
+    # The gap this closes: Excephalon could file an enhancement but had no lever to change how it
     # itself behaves. A typed tool, like every other - it cannot be half-written or leak into the
     # voice, and it lands in the same overlay the window edits.
     desk = FakeDesk()
@@ -215,7 +215,7 @@ def test_updating_the_persona_records_a_standing_instruction():
 
 
 def test_remembering_a_fact_appends_it_to_what_entity_has_learned():
-    # Write access to its memory: told a durable fact, Entity can keep it now, not only at the
+    # Write access to its memory: told a durable fact, Excephalon can keep it now, not only at the
     # end-of-session consolidation. Facts arrive as a list, the way `append_learned` takes them.
     desk = FakeDesk()
     remembered = []

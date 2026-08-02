@@ -9,7 +9,7 @@ import re
 
 
 def canonical(text):
-    """Lowercase, strip punctuation, collapse whitespace — so 'Goodbye, Entity.' matches 'goodbye entity'."""
+    """Lowercase, strip punctuation, collapse whitespace — so 'Goodbye, Excephalon.' matches 'goodbye entity'."""
     return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
 
 
@@ -21,7 +21,7 @@ def ends_with_command(canonical_text, commands):
 
 
 def wakes(canonical_text, commands):
-    """A wake word also counts at the START. "Hey Entity, can you hear me?" is plainly them waking it,
+    """A wake word also counts at the START. "Hey Excephalon, can you hear me?" is plainly them waking it,
     but it ENDS on "hear me" - so an ends-with check left them saying it over and over until they
     happened to say the bare phrase alone."""
     return ends_with_command(canonical_text, commands) or any(

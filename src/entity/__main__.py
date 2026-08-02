@@ -1,4 +1,4 @@
-"""Run the Entity: `python -m entity` (speak to it), or double-click Entity.bat for the window.
+"""Run Excephalon: `python -m entity` (speak to it), or double-click Excephalon.bat for the window.
 
   --gui         a window instead of the terminal: live transcript + a STOP button
   --text        type instead of speaking
@@ -68,7 +68,7 @@ def _live_instructions():
         return ""
     return "\n\nHis standing instructions, live from the file - already in force:\n" + told
 AGENT_INBOX = RUNTIME_DIR / "agent-inbox"  # agents drop questions/review-ready notes here, one per line
-ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who the Entity has running, readable after a reset
+ACTIVE_AGENTS = RUNTIME_DIR / "active-agents.txt"  # who Excephalon has running, readable after a reset
 AGENT_STATE = RUNTIME_DIR / "agents.json"  # the fleet's survival record: what a restart revives from
 AGENT_LOGS = RUNTIME_DIR / "agent-logs"  # one timestamped exchange log per agent, written by the desk
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
@@ -76,7 +76,7 @@ MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to f
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
 WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
-AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before the Entity flags it to the user
+AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before Excephalon flags it to the user
 
 
 def _fresh_worktree_note():
@@ -152,8 +152,8 @@ def _other_apps():
 
 
 def _agent_inbox_note(inbox):
-    """Persona line telling the Entity how its agents reach the user - the exact absolute path, since
-    the agents run in other projects' worktrees and can't guess where the Entity keeps its inbox."""
+    """Persona line telling Excephalon how its agents reach the user - the exact absolute path, since
+    the agents run in other projects' worktrees and can't guess where Excephalon keeps its inbox."""
     return (
         " When you put a background agent on a task, tell that agent - in its own instructions - to "
         "write anything it needs from the user (a question, or that it's ready for review) as a single "
@@ -219,7 +219,7 @@ def _open_ears(announce):
 
 
 def _persona():
-    """Everything the Entity has been told about how to be - the standing rules, the user's own
+    """Everything Excephalon has been told about how to be - the standing rules, the user's own
     context, and every instruction added since (its own persona overlay). Composed in one place
     because the window shows this exact text, and a second copy would drift from the one the brain
     reads."""
@@ -234,7 +234,7 @@ def _persona():
 
 
 def _voice(announce):
-    """The voice, fully loaded BEFORE the Entity says it is ready.
+    """The voice, fully loaded BEFORE Excephalon says it is ready.
 
     It first shipped the other way - the robot System.Speech voice served while the neural model
     loaded in the background - and the first reply of every session came out robot-voiced. His
@@ -259,7 +259,7 @@ def _voice(announce):
 
 def _build_ears(text_mode, stop, interrupt, announce=print):
     """Return (stt, mic, recorder) — mic/recorder are None in text mode; both close on exit.
-    `interrupt` lets a quiet moment be broken off so the Entity can pass on queued agent news."""
+    `interrupt` lets a quiet moment be broken off so Excephalon can pass on queued agent news."""
     if text_mode:
         return ConsoleSTT(), None, None
     from entity.stt_mic import MicSTT
@@ -278,8 +278,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     within a moment of the click, and the model loading, the brain waking and the spoken greeting
     all happen where they can watch them. They were hearing "I'm ready" before any window appeared.
     """
-    # Word from the agents the Entity drives lands in this inbox; the watcher tails it and the
-    # Entity speaks each new line at the next lull (never cutting the user off).
+    # Word from the agents Excephalon drives lands in this inbox; the watcher tails it and the
+    # Excephalon speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
     # Spooled, so news that has not reached the user yet survives a restart: three agents'
     # reports once lived only in a wedged process's memory, and died with it.
@@ -397,13 +397,13 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         threading.Thread(target=watch_keys, daemon=True).start()
 
     if text_mode:
-        announce("Excephalon is here. Type to talk; say 'quit' or 'goodbye entity' to end.")
+        announce("Excephalon is here. Type to talk; say 'quit' or 'goodbye Excephalon' to end.")
     elif gui:
         announce("Excephalon is here. Turn the mic on when you want to talk, or say 'hey Excephalon'.")
         announce("That same button stops it while it's speaking. Close the window to quit.")
     else:
         announce("Excephalon is here. Speak, and say 'over' when you finish each turn.")
-        announce("Press Enter to cut it off. To quit, say 'goodbye entity over' (or Ctrl-C).")
+        announce("Press Enter to cut it off. To quit, say 'goodbye Excephalon over' (or Ctrl-C).")
     if muted:
         announce("(muted: replies are shown, not spoken)")
     announce()
@@ -463,7 +463,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
 
     if not text_mode and not muted:
         # Spoken lines render as bubbles - "'I'm ready, what can I do for you?'... don't render
-        # in the conversation view, but they should, because Entity says them aloud." Through the
+        # in the conversation view, but they should, because Excephalon says them aloud." Through the
         # console AFTER it exists, so the greeting is a message like any other. Still guarded,
         # because the mic is already live: unguarded, the greeting went out of their speakers,
         # back into the mic, and opened their draft box with "I do for you".
@@ -565,7 +565,7 @@ def main(argv=None):
             print(line, flush=True)
 
     # Shutdown is a spoken/typed farewell ("goodbye entity", "quit") or Ctrl-C. Enter is NOT quit -
-    # it's the barge-in: press it to cut off whatever the Entity is saying (they had a 15-minute
+    # it's the barge-in: press it to cut off whatever Excephalon is saying (they had a 15-minute
     # ramble they couldn't stop). Each Enter sets `barge_in`; the Conversation clears it per turn.
     stop = threading.Event()
     barge_in = threading.Event()
@@ -685,7 +685,7 @@ def main(argv=None):
     )
     # The modifier beside the spacebar + Enter submits the draft. On Windows that is Win+Enter,
     # which reaches no window on that machine, so it arrives by keyboard hook instead - and only
-    # while the Entity is in front. Held in a name for the app's lifetime, and asked whether it
+    # while Excephalon is in front. Held in a name for the app's lifetime, and asked whether it
     # took: a hook that fails to install is the one place this can die in silence, so it says so
     # on screen rather than the chord just quietly doing nothing. The Mac needs none of it - Cmd
     # reaches the page like any other modifier, and window.js binds the same gesture there - so

@@ -6,7 +6,7 @@ microphone path (Parakeet) is wired in, and stays useful as a text fallback.
 
 
 class ConsoleSTT:
-    def __init__(self, *, prompt="you> ", read=input, eof_utterance="goodbye entity"):
+    def __init__(self, *, prompt="you> ", read=input, eof_utterance="goodbye excephalon"):
         self._prompt = prompt
         self._read = read
         self._eof_utterance = eof_utterance

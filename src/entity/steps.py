@@ -5,7 +5,7 @@ happened to say between steps - "Confirmed red. Now the implementation:" - and t
 minutes. Everything that would let anyone judge the work was dropped before it reached the file:
 the commands, the test output, the diffs. Asked for the real exchange repeatedly and given a
 narrated summary each time, the point was never logging: it was being able to compare how the
-Entity drives an agent with how they would have driven it themselves.
+Excephalon drives an agent with how they would have driven it themselves.
 
 So every message the agent streams back is rendered here, as the lines its log shows:
 

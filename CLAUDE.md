@@ -1,9 +1,9 @@
-# Working on Entity
+# Working on Excephalon
 
 Read this before touching anything here. It is what previous sessions learned the expensive way —
 mostly by shipping something that looked right and having the user discover, again, that it wasn't.
 
-Entity is a voice-in/voice-out companion that also supervises Claude coding agents on its user's
+Excephalon is a voice-in/voice-out companion that also supervises Claude coding agents on its user's
 behalf. The point is not convenience; it is presence — someone to show up for — and a single voice
 that shields the user from the machinery underneath. Almost every law below exists because that
 shield tore somewhere.
@@ -19,7 +19,7 @@ once, and there is no lock to hold.
 **This replaces the global end-of-task sequence's merge step, and the `.git/agent-merge.lock` that
 serializes it.** There is no local merge here, so no lock to take. Everything before it still
 stands — commit, rebase, full green suite — then you push and open a PR instead of merging. The
-gate runs the whole suite on `windows-latest`, the desk Entity runs on, so keep it green.
+gate runs the whole suite on `windows-latest`, the desk Excephalon runs on, so keep it green.
 
 Work on a branch in a worktree (`git worktree add .claude/worktrees/<name> -b claude/<name>`),
 never in the primary checkout. Sync by rebasing onto `origin/main` on a clean tree; never `reset`
@@ -95,7 +95,7 @@ Every session leaves artifacts. Use them before forming any theory:
 | What the mic actually heard | `runtime/audio/session-*.wav` | whether a word reached the machine at all |
 | What an agent said, as it said it | `runtime/agent-logs/<name>.log` (retired ones move to `runtime/agent-logs-archive/`) | whether an agent is working or dead |
 | Who is running right now | `runtime/active-agents.txt` | the roster, with last-heard times |
-| What Entity knows about its user | `runtime/profile.md`, `runtime/learned.md` | standing context; both gitignored |
+| What Excephalon knows about its user | `runtime/profile.md`, `runtime/learned.md` | standing context; both gitignored |
 
 Asking the user to copy their scrollback is a defect in this project — the transcript exists
 precisely so nobody ever has to. Reading the transcript is also how you check your own work:
@@ -117,7 +117,7 @@ hands" until he has exercised it. And when a failure can recur, make the app wri
 at the moment of failure (the close stall dumps every thread to `runtime/close-stall.log`), so the
 next diagnosis starts from fact instead of belief.
 
-## The rules Entity lives by
+## The rules Excephalon lives by
 
 These are user requirements, learned through failures somebody had to sit through. Persona text
 enforces some; code enforces the rest, and where only the persona enforces something, treat that as
@@ -132,7 +132,7 @@ a known weakness rather than a solution.
   through `narrator.py`: one trip through the brain, which composes the one or two sentences the
   user hears in its own voice. `relay.notice()` survives only as the fallback when the brain cannot
   answer — news must never die with a wedged session. Handed the raw stream, a person cannot tell
-  whether they are talking to Entity or to the agent; the code, not the model, has to prevent it.
+  whether they are talking to Excephalon or to the agent; the code, not the model, has to prevent it.
 - **Brevity is the product.** The persona holds replies to a couple of short sentences, and the
   voice speaks them as they are written, so a barge-in is the user's own length limit. The old
   260-character cut and its told-you-it-was-cut system note are gone WITH their reason: they
@@ -179,7 +179,7 @@ a known weakness rather than a solution.
   never read. That froze a whole session.
 - **Fan-out where one thing was named.** A worktree is recognized by its `.git`; globbing a directory
   once started an agent in `.venv`, `docs` and `src` of a single worktree.
-- **Believing the model over the file.** Entity has claimed to have filed something, opened
+- **Believing the model over the file.** Excephalon has claimed to have filed something, opened
   something, or verified something that had not happened. Check the artifact.
 
 ## Nothing personal in the source
@@ -224,7 +224,7 @@ situation and log tail, settles technical snags itself through its one tell_agen
 "handled", which is swallowed), and escalates to the user only what is genuinely theirs — its
 escalations go out app-authored so the unwritten-lines ledger keeps the fast brain aware of them.
 `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
-transcription into an editable draft, `hey entity` / `stop listening` to arm and disarm, `scratch
+transcription into an editable draft, `hey excephalon` / `stop listening` to arm and disarm, `scratch
 that` to take back what was just said, and it reports whether it is recording so nothing speaks
 over the user. It is also the duplex ear: while the brain merely thinks the ear stays open and
 words land in the draft; while the voice is actually sounding, chunks are judged against the
@@ -288,11 +288,18 @@ not expose locally, and a warning measured against a guessed denominator fires w
 directions — do not rebuild it without a sanctioned usage source. The app presents as
 "Excephalon" everywhere he sees or hears it — title, icon (the Chaosphere: a brain in a spiked
 wire cage, drawn transparent in the two-app family palette — gray-green metal, light-pink brain —
-shared with Highdeas's leaf-and-mic), launcher `Excephalon.bat`, the persona's own name, and the wake phrase ("hey
-excephalon", with "hey entity" kept working because the transcriber only sometimes lands the
-coined word — it is in the vocabulary to help) — while the repo, the module, the transcript
+shared with Highdeas's leaf-and-mic), launcher `Excephalon.bat`, the persona's own name, and every phrase it
+answers to — "hey excephalon" to wake, "goodbye/goodnight excephalon" to end — with the
+`entity` forms kept working beside them because the transcriber only sometimes lands the coined
+word (it is in the vocabulary to help). The word it prints and speaks and the word it listens
+for must be the SAME word: for months it said "say 'hey Entity'" and "say 'goodbye entity' to
+end" while the only spoken name that actually worked was the one it never called itself, so
+saying its own name back to it did nothing. When you touch either list, touch the sentence that
+tells him about it. Only the repo, the module, the transcript
 line format and every internal role key stay `entity`: renaming those breaks parsers of past
-transcripts for a word nobody hears. `links.py` decides what a message names that can be
+transcripts for a word nobody hears. Comments quoting HIM keep his words exactly as he said
+them, "Entity" and all — a quote rewritten to match today's name is a record of something he
+never said. `links.py` decides what a message names that can be
 opened, and opens it. A rename never fails in silence: a refused one comes back as a sentence
 the rail shows under the name ("another log is already called that"), because a name quietly
 put back reads as a broken app - and a name differing only in CASE is not a collision but this
@@ -352,7 +359,7 @@ are where Opus-tier work happens. Its every ask is bounded, and so is waiting fo
 lock: a stream once died without raising, held the lock from inside a narration, and everything
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
-frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Entity has learned, and the lexicon. `cards.py` is the
+frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Excephalon has learned, and the lexicon. `cards.py` is the
 cards' and the fleet's command-line door - `drop-instruction "<unique fragment>"`, `tick <number>`,
 `retire <agent> [--tick <number>]` - the same savers the app's pages use, for when the window isn't
 up; a fragment matching zero or several rows refuses the whole edit rather than guessing, and
@@ -375,8 +382,8 @@ from one minute of them reading (`Learn my voice.bat` at the repo root records i
 wav in `runtime/voice/` for future re-learning, saves the averaged speaker embedding) and scores
 any audio against it — sherpa-onnx CAM++ (`runtime/voice/wespeaker_en_voxceleb_CAM++.onnx`, 28 MB;
 torch stacks don't install on this Python). Measured on real session audio: the model separates
-voices (Entity against its own print ~0.55–0.95; a mostly-him session against Entity's print
-median 0.18, and the high outliers in that set were literally Entity's replies leaking through the
+voices (Excephalon against its own print ~0.55–0.95; a mostly-him session against Excephalon's print
+median 0.18, and the high outliers in that set were literally Excephalon's replies leaking through the
 speakers into the armed mic) — but a print scraped from UNLABELED session audio matches everything
 a little, so enrollment is the clean recording, never scraped bootstrapping. No score DECIDES
 anything yet: `score()` yields None without a print, callers keep the words, and the dropping

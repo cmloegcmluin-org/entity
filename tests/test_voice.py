@@ -102,9 +102,9 @@ def test_sentences_are_synthesized_in_their_spoken_form_but_recorded_raw():
 
 
 def test_a_reply_reports_when_its_sound_is_actually_in_the_air():
-    # The mic needs to know the difference between the Entity THINKING (no sound - the user's
+    # The mic needs to know the difference between Excephalon THINKING (no sound - the user's
     # words are theirs to keep) and its voice actually sounding (what the mic hears now is mostly
-    # the Entity itself). One flag spanning first sound to drained, not flapping per sentence.
+    # Excephalon itself). One flag spanning first sound to drained, not flapping per sentence.
     playing = threading.Event()
     hold = threading.Event()
 

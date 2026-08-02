@@ -16,12 +16,12 @@ from entity.transcript import DAY_BREAK, SESSION_BREAK, parse_line
 
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
-# identity of whatever other python-hosted app already owns a button - the Entity window turned up
+# identity of whatever other python-hosted app already owns a button - Excephalon window turned up
 # under an unrelated app's icon, wearing that app's icon. Declaring one gives it its own.
-APP_ID = "Entity.VoiceCompanion"
+APP_ID = "Excephalon.VoiceCompanion"
 
-# Who sits on which side of the thread. A heads-up is Entity talking out of turn, so it takes
-# Entity's side and says so in the name.
+# Who sits on which side of the thread. A heads-up is Excephalon talking out of turn, so it takes
+# Excephalon's side and says so in the name.
 SIDES = {"you": "right", "entity": "left", "heads-up": "left"}
 
 

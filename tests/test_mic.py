@@ -40,7 +40,7 @@ def test_flush_discards_audio_captured_before_listening_began():
     bg = BackgroundMicrophone(src)
     src.exhausted.wait(timeout=2)  # both frames are now buffered (their puts happen-before this signal)
 
-    bg.flush()  # between-turn backlog - the Entity's own reply - is thrown away
+    bg.flush()  # between-turn backlog - Excephalon's own reply - is thrown away
 
     assert list(bg.frames()) == []  # nothing replayed into their next turn
     bg.close()

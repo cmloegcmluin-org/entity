@@ -85,10 +85,10 @@ def test_the_port_is_one_the_machine_says_is_free():
 def test_the_window_is_pointed_at_the_app_on_loopback_only():
     webview = _Webview()
 
-    open_window(_App(), title="Entity", webview=webview, port=8123)
+    open_window(_App(), title="Excephalon", webview=webview, port=8123)
 
     title, url, how = webview.made[0]
-    assert title == "Entity"
+    assert title == "Excephalon"
     assert url == "http://127.0.0.1:8123/"  # nothing off this machine can reach it
     assert how == WINDOW  # its own size, and a floor under it
     assert webview.started == [{}]
@@ -181,7 +181,7 @@ def test_the_window_reopens_where_it_was_closed_unless_that_screen_is_gone():
 
 def test_the_taskbar_identity_is_claimed_before_the_window_exists(monkeypatch):
     # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits
-    # whatever other pythonw-hosted app already owns one - Entity turned up as another app. Claimed
+    # whatever other pythonw-hosted app already owns one - Excephalon turned up as another app. Claimed
     # after the window is made, it is the same as never claimed.
     claimed = []
     monkeypatch.setattr("entity.desktop.set_app_id", lambda app_id: claimed.append(app_id))
@@ -198,7 +198,7 @@ def test_a_platform_without_the_taskbar_api_still_gets_a_window():
     def refuses(_):
         raise OSError("no shell32 here")
 
-    set_app_id("Entity.VoiceCompanion", api=refuses)
+    set_app_id("Excephalon.VoiceCompanion", api=refuses)
 
 
 def test_the_server_is_reachable_only_from_this_machine_and_cannot_outlive_the_window():

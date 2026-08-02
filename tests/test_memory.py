@@ -62,14 +62,14 @@ def test_load_lexicon_is_empty_when_missing(tmp_path):
 
 
 def test_load_persona_additions_is_empty_when_missing(tmp_path):
-    # Entity's own standing instructions - absent on a fresh checkout, so the persona still composes.
+    # Excephalon's own standing instructions - absent on a fresh checkout, so the persona still composes.
     from entity.memory import load_persona_additions
 
     assert load_persona_additions(tmp_path / "nope.md") == ""
 
 
 def test_persona_additions_are_saved_and_read_back(tmp_path):
-    # The window edits these in full - Entity's persona is theirs to curate, so what they type is
+    # The window edits these in full - Excephalon's persona is theirs to curate, so what they type is
     # what it reads next start, stored as typed rather than normalised.
     from entity.memory import load_persona_additions, save_persona_additions
 
@@ -80,7 +80,7 @@ def test_persona_additions_are_saved_and_read_back(tmp_path):
 
 
 def test_append_persona_addition_is_cumulative_and_bulleted(tmp_path):
-    # How Entity files one when told to change how it behaves - the same accretion as its learned
+    # How Excephalon files one when told to change how it behaves - the same accretion as its learned
     # facts, so the file reads as a list of standing instructions however it was started.
     from entity.memory import append_persona_addition, load_persona_additions
 
@@ -108,7 +108,7 @@ def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():
 
 
 def test_compose_persona_folds_additions_in_as_binding_standing_instructions():
-    # Entity's own accreted instructions sit beside the base rules (how to behave), NOT under the
+    # Excephalon's own accreted instructions sit beside the base rules (how to behave), NOT under the
     # life-context/therapy warning (which is for facts about the user), and are named to the user
     # like everything else.
     out = compose_persona("BASE RULES", "# Ada - standing profile\n\nintro\n", "",
@@ -140,7 +140,7 @@ def test_a_user_with_no_profile_is_addressed_neutrally():
 
 def test_the_persona_is_addressed_to_whoever_the_profile_names():
     # The persona ships with a placeholder, never a name: composing it against a profile is what
-    # decides who the Entity is for, so one source serves any user.
+    # decides who Excephalon is for, so one source serves any user.
     out = compose_persona("You are {user}'s companion.", "# Ada - standing profile\n\nintro\n")
 
     assert "You are Ada's companion." in out
@@ -168,7 +168,7 @@ def test_compose_persona_folds_in_profile_and_learned_with_a_boundary_reminder()
     assert "BASE" in out
     assert "They are learning the cello." in out
     assert "evening shift" in out
-    # the framing must remind the Entity not to turn the context into unprompted therapy
+    # the framing must remind Excephalon not to turn the context into unprompted therapy
     assert "unprompted" in out.lower()
 
 
@@ -434,7 +434,7 @@ def test_ticking_and_typing_write_the_whole_list_back_into_its_section(tmp_path)
 
 
 def test_an_item_filed_while_the_page_sat_open_survives_the_next_thing_he_types(tmp_path):
-    # Entity files enhancements into this same list, and the window is open all session. Every
+    # Excephalon files enhancements into this same list, and the window is open all session. Every
     # keystroke writes the whole list back, so without this the next character they type deletes
     # whatever it filed a moment ago.
     from entity.memory import append_enhancement, profile_sections, save_checklist
@@ -532,7 +532,7 @@ def test_saving_enhancements_numbers_new_rows_and_never_forks_one_being_edited(t
 
 
 def test_an_enhancement_filed_while_the_page_sat_open_keeps_its_own_new_id(tmp_path):
-    # Entity files into this list while the window is open. The filed item has no id until the page
+    # Excephalon files into this list while the window is open. The filed item has no id until the page
     # saves; when it does, the carry-over must keep it AND give it a number distinct from the row he
     # was typing - not collide the two on "no id yet".
     from entity.memory import append_enhancement, profile_sections, save_checklist
@@ -644,7 +644,7 @@ def test_the_same_words_already_ticked_do_file_anew(tmp_path):
 
 
 def test_an_enhancement_can_be_rewritten_in_place_by_its_id(tmp_path):
-    # "Entity needs the ability to edit existing enhancement items after filing them" - the #id
+    # "Excephalon needs the ability to edit existing enhancement items after filing them" - the #id
     # is how he names one, and the rewrite keeps both the number and the tick.
     from entity.memory import revise_enhancement
 

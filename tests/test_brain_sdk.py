@@ -566,3 +566,24 @@ def test_a_lock_whose_holder_survives_the_shed_is_abandoned_not_waited_out(tmp_p
     assert brain.respond("hello?", deadline=0.2) == "reply to hello?"
     assert "abandoned" in (tmp_path / "brain-wedge.log").read_text(encoding="utf-8")
     assert brain.respond("again?", deadline=0.2) == "reply to again?"  # the fresh lock is free
+
+
+def test_a_machine_that_is_not_signed_in_still_opens_and_says_so():
+    # Nothing can be answered until he signs in - but the app crashing on the way up is not how he
+    # finds that out. Launched from its icon there is no console for a traceback to land in, so a
+    # warmup that raises is an app that simply never appears. It says the one thing he can act on
+    # instead, as an app aside: this is the machine reporting its own state, not Excephalon
+    # talking, and there is no /login to type at a microphone anyway.
+    from entity.sdk_session import BrainUnavailable
+
+    class SignedOutSession:
+        def ask(self, prompt, **kwargs):
+            raise BrainUnavailable("authentication_failed")
+
+    brain = SdkBrain(persona="p", session_factory=lambda options: SignedOutSession())
+    said = []
+
+    brain.warmup(announce=said.append)
+
+    assert len(said) == 1
+    assert "sign" in said[0].lower() and "claude" in said[0].lower()

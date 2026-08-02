@@ -341,7 +341,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
                      seed_turns=recent_turns(TRANSCRIPTS))
-    brain.warmup()
+    brain.warmup(announce=announce)
     # From here on, news arrives in the brain's own voice - and worded by where the work stands:
     # a finished turn is presentation news while building, wrap-up news while landing approved work.
     newsroom["narrator"] = Narrator(brain, outbox, stage_of=desk.delivery_stage)

@@ -18,6 +18,30 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeSDKClient, ResultMessage
 
 
+class BrainUnavailable(RuntimeError):
+    """The CLI answered instead of the model - it could not reach one on our behalf.
+
+    Raised rather than returned, because everything downstream treats a returned string as words
+    Excephalon said: the conversation speaks it, the record files it in its bubble, and the ledger
+    reads it back next turn as its own. Raising puts it on the path already built for a brain that
+    failed - the cause to the durable record, a plain sentence to the user, nothing leaked.
+    """
+
+
+def _cli_refusal(message):
+    """The CLI's own refusal, or None when this is really the model talking.
+
+    It arrives wearing the model's clothes: an ordinary assistant message, its text ready to be
+    spoken, under a ResultMessage whose subtype is "success" - so nothing about the turn's SHAPE
+    says anything went wrong. What gives it away is that the message carries an `error` at all,
+    and that its model is the synthetic stand-in rather than one that could have written the
+    words. Asked structurally like this, a revoked token, an expired plan and a signed-out machine
+    are all caught by the same line, and no wording anyone might change is being matched.
+    """
+    error = getattr(message, "error", None)
+    return str(error) if error else None
+
+
 def extract_text(messages):
     """The spoken reply is the FINAL thing Excephalon says, not its running narration.
 
@@ -148,6 +172,9 @@ class SdkSession:
                 on_text(piece)
 
         async for message in self._client.receive_response():
+            refusal = _cli_refusal(message)
+            if refusal is not None:
+                raise BrainUnavailable(refusal)
             messages.append(message)
             if on_message is not None:
                 on_message(message)
@@ -160,6 +187,14 @@ class SdkSession:
             if delta:
                 carry(delta)
             if isinstance(message, ResultMessage):
+                # The same refusal on a REBUILT session drops the synthetic message and only flags
+                # the result, so there is nothing above to have caught. With not one word said,
+                # returning the empty string reads downstream as a reply that happened to be
+                # blank: the turn passes in total silence, he having typed and waited for nothing.
+                # A turn that says something and then flags an error keeps what it said - that is
+                # an agent whose run failed partway, and its words are still what it did.
+                if message.is_error and not spoken and not extract_text(messages[:-1]):
+                    raise BrainUnavailable(f"the turn failed: {message.subtype}")
                 self.last_context_tokens = _context_tokens(message.usage)
                 # The id is the session's whole memory made durable: a restarted process resumes
                 # it instead of stranding the conversation - the old failure was agents dying

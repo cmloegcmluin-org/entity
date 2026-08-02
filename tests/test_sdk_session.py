@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, StreamEvent
 
-from entity.sdk_session import SdkSession, _context_tokens, extract_text
+from entity.sdk_session import BrainUnavailable, SdkSession, _context_tokens, extract_text
 
 
 class FakeBlock:
@@ -219,6 +219,67 @@ def test_a_block_that_starts_flush_against_the_last_gets_a_seam():
     reply = session.ask("go")
 
     assert "verification.\nI'm having" in reply
+    session.close()
+
+
+class SignedOutClient(FakeClient):
+    """The CLI with nobody signed in. Copied from a real capture: the refusal comes back dressed
+    as the model's own reply, and the only things saying otherwise are `error` and the synthetic
+    model name."""
+
+    async def query(self, prompt, session_id=None):
+        pass
+
+    async def receive_response(self):
+        message = FakeMsg([FakeBlock("Not logged in · Please run /login")])
+        message.error = "authentication_failed"
+        message.model = "<synthetic>"
+        yield message
+        yield ResultMessage(subtype="success", duration_ms=51, duration_api_ms=0, is_error=True,
+                            num_turns=1, session_id="s", usage={})
+
+
+def test_the_clis_own_refusal_never_becomes_something_Excephalon_said():
+    # Launched from its icon the app inherits no shell, so a Mac that has not been signed in yet
+    # got this back and SAID it: "entity> Not logged in - Please run /login". The CLI's words, in
+    # Excephalon's voice, in its bubble - which is the one thing the whole insulation exists to
+    # prevent, and worse than useless besides, since there is no /login to type at a microphone.
+    # The turn did not fail from the app's side: `is_error` rides on a subtype of "success", and
+    # the text arrives as an ordinary assistant reply. What gives it away is that the message
+    # carries an `error` at all - so this catches a revoked token or an expired plan the same way,
+    # without matching on any wording.
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: SignedOutClient())
+
+    with pytest.raises(BrainUnavailable) as raised:
+        session.ask("hi")
+
+    assert "authentication_failed" in str(raised.value)  # the cause, for the durable record
+    session.close()
+
+
+class SilentlyFailingClient(FakeClient):
+    """The same refusal on a REBUILT session: no assistant message this time, just the result
+    saying the turn failed."""
+
+    async def query(self, prompt, session_id=None):
+        pass
+
+    async def receive_response(self):
+        yield ResultMessage(subtype="success", duration_ms=40, duration_api_ms=0, is_error=True,
+                            num_turns=1, session_id="s", usage={})
+
+
+def test_a_turn_that_failed_with_nothing_said_is_a_failure_not_an_empty_reply():
+    # Catching only the assistant-shaped refusal fixed the first ask and not the second: the brain
+    # retries once on a fresh session, and on that one the CLI skipped the synthetic message and
+    # only flagged the result. The empty string came back as a reply, `_answer` found nothing to
+    # say, and the turn passed in total silence - he types, it thinks, and nothing ever comes back.
+    # A wedged brain that says nothing is the failure the error reply exists for.
+    session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: SilentlyFailingClient())
+
+    with pytest.raises(BrainUnavailable):
+        session.ask("hi")
+
     session.close()
 
 

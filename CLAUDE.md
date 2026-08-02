@@ -359,7 +359,16 @@ are where Opus-tier work happens. Its every ask is bounded, and so is waiting fo
 lock: a stream once died without raising, held the lock from inside a narration, and everything
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
-frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. `memory.py` is the profile, what Excephalon has learned, and the lexicon. `cards.py` is the
+frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. When
+the CLI cannot reach a model on our behalf it does not fail — it ANSWERS, wearing the model's
+clothes, and a signed-out Mac had "Not logged in · Please run /login" spoken in Excephalon's own
+voice and filed in its own bubble (there is no /login to type at a microphone). `sdk_session`
+raises `BrainUnavailable` instead of returning those words, on either shape the refusal takes: a
+message carrying an `error` at all, and a result flagged `is_error` with nothing said all turn —
+the second is the one the retry hits, and catching only the first bought a turn that passed in
+total silence. Never match on the wording; the structure is what is true. Warmup is the one caller
+that swallows it, into an app aside naming the one thing he can do, because a warmup that raises
+is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon. `cards.py` is the
 cards' and the fleet's command-line door - `drop-instruction "<unique fragment>"`, `tick <number>`,
 `retire <agent> [--tick <number>]` - the same savers the app's pages use, for when the window isn't
 up; a fragment matching zero or several rows refuses the whole edit rather than guessing, and

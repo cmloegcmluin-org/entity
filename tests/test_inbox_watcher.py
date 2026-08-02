@@ -100,7 +100,7 @@ def test_each_poll_ticks_the_monitor(tmp_path):
     # filename in here is not an agent, and reading it as one invented two of them.
     monitor = SpyMonitor()
     watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
-    (tmp_path / "not-an-agent.txt").write_text("a note Entity wrote to itself\n", encoding="utf-8")
+    (tmp_path / "not-an-agent.txt").write_text("a note Excephalon wrote to itself\n", encoding="utf-8")
 
     watcher.poll_once()
     watcher.poll_once()

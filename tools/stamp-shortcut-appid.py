@@ -1,7 +1,7 @@
-"""Stamp every Entity shortcut with the app's AppUserModelID, so a pin and the running window are
+"""Stamp every Excephalon shortcut with the app's AppUserModelID, so a pin and the running window are
 the same taskbar button.
 
-Windows matches a shortcut to a running window by AppUserModelID. The Entity process declares one
+Windows matches a shortcut to a running window by AppUserModelID. Excephalon process declares one
 (entity.mirror.APP_ID); without the same id on the .lnk, launching it gives a second, separate
 button - the pin sitting inert while the running app lights up somewhere else entirely, and
 pinning THAT one pins the interpreter, generic icon and all.
@@ -26,11 +26,11 @@ STGM_READWRITE = 0x00000002  # loading a .lnk read-only makes every write Access
 
 # Where Windows keeps the two copies of a shortcut: the one in the menu, and the one a pin made.
 # Both names, because a pin is a copy and keeps the name it was made under - a pin from before
-# the app presented as Excephalon still sits there as Entity.lnk, and it needs the id no less.
+# the app presented as Excephalon still sits there as Excephalon.lnk, and it needs the id no less.
 _MENU = Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs"
 _PINS = Path.home() / "AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar"
 SHORTCUTS = tuple(place / name for place in (_MENU, _PINS)
-                  for name in ("Excephalon.lnk", "Entity.lnk"))
+                  for name in ("Excephalon.lnk", "Excephalon.lnk"))
 
 
 def stamp(path, app_id):

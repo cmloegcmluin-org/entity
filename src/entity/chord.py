@@ -14,7 +14,7 @@ guessed:
 
 A WH_KEYBOARD_LL hook sits ahead of all of that - it is the first thing in the input path, before
 hotkey dispatch and before any hook installed earlier. AutoHotkey's went in at boot and ours when
-the Entity starts, which is later, and low-level hooks run newest-first; injecting AutoHotkey's own
+Excephalon starts, which is later, and low-level hooks run newest-first; injecting AutoHotkey's own
 `LWin & c` and watching our hook log the `c` confirmed the order. So the hook is not a workaround
 here; it is the only mechanism that can see this chord at all.
 

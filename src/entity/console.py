@@ -1,4 +1,4 @@
-"""What the Entity shows, kept separate from what it speaks.
+"""What Excephalon shows, kept separate from what it speaks.
 
 The spoken word is transient - it's gone the moment it's said. A surface the user can read is where
 they catch up on the reply, see it's thinking rather than hung, and notice an unprompted heads-up.

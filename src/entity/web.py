@@ -70,7 +70,7 @@ def _said(entry, label="", day="", speakers=SPEAKERS):
 
     `day` is the date of the break above this entry. A message keeps only the time on screen, but
     it carries two dated pointers: `reference`, the readable "You · 2026-07-18 05:01:59" he copies
-    to paste back at Entity, and `moment`, the bare "date time" the link button encodes into a
+    to paste back at Excephalon, and `moment`, the bare "date time" the link button encodes into a
     URL's #at= hash to reopen the conversation at this turn. A bare "05:01:59" could be any day, so
     both carry the date. A break is a place, not a moment, so it carries neither."""
     bubble = entry["role"] in SIDES
@@ -173,7 +173,7 @@ class Agents:
     """Every agent's log, read back as the exchange it is rather than as lines.
 
     An agent's thread is the same shape as the conversation, with the speakers swapped: the
-    Entity is the one asking, and the agent answers."""
+    Excephalon is the one asking, and the agent answers."""
 
     def __init__(self, directory, clock):
         self._directory = Path(directory) if directory else None
@@ -373,7 +373,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     @app.get("/config")
     def config():
         """Everything he tunes, down one page with a contents column beside it: the profile's four
-        checklists, what Entity has learned, its standing instructions, the words it swaps, the
+        checklists, what Excephalon has learned, its standing instructions, the words it swaps, the
         vocabulary it snaps to, and the credit line it warns from. These were five tabs
         ("'Profile' doesn't make sense as a title to me. please change it to 'Config', and
         consolidate in all the contents"), and the composed-persona dump is deliberately not
@@ -436,7 +436,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         """Save one section's list back, as the markdown the file keeps and the brain reads -
         never as the boxes drawn from it.
 
-        `drawn` is what the page believes the file holds, so an enhancement Entity filed into the
+        `drawn` is what the page believes the file holds, so an enhancement Excephalon filed into the
         same section while the window sat open is carried over rather than overwritten by the next
         character they type."""
         if profile_path is not None:
@@ -538,7 +538,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     def agent_thread(name):
         if name not in agents.names():  # never read a path that did not come from the log folder
             return ({"entries": [], "at": 0, "total": 0, "sessions": []}, 404)
-        # In an agent's thread the Entity is the one asking and the agent answers.
+        # In an agent's thread Excephalon is the one asking and the agent answers.
         return _thread(agents.entries(name), request.args.get("since", 0, type=int),
                        {"you": "Excephalon", "entity": name, "heads-up": "Excephalon · heads-up"})
 

@@ -90,7 +90,7 @@ def restore_context_menus(window, apply=turn_on_context_menus):
 
 
 def restored_geometry(saved, screens):
-    """Where the window reopens: exactly where it was closed - "Entity window should remember
+    """Where the window reopens: exactly where it was closed - "Excephalon window should remember
     where it was on the screen" - unless that spot no longer exists (a monitor unplugged), in
     which case the defaults, because a window restored off-screen reads as an app that vanished.
 
@@ -228,7 +228,7 @@ def open_window(app, *, title="Excephalon", icon=None, webview=None, port=None,
 
     # Before the window exists, or the taskbar button is already grouped. Windows groups buttons by
     # AppUserModelID, and a process that declares none inherits the identity of whatever other
-    # pythonw-hosted app already owns one - the Entity window turned up under another app's icon,
+    # pythonw-hosted app already owns one - Excephalon window turned up under another app's icon,
     # wearing its name. It did so again the moment this call was dropped in a move.
     set_app_id(APP_ID)
     port = port or free_port()

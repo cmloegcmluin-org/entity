@@ -5,7 +5,7 @@ every thought to be final. In the window the mic is a STATE, not a turn: while i
 they say is transcribed chunk-by-chunk into the draft box - which they can edit - and nothing is
 sent until they click Submit, or until they say "over", which is still the whole gesture for "I'm
 done": it hands the turn over AND puts the mic down. "Stop listening" turns the mic off mid-stream
-and keeps the words before it; "hey Entity" turns it back on and keeps the words after it; the
+and keeps the words before it; "hey Excephalon" turns it back on and keeps the words after it; the
 window's button does the same by hand. Muted, the room is heard but dropped - only the wake phrase
 gets through. "Scratch that" rewinds: it takes back the words immediately before it, whether those
 are the chunk already sitting in the box or the ones they said in the same breath, so a sentence that
@@ -23,15 +23,15 @@ knowing anything about Tk. `listen()` is the Conversation-facing half: it blocks
 hands over the (possibly edited) draft via `submit`, so the loop's think/speak flow is unchanged.
 
 Two things decide whether they are being heard: whether the mic is ARMED (their button, their spoken
-phrases) and whether the Entity's voice is actually SOUNDING. While the brain merely thinks, nothing
+phrases) and whether Excephalon's voice is actually SOUNDING. While the brain merely thinks, nothing
 is coming out of the speakers, so the ear stays open and words said then are drafted normally. While
-sound IS in the air, the mic mostly hears the Entity itself - their very first draft box opened with
+sound IS in the air, the mic mostly hears Excephalon itself - their very first draft box opened with
 "I do for you", the tail of its own spoken greeting - so each chunk is judged against the script
 being spoken: its own words arriving back are dropped, someone ELSE'S words are kept as draft
 (talking over the reply must not mean being unheard), and only a stop BARK cuts the voice - so the
 TV, whose sentence once killed an utterance, can never kill a reply. Arming survives a reply, so a conversation flows
 without touching the button; only they can end it - by saying "over" or "stop listening", or by
-cutting the Entity off mid-sentence, since a stop should not turn straight around and start
+cutting Excephalon off mid-sentence, since a stop should not turn straight around and start
 recording their next breath. Auto-listening goes one further and opens the mic each time a reply
 ends, so answering costs nothing - except after that same cut-off, for the same reason.
 """
@@ -55,7 +55,7 @@ from entity.stt_mic import (
     rms,
 )
 
-# How long after end_speaking a frame still counts as the Entity's sound: its last word is in the
+# How long after end_speaking a frame still counts as Excephalon's sound: its last word is in the
 # air when the audio call returns (speaker to mic is ~90ms on the measured desk), and the output
 # stream drains a beat after the last write. 10 frames = 300ms at the 30ms mic frame.
 SPEAK_TAIL_FRAMES = 10
@@ -152,9 +152,9 @@ class Dictation:
         self._drafted = False  # dictated words are sitting in the box, unsubmitted
         self._mid_burst = False  # they are talking right now: a burst has started and not yet ended
         self._finish_burst = False  # muted mid-sentence: take down what's still in the air
-        self._bark = None  # while the Entity speaks: an Event a stop bark should fire
+        self._bark = None  # while Excephalon speaks: an Event a stop bark should fire
         self._stop_words = STOP_WORDS  # what counts as a bark, per the watcher that installed _bark
-        self._script = None  # while the Entity speaks: a callable for the words it is saying
+        self._script = None  # while Excephalon speaks: a callable for the words it is saying
         self._tail_pending = False  # end_speaking happened; the pump owes a grace window for the tail
         self._clock = clock
         self._last_worded = None  # when words last landed in the draft: the mid-thought clock
@@ -261,7 +261,7 @@ class Dictation:
 
         Being ARMED is not the answer: the mic here is a state they leave on for the whole
         conversation, so "is it armed" is yes from the moment they start until they stop, and taking
-        that for "they are talking" left the Entity unable to say anything unprompted ever again.
+        that for "they are talking" left Excephalon unable to say anything unprompted ever again.
         But an open burst alone is not the answer either: his natural pauses END bursts, and the
         news offer barged into one of those pauses mid-thought. Mid-utterance is an open burst, or
         an armed mic whose draft gained words moments ago - a thought still being composed. A
@@ -272,12 +272,12 @@ class Dictation:
         return self._mid_burst or composing
 
     def begin_speaking(self):
-        """The Entity has started talking: stop taking dictation until it's done."""
+        """Excephalon has started talking: stop taking dictation until it's done."""
         self._speaking = True
         self._announce_state()
 
     def set_auto_listen(self, on):
-        """Auto-listening: the mic opens by itself each time the Entity stops talking, so answering
+        """Auto-listening: the mic opens by itself each time Excephalon stops talking, so answering
         back costs nothing at all."""
         self._auto_listen = on
 
@@ -309,10 +309,10 @@ class Dictation:
         its own thread against a real mic; tests run it inline against a finite one.
 
         A burst is judged by the state it was CAPTURED in, never the state at its closing pause.
-        The Entity's reply used to start a burst whose pause came after end_speaking, and the
+        Excephalon's reply used to start a burst whose pause came after end_speaking, and the
         whether-to-draft check looked at the current state - so its own sentence became the user's
         draft, word for word. Every speaking transition now cuts the burst in flight: what came
-        before the Entity opened its mouth is the user's, what its voice made is a bark-check and
+        before Excephalon opened its mouth is the user's, what its voice made is a bark-check and
         nothing more, and a short grace window after end_speaking still counts as it talking,
         because its last word is in the air (speaker to mic is ~90ms) after the audio call returns.
         """
@@ -353,7 +353,7 @@ class Dictation:
             burst.add(frame, speech=speech, level=level)
             if self._hearing is not None and self._armed and not entity_sounding:
                 # Only what they are being heard saying: the room while the mic is off, and the
-                # Entity's own voice through their speakers, have no business on screen as their words.
+                # Excephalon's own voice through their speakers, have no business on screen as their words.
                 self._hearing.follow(burst)
             silence = 0 if speech else silence + 1
             ended = silence >= self._pause_frames  # they paused: that burst is over

@@ -96,7 +96,7 @@ class SpyMonitor:
 
 def test_the_desk_is_what_reports_whether_an_agent_is_alive():
     # "Again, you're lying about that. I can see that the agent just checked in two minutes ago."
-    # Silence was measured off the inbox FILENAMES, so a file Entity had written itself became an
+    # Silence was measured off the inbox FILENAMES, so a file Excephalon had written itself became an
     # agent that then "went quiet", and a real agent that hadn't happened to write to its inbox
     # looked dead. The desk is the only thing that knows which agents exist and when each spoke.
     monitor = SpyMonitor()
@@ -262,7 +262,7 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
 
 
 def test_the_roster_on_disk_says_who_is_live_and_what_they_are_doing(tmp_path):
-    # The Entity's own context resets kept stranding agents. The roster is a file, so it survives
+    # Excephalon's own context resets kept stranding agents. The roster is a file, so it survives
     # a reset - the brain can just read it back with its ordinary tools.
     roster = tmp_path / "active-agents.txt"
     hold = threading.Event()
@@ -280,7 +280,7 @@ def test_the_roster_on_disk_says_who_is_live_and_what_they_are_doing(tmp_path):
 
 
 def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
-    # "still no timestamps in the logs": the tailable record of what the Entity and an agent said
+    # "still no timestamps in the logs": the tailable record of what Excephalon and an agent said
     # to each other, stamped, written by the desk itself as it happens - not left to the brain to
     # hand-author in whatever format it invents that day.
     outbox = Outbox()
@@ -343,7 +343,7 @@ def test_closing_the_desk_shuts_its_agents_down():
 
 def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
     # They watched an empty log for fourteen minutes while the agent was alive and working, and
-    # Entity declared it dead one minute before it answered. Being able to SEE it work is the fix.
+    # Excephalon declared it dead one minute before it answered. Being able to SEE it work is the fix.
     outbox = Outbox()
     steps = ["Reading the router.", "Writing a failing test.", "Confirmed red."]
 
@@ -690,7 +690,7 @@ def test_a_worktree_that_will_not_remove_does_not_block_the_retirement(tmp_path)
 
 
 def test_the_desks_state_survives_on_disk_for_the_next_process(tmp_path):
-    # "Obviously the agent processes must be independent of Entity. I close it and reopen it
+    # "Obviously the agent processes must be independent of Excephalon. I close it and reopen it
     # constantly." The state file is the fleet's survival record: who exists, where, on which
     # CLI session - everything a fresh process needs to reattach.
     import json
@@ -724,7 +724,7 @@ def test_retiring_prunes_the_state_file(tmp_path):
 
 
 def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
-    # The whole point of Milestone 3: close Entity mid-task, reopen it, and the same agents are
+    # The whole point of Milestone 3: close Excephalon mid-task, reopen it, and the same agents are
     # there - reattached to sessions that remember everything, with in-flight work re-kicked.
     import json
 
@@ -804,7 +804,7 @@ def test_revive_asks_an_idle_agent_with_unpresented_work_to_present(tmp_path):
 
 
 def test_the_digest_names_tabs_left_by_agents_the_desk_no_longer_knows(tmp_path):
-    # He asked for a leftover tab to be closed and Entity answered that it had no agent's name
+    # He asked for a leftover tab to be closed and Excephalon answered that it had no agent's name
     # to go by: the window draws a tab for every log file, but the briefing listed only live
     # agents, so the two views never met. The digest now names the orphans, so "close that tab"
     # is one close_agent_tab call away.
@@ -1298,7 +1298,7 @@ def test_the_standing_rule_tells_the_agent_to_stop_at_presenting_and_wait_for_si
 
 
 def test_a_landing_agents_silence_clock_keeps_running():
-    # "Entity must proactively monitor agent progress and alert the user when progress stalls."
+    # "Excephalon must proactively monitor agent progress and alert the user when progress stalls."
     # The overnight failure: agents told to land went idle, their merge-watchers fired into ended
     # turns, and nobody was counting their silence - so a stall was invisible until he asked. An
     # agent still owing a merge report is still ON the clock; only its retirement stops it.

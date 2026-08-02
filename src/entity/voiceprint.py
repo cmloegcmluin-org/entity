@@ -1,4 +1,4 @@
-"""How Entity learns whose voice it should listen for, and how it asks later "is this them?".
+"""How Excephalon learns whose voice it should listen for, and how it asks later "is this them?".
 
 One minute of the user reading anything aloud becomes a numerical fingerprint of their voice: the
 recording is cut into short windows that actually hold sound, each window is embedded by a small
@@ -159,7 +159,7 @@ def _record_and_learn():  # pragma: no cover - a microphone and a person, not a 
 
     runtime_voice = Path(__file__).resolve().parents[2] / "runtime" / "voice"
     seconds = 60
-    print("Entity is going to learn your voice.")
+    print("Excephalon is going to learn your voice.")
     print(f"When the countdown starts, read anything aloud - out of your head or off a page -")
     print(f"for {seconds} seconds. Keep the room otherwise quiet: no music, no TV, nobody else.")
     input("Press Enter when you're ready to start... ")
@@ -188,7 +188,7 @@ def _record_and_learn():  # pragma: no cover - a microphone and a person, not a 
     held_out = speechy_chunks(samples)[-5:]
     scores = [voiceprint.score(chunk) for chunk in held_out]
     print(f"\nLearned. Your own voice scores {min(scores):.2f}-{max(scores):.2f} against the")
-    print("fingerprint (1.00 is a perfect match) - Entity can now start measuring what is and")
+    print("fingerprint (1.00 is a perfect match) - Excephalon can now start measuring what is and")
     print("isn't you. Nothing changes in how it hears until those measurements prove safe.")
 
 

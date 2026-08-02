@@ -258,7 +258,7 @@ def test_a_fresh_respond_after_an_interrupt_works_normally():
 
 
 def test_brain_is_isolated_from_user_settings_and_hooks():
-    # The fix for the leak: load NO user/project/local settings, so the Entity never
+    # The fix for the leak: load NO user/project/local settings, so Excephalon never
     # inherits the global coding CLAUDE.md or the Stop hook that enforces a quoted-block
     # reply format (which otherwise bleeds that format in and explodes latency).
     opts = _make_options("PERSONA", "sonnet")

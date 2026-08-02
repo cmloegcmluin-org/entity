@@ -315,7 +315,7 @@ def test_a_spoken_stop_word_cuts_the_voice_off():
 
 def test_the_stop_watcher_is_handed_the_script_and_the_audio_state():
     # Full duplex needs the mic to know two things the bare stop-watch never carried: WHAT is
-    # being spoken (to tell the Entity's own leak from someone talking over it) and WHETHER sound
+    # being spoken (to tell Excephalon's own leak from someone talking over it) and WHETHER sound
     # is in the air at all (while the brain merely thinks, the ear stays open). Both ride in on
     # catch_stop for a mic whose catch_stop can take them.
     seen = {}
@@ -368,7 +368,7 @@ def test_the_stop_watcher_is_handed_the_script_and_the_audio_state():
 def test_stop_listening_sleeps_the_entity_and_hey_entity_wakes_it():
     brain = FakeBrain()
     tts = FakeTTS()
-    stt = FakeSTT(["stop listening", "are you there", "hey Entity", "hi again", "goodbye entity"])
+    stt = FakeSTT(["stop listening", "are you there", "hey Excephalon", "hi again", "goodbye entity"])
     convo = Conversation(stt, brain, tts)
 
     convo.run()
@@ -394,6 +394,19 @@ def test_a_command_with_a_stray_word_in_front_still_fires():
 def test_a_trailing_farewell_still_ends_the_conversation():
     convo = Conversation(FakeSTT(["alright well goodbye entity"]), FakeBrain(), FakeTTS())
     assert convo.turn().farewell is True
+
+
+def test_it_answers_to_the_name_it_calls_itself():
+    # It says "Excephalon is here" on the way up and "say 'hey Excephalon' when you want me back"
+    # on the way to sleep - and then only ever listened for "entity". The app naming itself one
+    # thing and answering to another is the rename left half-done; the coined word being the one
+    # the transcriber least reliably lands is exactly why the old name stays alongside it.
+    assert Conversation(FakeSTT(["goodbye excephalon"]), FakeBrain(), FakeTTS()).turn().farewell
+    assert Conversation(FakeSTT(["goodnight excephalon"]), FakeBrain(), FakeTTS()).turn().farewell
+
+    convo = Conversation(FakeSTT(["stop listening", "hey excephalon"]), FakeBrain(), FakeTTS())
+    assert convo.turn().said == convo.suspend_reply
+    assert convo.turn().said == convo.resume_reply
 
 
 def test_a_plain_sentence_is_not_mistaken_for_a_command():
@@ -807,7 +820,7 @@ def test_run_loops_until_should_continue_is_false():
 
 
 def test_farewell_ends_the_conversation_without_asking_the_brain():
-    stt = FakeSTT(["hi", "Goodbye, Entity.", "unreachable"])
+    stt = FakeSTT(["hi", "Goodbye, Excephalon.", "unreachable"])
     brain = FakeBrain()
     tts = FakeTTS()
     convo = Conversation(stt, brain, tts)
@@ -815,7 +828,7 @@ def test_farewell_ends_the_conversation_without_asking_the_brain():
     convo.run()
 
     assert [_words(u) for u in brain.heard] == ["hi"]
-    assert "Goodbye, Entity." not in brain.heard
+    assert "Goodbye, Excephalon." not in brain.heard
     assert tts.spoken[-1] == convo.farewell_reply
 
 
@@ -898,10 +911,10 @@ def test_suspend_pauses_the_brain_until_resume():
 
 
 def test_a_wake_word_with_words_after_it_still_wakes_it():
-    # "Hey Entity. Can you hear me?" ENDS on "hear me", so an ends-with check ignored them and they had
+    # "Hey Excephalon. Can you hear me?" ENDS on "hear me", so an ends-with check ignored them and they had
     # to keep repeating themselves until they said the bare phrase alone.
     brain = FakeBrain()
-    stt = FakeSTT(["stop listening", "hey Entity, can you hear me?", "so about that bug", "goodbye entity"])
+    stt = FakeSTT(["stop listening", "hey Excephalon, can you hear me?", "so about that bug", "goodbye entity"])
     convo = Conversation(stt, brain, FakeTTS())
 
     convo.run()

@@ -12,7 +12,7 @@ the tail of the agent's own log, then either settles it - sends the agent what i
 its one typed tool and answers "handled", and the user never hears of it - or writes the one or
 two sentences the user genuinely must see, which go to the outbox like any other news. Those go
 out app-authored (not composed by the fast brain), so the unwritten-lines ledger reads them back
-to the brain and one Entity remembers everything said in its name.
+to the brain and one Excephalon remembers everything said in its name.
 """
 
 import threading
@@ -30,14 +30,14 @@ FOREMAN_EFFORT = "high"
 
 PROMPT = (
     "[Foreman turn, from the app - no user is in this exchange. You are the senior half of "
-    "Entity: the fast brain handed you a working agent's situation instead of bothering the "
+    "Excephalon: the fast brain handed you a working agent's situation instead of bothering the "
     "user.\nAgent: {agent}\nIts task: {task}\nThe situation: {question}\n"
     "The tail of its log:\n{log}\n\n"
     "If a competent technical lead could settle this - answer the question, correct the course, "
     "tell it plainly to finish - settle it: send the agent what it needs with tell_agent, then "
     "reply with the single word: handled. Only if it genuinely needs the user - a preference, "
     "scope, spending, sign-off - reply instead with one or two short sentences addressed to "
-    "them, in Entity's voice, saying what is needed and what you recommend.]"
+    "them, in Excephalon's voice, saying what is needed and what you recommend.]"
 )
 
 

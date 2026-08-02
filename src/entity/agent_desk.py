@@ -1,6 +1,6 @@
-"""The agents the Entity has started, and can still talk to.
+"""The agents Excephalon has started, and can still talk to.
 
-The Entity used to fire agents off and lose them: it spawned them as detached background tasks,
+Excephalon used to fire agents off and lose them: it spawned them as detached background tasks,
 kept only an id, and then couldn't reach them again - four in a row went unreachable, and its own
 context resets stranded the rest. It also drove them from inside a conversational turn, so while
 an agent worked, the user was talking to a wall.
@@ -114,10 +114,10 @@ def newest_session_for(cwd, store=None):
     return sessions[-1].stem if sessions else None
 
 
-# What a restarted Entity says to an agent it found recorded mid-task. The resumed session
+# What a restarted Excephalon says to an agent it found recorded mid-task. The resumed session
 # remembers everything, so the message is a nudge, not a re-briefing.
 CONTINUE_AFTER_RESTART = (
-    "Entity restarted while you were mid-task. Your session was resumed, so everything you knew "
+    "Excephalon restarted while you were mid-task. Your session was resumed, so everything you knew "
     "still holds. Pick up exactly where you left off and finish; if you had in fact finished, "
     "report where things stand."
 )
@@ -125,7 +125,7 @@ CONTINUE_AFTER_RESTART = (
 # A revived agent recorded mid-landing owes exactly one thing: the outcome. Left "idle" in
 # peace, one sat on a merge that had landed within a minute while its tab stayed open all day.
 RESUME_LANDING = (
-    "Entity restarted while you were landing approved work. Check the PR's real state right now "
+    "Excephalon restarted while you were landing approved work. Check the PR's real state right now "
     "- gh pr view --json state,mergedAt - and make this reply the outcome: merged, or exactly "
     "what stands in the way. Still queued? Watch it in the foreground of this same turn until "
     "it lands or fails; never hand the watch to a background task and end your turn."
@@ -137,7 +137,7 @@ RESUME_LANDING = (
 # feature when the app closed, came back idle, and the user only learned the work was stranded
 # by asking after it that night. Presenting is the one duty such an agent still owes.
 PRESENT_AFTER_RESTART = (
-    "Entity restarted and found you idle on work that was never presented for the user's eyes. "
+    "Excephalon restarted and found you idle on work that was never presented for the user's eyes. "
     "Say plainly where the task stands: if the work is ready, present it now with the exact "
     "steps for the user to see it running; if it is unfinished, pick it back up and finish, "
     "then present; if nothing of it survives, say that outright so it can be restarted."
@@ -212,7 +212,7 @@ class AgentDesk:
         # Where a finished agent's log goes to rest - the fleet's one archive (see tailing).
         self._archive_dir = archive_dir(self._log_dir) if self._log_dir else None
         # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
-        # know nothing about agents: a note Entity wrote itself became an "agent" that then went
+        # know nothing about agents: a note Excephalon wrote itself became an "agent" that then went
         # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
         # reported to the user as fact, and both were denied on the spot by someone reading the log.
         self._monitor = monitor
@@ -242,7 +242,7 @@ class AgentDesk:
 
     def _law_note(self):
         """The machine-wide engineering law, pointed at rather than pasted: one source, no size
-        ceiling, and each agent reads the CURRENT text, never a copy staled by Entity's uptime.
+        ceiling, and each agent reads the CURRENT text, never a copy staled by Excephalon's uptime.
         Silent when the file isn't there - a fresh machine must not send agents chasing it."""
         if self._law_path is None or not self._law_path.exists():
             return ""
@@ -290,7 +290,7 @@ class AgentDesk:
     def revive(self):
         """Reopen every agent the last process recorded, each resumed on its old session.
 
-        "Obviously the agent processes must be independent of Entity. I close it and reopen it
+        "Obviously the agent processes must be independent of Excephalon. I close it and reopen it
         constantly" - and a restart used to strand the whole fleet. An agent recorded mid-task is
         told to pick back up; one that was idle is reattached and left in peace. An entry with no
         session id was never heard from, so there is nothing to resume - it is skipped. Returns
@@ -712,7 +712,7 @@ class AgentDesk:
                 for name, entry in self._desked.items()
             ]
         self._roster_path.parent.mkdir(parents=True, exist_ok=True)
-        header = f"# agents the Entity has running, as of {self._clock('%Y-%m-%d %H:%M:%S')}\n"
+        header = f"# agents Excephalon has running, as of {self._clock('%Y-%m-%d %H:%M:%S')}\n"
         self._roster_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 

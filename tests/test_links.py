@@ -9,7 +9,7 @@ def test_a_web_address_and_a_path_on_this_machine_are_both_openable():
 
 
 def test_the_sentence_keeps_its_own_punctuation():
-    # Entity writes these mid-sentence, so the full stop after a filename is the sentence's and
+    # Excephalon writes these mid-sentence, so the full stop after a filename is the sentence's and
     # opening "notes.md." opens nothing.
     assert link_in(r"C:\ada\notes.md.") == r"C:\ada\notes.md"
     assert link_in("(https://example.com/a)") == "https://example.com/a"
@@ -44,7 +44,7 @@ def test_an_address_goes_to_the_browser_and_a_file_to_the_machine(tmp_path):
 
 
 def test_a_file_not_written_yet_opens_the_nearest_folder_that_is_there(tmp_path):
-    # Entity names a file in the same breath as making it, and a click landing a moment early
+    # Excephalon names a file in the same breath as making it, and a click landing a moment early
     # would open nothing at all - which reads as the window being broken rather than as being
     # early. The folder it is going into is somewhere to look.
     inbox = tmp_path / "runtime" / "agent-inbox"
@@ -84,7 +84,7 @@ def test_a_path_that_exists_nowhere_is_still_the_one_word_it_was():
 
     parts = link_parts(r"See C:\ada\gone.md now", exists=lambda p: False)
 
-    # Entity names a file a moment before making it, so a single-token path is offered regardless;
+    # Excephalon names a file a moment before making it, so a single-token path is offered regardless;
     # only EXTENDING across a space needs the disk.
     assert [p["link"] for p in parts if p["link"]] == [r"C:\ada\gone.md"]
 

@@ -1,4 +1,4 @@
-/* Drawing a conversation: the shape shared by Entity's own thread and every agent's.
+/* Drawing a conversation: the shape shared by Excephalon's own thread and every agent's.
 
    The server hands over entries that already know who said them and which side they belong on,
    so nothing here parses a transcript line. */

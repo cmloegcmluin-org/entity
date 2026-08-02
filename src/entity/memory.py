@@ -1,9 +1,9 @@
-"""The Entity's memory of its user.
+"""Excephalon's memory of its user.
 
 Three layers, all under the gitignored `runtime/` dir (private):
 - `profile.md`  - the hand-written standing profile (goals, projects, life context). Its title
-                  line is also what the Entity calls its user - see `user_name`.
-- `learned.md`  - facts the Entity captured itself from past conversations.
+                  line is also what Excephalon calls its user - see `user_name`.
+- `learned.md`  - facts Excephalon captured itself from past conversations.
 - `lexicon.md`  - the user's working vocabulary: names they coined (Notecraft, WaveShaper) AND the
                   domain terms and proper nouns of the fields they work in (Bayesian inference,
                   the people they collaborate with) - one word or several. Triple duty: it is part
@@ -31,8 +31,8 @@ LEXICON_POINTER = _RUNTIME / "lexicon-path.txt"
 # word to get right, a translation has a WRONG side, and the lexicon is shared with whatever else
 # transcribes them - a syntax it doesn't know would read as a term they never uses.
 DEFAULT_TRANSLATIONS_PATH = _RUNTIME / "translations.md"
-# Entity's OWN standing instructions - how it has been told to behave, accreted over time by the
-# user and by Entity itself when it is told to work differently from now on. This is the editable
+# Excephalon's OWN standing instructions - how it has been told to behave, accreted over time by the
+# user and by Excephalon itself when it is told to work differently from now on. This is the editable
 # overlay layered on top of the shipped `DEFAULT_PERSONA` base (which stays in the source, nameless);
 # it is NOT where `DEFAULT_PERSONA` lives. Gitignored like the rest of runtime, because how a
 # companion behaves for one person is personal.
@@ -81,7 +81,7 @@ ANONYMOUS_USER = "the user"
 
 
 def user_name(profile, default=ANONYMOUS_USER):
-    """What to call the person the Entity is for, taken from the title line of their own profile
+    """What to call the person Excephalon is for, taken from the title line of their own profile
     ("# Ada - standing profile" -> "Ada"), with any gloss after the title dropped.
 
     The name belongs to the user, so it is read from the user's file rather than written into the
@@ -121,7 +121,7 @@ def load_lexicon(path=None):
 
 
 def load_persona_additions(path=DEFAULT_PERSONA_ADDITIONS_PATH):
-    """Entity's own accreted standing instructions, or "" when none have been added yet."""
+    """Excephalon's own accreted standing instructions, or "" when none have been added yet."""
     return _read(path)
 
 
@@ -183,7 +183,7 @@ def save_translations(text, path=DEFAULT_TRANSLATIONS_PATH):
 
 
 def compose_persona(base_persona, profile, learned="", lexicon="", additions=""):
-    """Fold the user's standing context into the brain's system prompt: Entity's own accreted
+    """Fold the user's standing context into the brain's system prompt: Excephalon's own accreted
     standing instructions right after the base rules (they are how-to-behave, like the base), then
     life context (profile + learned) under a do-not-play-therapist warning, then their lexicon under
     its own recognize-these framing.
@@ -217,7 +217,7 @@ def parse_facts(text):
 
 
 def save_learned(text, path=DEFAULT_LEARNED_PATH):
-    """Write the user's edits to what the Entity has learned. It is a memory OF them and it is
+    """Write the user's edits to what Excephalon has learned. It is a memory OF them and it is
     theirs; when they cross something out it should stay crossed out."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -282,7 +282,7 @@ def append_learned(facts, path=DEFAULT_LEARNED_PATH):
 
 
 def save_persona_additions(text, path=DEFAULT_PERSONA_ADDITIONS_PATH):
-    """Write Entity's standing instructions back. Its persona is theirs to shape, so what they
+    """Write Excephalon's standing instructions back. Its persona is theirs to shape, so what they
     cross out stays out and what they type is stored exactly as typed - the same contract as their
     learned facts and their translations."""
     path = Path(path)
@@ -291,7 +291,7 @@ def save_persona_additions(text, path=DEFAULT_PERSONA_ADDITIONS_PATH):
 
 
 def append_persona_addition(instruction, path=DEFAULT_PERSONA_ADDITIONS_PATH):
-    """Add one standing instruction, the way Entity files one when it is told to change how it
+    """Add one standing instruction, the way Excephalon files one when it is told to change how it
     behaves from now on. Cumulative and bulleted - the mirror of `append_learned`, for how to be
     rather than for facts about the user - so a whole persona can grow one instruction at a time."""
     path = Path(path)
@@ -441,7 +441,7 @@ def save_checklist(path, heading, items, *, drawn, number=False, boxes=True):
 
     `drawn` is what the page believes the file holds - the words of every item it was drawn with,
     or last sent. Anything the section has gained since is carried over rather than overwritten:
-    Entity files enhancements into this same list while the window sits open, and every keystroke
+    Excephalon files enhancements into this same list while the window sits open, and every keystroke
     writes the whole list back, so without this the next character they type deletes them.
 
     An item is told from a fresh one two ways. By `#id` when it has one (`number`): the same id is
@@ -555,7 +555,7 @@ def open_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
 
 def revise_enhancement(item_id, text, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """Rewrite the words of enhancement #id in place, keeping its number and its tick. False when
-    no item carries that id. "Entity needs the ability to edit existing enhancement items after
+    no item carries that id. "Excephalon needs the ability to edit existing enhancement items after
     filing them, not just create new ones" - and the #id is how he names one."""
     path = Path(path)
     resolved = find_heading(profile_sections(_read(path)), heading)

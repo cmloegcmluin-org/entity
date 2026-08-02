@@ -6,7 +6,7 @@
 {% block content %}
 {#- One home for the agents, however many are being driven at once. Each exchange reads the way
     the conversation does - who asked, who answered, and when - rather than as a wall of log
-    lines. In an agent's thread the Entity is the one asking and the agent answers.
+    lines. In an agent's thread Excephalon is the one asking and the agent answers.
 
     The rail is the same contents column the Config page has: every log, active and archived, one
     click away. An archived name is not opened in place - clicking it UNARCHIVES the log, so it
@@ -63,7 +63,7 @@
     <div class="agent thread" data-agent="{{ name }}"></div>
   </section>
   {% else %}
-  <p class="empty">No agent is running. When Entity starts one, its work appears here.</p>
+  <p class="empty">No agent is running. When Excephalon starts one, its work appears here.</p>
   {% endfor %}
 </main>
 

@@ -363,8 +363,8 @@ def test_closing_a_session_releases_its_loop_rather_than_only_stopping_it(monkey
 
 
 def test_the_sessions_id_is_kept_for_resuming_it_later():
-    # An agent's whole memory lives in its CLI session; the id is what lets a restarted Entity
-    # reattach instead of stranding the fleet - the old failure was "agents die when Entity dies".
+    # An agent's whole memory lives in its CLI session; the id is what lets a restarted Excephalon
+    # reattach instead of stranding the fleet - the old failure was "agents die when Excephalon dies".
     client = StreamingClient()
     session = SdkSession(ClaudeAgentOptions(), client_factory=lambda options: client)
 

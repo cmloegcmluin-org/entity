@@ -2,7 +2,7 @@
 as one, what opens it, and how it is said aloud.
 
 They are not technical outside code, so the useful behaviour is not that a path is coloured - it is
-that it OPENS. Entity writes real Windows paths into the conversation constantly, and reading one
+that it OPENS. Excephalon writes real Windows paths into the conversation constantly, and reading one
 off the screen to type somewhere else is exactly the friction the window exists to remove.
 
 Spoken is the other half of the same question, and the same answer serves both: a thing worth
@@ -38,7 +38,7 @@ _LINK = re.compile(
     rf"https?://\S+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+|{_POSIX_PATH}")
 _IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
 
-# Entity writes these inside sentences, so the full stop after a filename is the sentence's and
+# Excephalon writes these inside sentences, so the full stop after a filename is the sentence's and
 # the bracket around an address is the sentence's too.
 _LEADING, _TRAILING = "\"'<([{", ".,;:!?\"'>)]}"
 
@@ -96,7 +96,7 @@ def offers(target, *, exists=os.path.exists):
 
 def _widest(words, index, exists):
     """How many words the path at `index` really spans, and the path itself. The one-word match is
-    the floor - offered whether or not it exists, since Entity names files a moment before making
+    the floor - offered whether or not it exists, since Excephalon names files a moment before making
     them. A wider run only wins when the disk confirms it, so a real word after a real path is
     never swallowed into it."""
     base = link_in(words[index])
@@ -174,7 +174,7 @@ def _on_this_machine(where):
 def open_link(target, *, browser=webbrowser.open, shell=_on_this_machine):
     """Open what was clicked - an address in the browser, anything else on this machine.
 
-    A path Entity has named but not written yet opens the nearest folder above it that IS there.
+    A path Excephalon has named but not written yet opens the nearest folder above it that IS there.
     It names a file in the same breath as making it, so a click can land a moment early, and a
     click that opens nothing at all reads as the window being broken rather than as being early.
     If nothing in the path exists, nothing opens - there is no such place to show."""

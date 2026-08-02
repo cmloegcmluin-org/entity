@@ -1,8 +1,12 @@
 #!/bin/bash
-# Put "Excephalon" in ~/Applications, so the Mac launches it the way the Start Menu shortcut
+# Put "Excephalon" in /Applications, so the Mac launches it the way the Start Menu shortcut
 # launches it on the desk: an icon to click, a name under it, and its own thing in the Dock.
 # Run from anywhere; everything is derived from this script's own location. Re-run after moving
 # the repo. Run it once after cloning; it creates the bundle, nothing else is needed.
+#
+# /Applications rather than ~/Applications, because that is "where literally every other
+# Application on my computer lives" - a second Applications folder most Macs never show him is a
+# place to lose an app, not a place to find one. It is admin-writable, so no password is wanted.
 #
 # The bundle is not decoration. macOS attributes a microphone permission to the APPLICATION that
 # asked, so a bare `python -m entity --gui` asks on behalf of whatever terminal started it - the
@@ -12,7 +16,7 @@
 set -e
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-app="$HOME/Applications/Excephalon.app"
+app="/Applications/Excephalon.app"
 
 python="$repo/.venv/bin/python"
 if [ ! -x "$python" ]; then
@@ -53,7 +57,7 @@ cat > "$app/Contents/Info.plist" <<'EOF'
     <key>CFBundleName</key><string>Excephalon</string>
     <key>CFBundleDisplayName</key><string>Excephalon</string>
     <key>CFBundleExecutable</key><string>Excephalon</string>
-    <key>CFBundleIdentifier</key><string>Entity.VoiceCompanion</string>
+    <key>CFBundleIdentifier</key><string>Excephalon.VoiceCompanion</string>
     <key>CFBundleIconFile</key><string>excephalon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>

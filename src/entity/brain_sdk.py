@@ -1,7 +1,7 @@
-"""The Entity's brain: one persistent Claude agent, isolated from the global config.
+"""Excephalon's brain: one persistent Claude agent, isolated from the global config.
 
 Isolation is critical: `setting_sources=[]` loads NONE of the user's own user/project/local
-settings, so the Entity never inherits their global coding CLAUDE.md or hooks. If it did,
+settings, so Excephalon never inherits their global coding CLAUDE.md or hooks. If it did,
 a terminal reply-format instruction AND the Stop hook that enforces it bleed into the
 companion - it starts answering in quoted-block format, the hook fires every turn and
 injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. Runs on the Max subscription
@@ -83,7 +83,7 @@ class BrainInterrupted(Exception):
 # is first words in about a second, not depth. The agents doing the real work run Opus-tier.
 DEFAULT_BRAIN_MODEL = FAMILIES["haiku"]
 
-# Who the Entity is for is NOT written here: `{user}` is filled in from the user's own profile when
+# Who Excephalon is for is NOT written here: `{user}` is filled in from the user's own profile when
 # the persona is composed (entity.memory.compose_persona), so this source ships with no one's name.
 DEFAULT_PERSONA = (
     "You are Excephalon, {user}'s voice companion and their hands on this machine. Everything you "
@@ -180,7 +180,7 @@ def _is_usage_limit(text):
 def _make_options(persona, model, actions=None):
     # Approvals are bypassed because there is nowhere to approve: this is a spoken conversation with
     # no terminal in front of it, so a tool waiting on a yes/no would simply hang forever. The
-    # agents the Entity dispatches are the opposite - they run approval-gated (see SupervisedAgent).
+    # agents Excephalon dispatches are the opposite - they run approval-gated (see SupervisedAgent).
     #
     # `tools=[]` is the other half of the brain's speed: no built-in tools means no way to spend
     # half a minute reading files mid-turn - everything it can do, it does through the typed

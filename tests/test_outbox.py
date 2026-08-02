@@ -24,7 +24,7 @@ def test_arrived_is_set_on_push_and_cleared_on_drain():
 def test_news_carries_which_agent_it_is_about_while_still_being_the_message():
     # Which agent a queued message is about has to survive the queue. Worked back out of the text
     # it would be reading the label to find the thing - and two of the four kinds of news the
-    # Entity queues do not carry the name in any fixed place at all.
+    # Excephalon queues do not carry the name in any fixed place at all.
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed", about="fixer")
 

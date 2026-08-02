@@ -12,17 +12,23 @@ from entity.phrases import ends_with_command as _ends_with_command
 from entity.phrases import wakes as _wakes
 from entity.waiting import chosen, roll_call
 
+# Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
+# time it names itself, so that has to be the word that works - and the coined one is the word the
+# transcriber least reliably lands, which is the whole reason the plain one stays beside it.
 DEFAULT_FAREWELLS = (
+    "goodbye excephalon",
+    "goodnight excephalon",
     "goodbye entity",
     "goodnight entity",
     "that's all for now",
     "quit",
     "exit",
 )
-# "Stop listening" doesn't quit - it puts the Entity to sleep so it stops responding; "hey entity"
-# wakes it. (While asleep it still transcribes, only to catch the wake word - nothing reaches the brain.)
+# "Stop listening" doesn't quit - it puts Excephalon to sleep so it stops responding; "hey
+# excephalon" wakes it. (While asleep it still transcribes, only to catch the wake word - nothing
+# reaches the brain.)
 DEFAULT_SUSPENDS = ("suspend", "stop listening")
-DEFAULT_RESUMES = ("resume", "hey entity")
+DEFAULT_RESUMES = ("resume", "hey excephalon", "hey entity")
 DEFAULT_FAREWELL_REPLY = "Be seeing you."
 # What they hear when the brain call fails: a plain sentence, no cause. The cause used to be IN
 # the sentence (stderr goes nowhere under pythonw, and an unexplained failure "has never said
@@ -33,13 +39,13 @@ DEFAULT_ERROR_REPLY = "Something's broken in my head - give me a moment, then as
 # They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
 # repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
-DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Entity' when you want me back."
+DEFAULT_SUSPEND_REPLY = "Resting. Say 'hey Excephalon' when you want me back."
 DEFAULT_RESUME_REPLY = "Back with you."
 
 # Said back to the brain on the turn AFTER anything was spoken in its name that it did not write -
 # an agent's notice, a roll call, a canned confirmation.
 #
-# The user hears ONE Entity. The brain only ever knew the half of it that it composed, so they could
+# The user hears ONE Excephalon. The brain only ever knew the half of it that it composed, so they could
 # quote a line at it and be told, truthfully, "I have no record of typing that myself" - which from
 # where they sit is a thing that said something and then denied saying it. Their words: "a basic
 # principle of two people having a conversation is that each person is aware of the things that
@@ -317,7 +323,7 @@ class Conversation:
             self._console.aside("(left unsaid - they had cut in)")
             return
         if not known:
-            # They are about to hear this as the Entity speaking, and the brain did not write it -
+            # They are about to hear this as Excephalon speaking, and the brain did not write it -
             # so the brain has to be told, or the two of them remember different conversations.
             self._unwritten.append(text)
         if record:  # a line already printed records itself; this is for the ones only they hear
@@ -355,7 +361,7 @@ class Conversation:
         mic is free again before the next listen), or None when voice-stop isn't available.
 
         A mic whose catch_stop can take them is also handed `script` (the words being spoken, so it
-        can tell the Entity's own leak from someone talking over it) and `audio` (whether sound is
+        can tell Excephalon's own leak from someone talking over it) and `audio` (whether sound is
         in the air at all - while the brain merely thinks, the ear stays open). A mic with the bare
         signature gets the bare call, unchanged."""
         catch_stop = getattr(self._stt, "catch_stop", None)
@@ -404,7 +410,7 @@ class Conversation:
         return release
 
     def _deliver_outbox(self):
-        """Say what the Entity has queued to say on its own - word from an agent.
+        """Say what Excephalon has queued to say on its own - word from an agent.
 
         ONE agent's news is spoken as it lands. SEVERAL arriving together are read out numbered and
         then held, because run into one utterance they arrived as a wall. When several are ready,
@@ -517,7 +523,7 @@ class Conversation:
         return Turn(heard=heard, said=roll_call(self._waiting))
 
     def _they_are_talking(self):
-        """Are they part-way through saying something? While they are, the Entity says nothing of its
+        """Are they part-way through saying something? While they are, Excephalon says nothing of its
         own accord - it once broke in while they were mid-sentence.
 
         The question used to be "is their mic on", which was the same question when the mic was a
@@ -649,7 +655,7 @@ class Conversation:
             # the record keeps the real text - the screen shows what gets clicked.
             reply = open_stream(interrupt=self._interrupt, spoken_form=as_spoken)
         # What the voice is saying, as it accrues - the stop-watcher's measure of whether a chunk
-        # heard mid-reply is the Entity's own leak or someone talking over it. Spoken form, since
+        # heard mid-reply is Excephalon's own leak or someone talking over it. Spoken form, since
         # that is what is audible and therefore what a leak transcribes.
         spoken_parts = []
 
@@ -679,7 +685,7 @@ class Conversation:
             # The floor first: its leak-script is the streamed reply, and a wedge streamed
             # nothing - spoken under it, the error line's own audio came back through the mic
             # as the user's draft words. Released, _say opens a watcher scripted with exactly
-            # the line it is about to speak, and the leak is dropped as the Entity's own.
+            # the line it is about to speak, and the leak is dropped as Excephalon's own.
             release_floor()
             self._console.evidence(f"(brain error: {_cause(exc)})")
             said = self.error_reply

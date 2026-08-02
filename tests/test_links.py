@@ -141,3 +141,38 @@ def test_ordinary_words_and_small_numbers_are_not_mistaken_for_identifiers():
 def test_a_bare_localhost_address_is_spoken_as_written():
     # He liked hearing "localhost 5200" - it IS the natural spoken form, unlike a full URL.
     assert as_spoken("It's live at localhost:5200 now.") == "It's live at localhost:5200 now."
+
+
+def test_a_path_the_other_desk_writes_is_openable_too():
+    # The app runs on a Mac as well as the desk now, and a path is offered by its SHAPE rather
+    # than by which machine is asking: neither shape is ambiguous in prose, since English has no
+    # leading-slash word and "C:\..." is nobody's sentence.
+    assert link_in("/Users/ada/workspace/runtime/inbox/task.md") == \
+        "/Users/ada/workspace/runtime/inbox/task.md"
+    assert as_spoken("I put it in /Users/ada/workspace/entity/runtime/profile.md.") == \
+        "I put it in profile.md."
+
+
+def test_a_single_slashed_word_is_prose():
+    # One segment is not a path. "/shrug" offered as openable is the wrong thing offered, which
+    # is worse than a right one left plain.
+    assert link_in("/shrug") is None
+
+
+def test_a_click_reaches_this_desk_s_own_opener(tmp_path, monkeypatch):
+    # The default `shell` is the one thing here that is not the same on both desks: `os.startfile`
+    # exists only on Windows, so on a Mac the click that used to open a folder was an
+    # AttributeError at the moment of the click - the failure a person reads as a broken window.
+    from entity import links, machine
+
+    opened = []
+    if machine.WINDOWS:
+        monkeypatch.setattr(links.os, "startfile", opened.append, raising=False)
+        expected = [str(tmp_path)]
+    else:
+        monkeypatch.setattr(links.subprocess, "run", lambda argv, **kw: opened.append(argv))
+        expected = [["open", str(tmp_path)]]
+
+    open_link(str(tmp_path))
+
+    assert opened == expected

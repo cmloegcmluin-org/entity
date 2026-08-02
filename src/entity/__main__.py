@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from entity import machine
 from entity.actions import fleet_actions
 from entity.agent_desk import AgentDesk
 from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
@@ -644,17 +645,13 @@ def main(argv=None):
             # The relaunch is a DETACHED helper spawned now, at the request - not the old
             # process's last act. It waits for this pid to die, however that goes (the one time
             # it mattered, teardown misbehaved, the spawn line never ran, and he reopened by
-            # hand), then starts a fresh app on the current code.
+            # hand), then starts a fresh app on the current code. How a helper is detached, and
+            # which interpreter brings the app back, are the desk's business and live with it.
             import os
-            import subprocess
 
-            subprocess.Popen(
-                [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "entity.relauncher",
-                 str(os.getpid()), str(_REPO)],
-                cwd=str(_REPO),
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                close_fds=True,
-            )
+            from entity.relauncher import spawn
+
+            spawn(os.getpid(), _REPO)
             control.restart()
 
     app = create_app(
@@ -686,15 +683,19 @@ def main(argv=None):
         # into the running transcriber the moment they save.
         on_translations_saved=lambda own: hooks.get("retune", lambda **_: None)(translations=own),
     )
-    # The modifier beside the spacebar + Enter submits the draft. It reaches no window on this
-    # machine, so it arrives by keyboard hook instead - and only while the Entity is in front.
-    # Held in a name for the app's lifetime, and asked whether it took: a hook that fails to
-    # install is the one place this can die in silence, so it says so on screen rather than the
-    # chord just quietly doing nothing.
-    chord = ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
-                                      focused=foreground_is_ours))
-    if not chord.start():
-        feed.push("line", "(Win+Enter to submit is unavailable - the keyboard hook didn't install)")
+    # The modifier beside the spacebar + Enter submits the draft. On Windows that is Win+Enter,
+    # which reaches no window on that machine, so it arrives by keyboard hook instead - and only
+    # while the Entity is in front. Held in a name for the app's lifetime, and asked whether it
+    # took: a hook that fails to install is the one place this can die in silence, so it says so
+    # on screen rather than the chord just quietly doing nothing. The Mac needs none of it - Cmd
+    # reaches the page like any other modifier, and window.js binds the same gesture there - so
+    # there is no hook to install and, more to the point, no failure to announce about one.
+    if machine.WINDOWS:
+        chord = ChordListener(SubmitChord(submit=lambda: feed.push("submit", ""),
+                                          focused=foreground_is_ours))
+        if not chord.start():
+            feed.push("line",
+                      "(Win+Enter to submit is unavailable - the keyboard hook didn't install)")
 
     def worker():
         try:

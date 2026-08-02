@@ -971,7 +971,11 @@ def test_an_agent_whose_log_is_archived_is_not_brought_back(tmp_path):
 
     assert desk.revive() == ["live"]  # the wrapped-up one stays wrapped up
 
-    assert [str(news) for news in outbox.drain()] == []  # and its news goes with it
+    # And its news goes with it. Asked of the WHOLE queue this was a race the machine usually
+    # won: the agent still running is told, on a thread, that the app restarted under its landing,
+    # and on a loaded machine that true and wanted line arrives before the drain. What this is
+    # about is the settled one - so it asks about the settled one.
+    assert [str(news) for news in outbox.drain() if news.about == "settled"] == []
     desk.close()
 
 

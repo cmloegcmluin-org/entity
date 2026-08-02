@@ -36,7 +36,7 @@ from claude_agent_sdk import ClaudeAgentOptions
 from entity.actions import TOOL_NAMES
 from entity.memory import ANONYMOUS_USER
 from entity.models import FAMILIES
-from entity.sdk_session import SdkSession
+from entity.sdk_session import BrainUnavailable, SdkSession
 
 
 # How long one ask may sit unanswered before the session is declared dead and shed. Generous -
@@ -385,9 +385,19 @@ class SdkBrain:
         turns = "\n".join(f"{self._user}: {said}\nYou: {reply}" for said, reply in self._recent)
         return RECENT_HEADER + turns
 
-    def warmup(self):
-        """Pay the variable cold-start of the first query now, so the user's first real turn is fast."""
-        self._live_session().ask("Reply with just: ready")
+    def warmup(self, announce=lambda line: None):
+        """Pay the variable cold-start of the first query now, so the user's first real turn is fast.
+
+        A machine nobody has signed in on still has to come UP. Launched from its icon there is no
+        console for a traceback to land in, so a warmup that raises is an app that simply never
+        appears - and the one thing he could do about it goes with it. So the state is said, as an
+        app aside rather than in Excephalon's voice, and the window opens to a conversation that
+        cannot answer yet rather than to nothing at all."""
+        try:
+            self._live_session().ask("Reply with just: ready")
+        except BrainUnavailable:
+            announce("(not signed in - run `claude` in a terminal and use /login, then restart; "
+                     "nothing can be answered until then)")
 
     def close(self):
         if self._session is not None:

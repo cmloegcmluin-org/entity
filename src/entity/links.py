@@ -15,16 +15,27 @@ this finds.
 
 import os
 import re
+import subprocess
 import webbrowser
 from pathlib import Path, PureWindowsPath
 
-# A drive-letter path, a UNC share, an http(s) address - or a LOCAL app's address the way a
-# person writes it: "localhost:5200", scheme and all dropped. That last one is scoped to the two
-# local hosts with an explicit port, because anything looser ("note:", "10:30") is ordinary prose.
-# Nothing else: a bare `src/entity` is indistinguishable from "and/or" or "they/she", and a wrong
-# thing offered as openable is worse than a right one left plain.
+from entity import machine
+
+# A drive-letter path, a UNC share, a rooted POSIX path, an http(s) address - or a LOCAL app's
+# address the way a person writes it: "localhost:5200", scheme and all dropped. That last one is
+# scoped to the two local hosts with an explicit port, because anything looser ("note:", "10:30")
+# is ordinary prose. Nothing else: a bare `src/entity` is indistinguishable from "and/or" or
+# "they/she", and a wrong thing offered as openable is worse than a right one left plain.
+#
+# Both path shapes count on both desks, because a path is offered by its shape and neither shape
+# is ambiguous prose anywhere: English has no leading-slash word, and "C:\..." is nobody's
+# sentence. Asking which machine this is would only make `C:\...` on the Mac - and the whole
+# suite's paths with it - stop being what it plainly is. A POSIX path needs TWO segments, so a
+# lone "/shrug" stays prose.
 _BARE_LOCAL = r"(?:localhost|127\.0\.0\.1):\d{2,5}(?:/\S*)?"
-_LINK = re.compile(rf"https?://\S+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+")
+_POSIX_PATH = r"/[^/\s]+/\S*"
+_LINK = re.compile(
+    rf"https?://\S+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+|{_POSIX_PATH}")
 _IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
 
 # Entity writes these inside sentences, so the full stop after a filename is the sentence's and
@@ -151,8 +162,13 @@ def _stand_in(target):
 
 
 def _on_this_machine(where):
-    """Windows' own "open this": a folder in Explorer, a file in whatever owns that kind."""
-    os.startfile(where)
+    """This desk's own "open this": a folder in its file manager, a file in whatever owns that
+    kind. Windows has a call for it and no command; macOS has a command and no call, and asking
+    for `os.startfile` there is an AttributeError at the moment of the click."""
+    if machine.WINDOWS:
+        os.startfile(where)
+    else:
+        subprocess.run(["open", where], check=False)
 
 
 def open_link(target, *, browser=webbrowser.open, shell=_on_this_machine):

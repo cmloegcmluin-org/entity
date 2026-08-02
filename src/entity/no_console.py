@@ -7,12 +7,20 @@ through `anyio.open_process`, which accepts `creationflags` but is never given a
 to be injected at that seam.
 """
 
+from entity import machine
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 def silence_child_consoles(module, attribute="open_process"):
     """Wrap `module.attribute` so every process it starts is windowless unless the caller said
-    otherwise. Idempotent-safe to call once at startup, before anything spawns."""
+    otherwise. Idempotent-safe to call once at startup, before anything spawns.
+
+    Any other desk is left alone. `creationflags` is not an ignored nicety to a POSIX subprocess
+    but a ValueError, so wrapping on the Mac would break every process the app starts - the
+    brain's own CLI first - in the name of a console window that machine never opens."""
+    if not machine.WINDOWS:
+        return
     original = getattr(module, attribute)
 
     def quietly(*args, **kwargs):

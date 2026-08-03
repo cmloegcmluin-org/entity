@@ -156,3 +156,18 @@ def test_the_brain_is_told_what_errands_can_reach_and_told_nothing_when_nothing(
     note = services_note({"asana": {}, "gmail": {}})
     assert "asana" in note and "gmail" in note and "run_errand" in note
     assert services_note({}) == ""
+
+
+def test_an_errand_session_sees_only_the_servers_it_was_given():
+    # Account-level connectors (claude.ai Gmail and friends) attach themselves to ANY session the
+    # CLI opens, and a headless one that tries to OAuth them has no browser and no user - sessions
+    # wedge on exactly that (anthropics/claude-code#36060). --strict-mcp-config pins the errand
+    # session to the servers the app handed it, and nothing else.
+    session, events, made = FakeSession(), [], []
+    runner = ErrandRunner("C:/runtime", lambda *event: events.append(event),
+                          session_factory=lambda o: made.append(o) or session)
+
+    runner.run("tidy the archive")
+
+    assert _wait_for(lambda: bool(made))
+    assert made[0].extra_args == {"strict-mcp-config": None}

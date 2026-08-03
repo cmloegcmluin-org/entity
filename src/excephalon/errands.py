@@ -87,6 +87,11 @@ def _errand_options(cwd, services=None):
         mcp_servers=services,
         permission_mode="bypassPermissions",
         setting_sources=[],
+        # Only the servers handed over above - account-level connectors (claude.ai Gmail and
+        # friends) otherwise attach to any session the CLI opens, and a headless one that tries
+        # to OAuth them has no browser and no user; sessions wedge on exactly that
+        # (anthropics/claude-code#36060).
+        extra_args={"strict-mcp-config": None},
     )
 
 

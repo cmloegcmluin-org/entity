@@ -86,18 +86,35 @@ in the standard MCP shape:
 {
   "mcpServers": {
     "asana": {"type": "sse", "url": "https://mcp.asana.com/sse"},
-    "gmail": {"type": "http", "url": "https://gmailmcp.googleapis.com/mcp/v1"},
-    "google-calendar": {"type": "http", "url": "https://calendarmcp.googleapis.com/mcp/v1"}
+    "gmail": {"command": "<repo>/.venv/bin/python",
+              "args": ["-m", "excephalon.google_bridge", "--serve",
+                       "https://gmailmcp.googleapis.com/mcp/v1"]},
+    "google-calendar": {"command": "<repo>/.venv/bin/python",
+                        "args": ["-m", "excephalon.google_bridge", "--serve",
+                                 "https://calendarmcp.googleapis.com/mcp/v1"]}
   }
 }
 ```
 
-Each server is authorized once, through the CLI's own sign-in: register it (`claude mcp add
---transport sse asana https://mcp.asana.com/sse`), then run `claude`, type `/mcp`, pick the
-server and follow the browser sign-in. The tokens live with the CLI - never in this repo, its
-config, or the app. At startup Excephalon says what is connected, and the fast brain learns it
-can send errands there; the errand session does the looking, off-turn, and the answer is spoken
-as one sentence like any other news.
+(`<repo>` is this checkout's absolute path; on Windows the interpreter is
+`.venv\Scripts\python.exe`.)
+
+Asana authorizes through the CLI's own sign-in: register it (`claude mcp add --transport sse
+asana https://mcp.asana.com/sse`), then run `claude`, type `/mcp`, pick it and follow the
+browser sign-in.
+
+Gmail and Calendar go through `excephalon.google_bridge` instead - a small stdio bridge to
+Google's own hosted MCP servers, needed twice over: Google's sign-in does not register clients
+on the fly (the CLI's `/mcp` flow fails with "does not support dynamic client registration"),
+and the CLI's remote transport mishandles these servers' responses ("tools fetch failed" on a
+valid reply). The bridge owns its auth: create an OAuth client once in Google's Cloud console
+(Desktop app; enable the Gmail and Calendar APIs, add yourself as a test user), save the
+downloaded JSON as `runtime/google/client.json`, and double-click `Connect Google.command` to
+sign in. Tokens land in `runtime/google/tokens.json` - personal, gitignored, never the source.
+
+At startup Excephalon says what is connected, and the fast brain learns it can send errands
+there; the errand session does the looking, off-turn, and the answer is spoken as one sentence
+like any other news.
 
 ## The brain, concretely
 

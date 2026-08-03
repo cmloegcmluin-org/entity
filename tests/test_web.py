@@ -36,13 +36,13 @@ def _rule_for(css, selector):
 def test_the_page_hands_over_who_said_what_rather_than_transcript_lines():
     model = _model(("day", "2026-07-18"),
                    ("message", "you", "02:41:38", "morning"),
-                   ("message", "entity", "02:42:10", "Morning."))
+                   ("message", "excephalon", "02:42:10", "Morning."))
 
     shown = _client(model).get("/messages").get_json()
 
-    assert [entry["role"] for entry in shown["entries"]] == ["day", "you", "entity"]
+    assert [entry["role"] for entry in shown["entries"]] == ["day", "you", "excephalon"]
     assert shown["entries"][1]["name"] == "You"  # who said it, resolved once, on the server
-    assert shown["entries"][2]["name"] == "Excephalon"  # the display name; the role key stays "entity"
+    assert shown["entries"][2]["name"] == "Excephalon"  # the display name; the role key is its own thing
     assert shown["sessions"] == [{"label": "2026-07-18 02:41", "at": 0}]
 
 
@@ -53,7 +53,7 @@ def test_a_message_carries_a_full_dated_reference_the_copy_link_can_locate():
     # the poll starts past that break. A break is a place, not a moment, so it carries none.
     model = _model(("day", "2026-07-18"),
                    ("message", "you", "02:41:38", "morning"),
-                   ("message", "entity", "02:42:10", "Morning."))
+                   ("message", "excephalon", "02:42:10", "Morning."))
 
     shown = _client(model).get("/messages?since=2").get_json()
 
@@ -68,7 +68,7 @@ def test_a_message_carries_the_bare_moment_the_link_button_builds_a_url_from():
     # The link button copies an actual URL - http://<host>/#at=<moment> - that reopens the
     # conversation at that turn, not the readable "Name · …" text. The server hands over the bare
     # moment (date and time, no name) for the page to encode into that hash.
-    model = _model(("day", "2026-07-18"), ("message", "entity", "02:42:10", "Morning."))
+    model = _model(("day", "2026-07-18"), ("message", "excephalon", "02:42:10", "Morning."))
 
     entries = _client(model).get("/messages").get_json()["entries"]
 
@@ -80,7 +80,7 @@ def test_a_poll_carries_only_what_the_page_has_not_drawn():
     # Four times a second against every session ever recorded, so it cannot hand back the lot.
     model = _model(("day", "2026-07-18"),
                    ("message", "you", "02:41:38", "morning"),
-                   ("message", "entity", "02:42:10", "Morning."))
+                   ("message", "excephalon", "02:42:10", "Morning."))
     client = _client(model)
 
     shown = client.get("/messages?since=2").get_json()
@@ -605,7 +605,7 @@ def test_a_message_naming_a_path_hands_it_over_as_something_to_open():
     # Excephalon names paths and addresses constantly, and reading one off the screen to retype it is
     # exactly what this saves. The rules live in links.py; the page only draws what it is handed.
     named = r"C:\ada\runtime\task.md"
-    model = _model(("message", "entity", "10:00:00",
+    model = _model(("message", "excephalon", "10:00:00",
                     rf"Filed it at {named}, see https://ex.com/x"))
 
     parts = _client(model).get("/messages").get_json()["entries"][0]["parts"]
@@ -799,15 +799,15 @@ def test_the_conversation_is_replayed_from_what_was_said_not_parsed_back_out_of_
     kept = MessageLog(tmp_path / "session-20260729-021500.jsonl",
                       clock=lambda: datetime(2026, 7, 29, 2, 15, 0))
     kept.keep("you", "The demo is good to ship.\n\nI have lots of feedback on the other one:")
-    kept.keep("entity", "Landing it.")
-    kept.keep("entity", "I've got an update on the copy fixes when you're ready.")
+    kept.keep("excephalon", "Landing it.")
+    kept.keep("excephalon", "I've got an update on the copy fixes when you're ready.")
     kept.keep("status", "(thinking\u2026)")
 
     model = TranscriptModel(clock=lambda: "12:00:00")
     for op, payload in past_messages(tmp_path):
         model.apply(op, payload)
 
-    assert [entry["role"] for entry in model.entries] == ["day", "you", "entity", "entity",
+    assert [entry["role"] for entry in model.entries] == ["day", "you", "excephalon", "excephalon",
                                                           "status"]
     assert model.entries[1]["text"].count("\n") == 2  # his paragraphs, whole
     assert model.entries[3]["text"].startswith("I've got an update")  # spoken, and his to see
@@ -832,7 +832,7 @@ def test_an_old_log_is_converted_once_and_read_as_messages_after(tmp_path):
 
     assert (tmp_path / "session-20260718-024138.jsonl").exists()  # converted, once
     said = [payload for _, payload in ops if payload[0] == "message"]
-    assert [message[1] for message in said] == ["you", "entity", "entity", "status"]
+    assert [message[1] for message in said] == ["you", "excephalon", "excephalon", "status"]
     assert said[0][3] == "morning\nand one more thing"   # one submission, not two lines
     assert said[2][3].startswith("I've got an update")     # spoken aloud: Excephalon's own
     assert said[3][3] == "(thinking\u2026)"                # an aside stays an aside

@@ -12,7 +12,7 @@ same id and there must be one definition of it rather than a copy in the install
 import queue
 import time
 
-from entity.transcript import DAY_BREAK, SESSION_BREAK, parse_line
+from entity.transcript import DAY_BREAK, SELF, SESSION_BREAK, parse_line
 
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the
@@ -22,7 +22,7 @@ APP_ID = "Excephalon.VoiceCompanion"
 
 # Who sits on which side of the thread. A heads-up is Excephalon talking out of turn, so it takes
 # Excephalon's side and says so in the name.
-SIDES = {"you": "right", "entity": "left", "heads-up": "left"}
+SIDES = {"you": "right", SELF: "left", "heads-up": "left"}
 
 
 def _clock():

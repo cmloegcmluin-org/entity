@@ -102,7 +102,7 @@ def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
     from entity.transcript import parse_line
 
     assert parse_line("[03:41:12] you said: pick up the drive work") == ("you", "03:41:12", "pick up the drive work")
-    assert parse_line("[03:41:20] entity> Started 1 agent.") == ("entity", "03:41:20", "Started 1 agent.")
+    assert parse_line("[03:41:20] entity> Started 1 agent.") == ("excephalon", "03:41:20", "Started 1 agent.")
     assert parse_line("[03:43:03] entity (heads-up)> the fixer is done") == ("heads-up", "03:43:03", "the fixer is done")
     assert parse_line("[03:41:18] (thinking…)") == ("status", "03:41:18", "(thinking…)")
 
@@ -223,3 +223,35 @@ def test_a_question_the_session_died_on_is_not_paired_with_the_next_answer(tmp_p
     )
 
     assert recent_turns(tmp_path) == [("a fresh start", "the fresh answer")]
+
+
+def test_history_recorded_under_the_old_name_is_still_his_conversation(tmp_path):
+    from entity.transcript import messages_in
+
+    # Every message the app has ever stored carries `"role": "entity"`, and the .log lines it
+    # wrote carry an "entity> " prefix. The displayed name was never in either file - it is looked
+    # up from the role when the page draws - so renaming what gets STORED would leave months of
+    # his own conversations carrying a role nothing recognises: no name, not a message, no side to
+    # sit on. "the conversation history had been rewritten. this is terrifying" was a far smaller
+    # version of that. Both spellings read back as the one thing they always were.
+    record = tmp_path / "session-20260101-120000.jsonl"
+    record.write_text(
+        '{"at": "2026-01-01 12:00:00", "role": "you", "text": "hi"}\n'
+        '{"at": "2026-01-01 12:00:01", "role": "entity", "text": "old spelling"}\n'
+        '{"at": "2026-01-01 12:00:02", "role": "excephalon", "text": "new spelling"}\n',
+        encoding="utf-8")
+
+    spoken = [(role, text) for role, _, _, text in messages_in(record) if role != "you"]
+
+    assert spoken == [("excephalon", "old spelling"), ("excephalon", "new spelling")]
+
+
+def test_a_log_line_written_under_either_name_reads_back_the_same():
+    from entity.transcript import parse_line
+
+    assert parse_line("[12:00:01] entity> old") == ("excephalon", "12:00:01", "old")
+    assert parse_line("[12:00:02] excephalon> new") == ("excephalon", "12:00:02", "new")
+    # The heads-up prefix starts with the same word, so it has to be tried first or an unprompted
+    # line comes back as an ordinary reply and stops being marked as one.
+    assert parse_line("[12:00:03] entity (heads-up)> old") == ("heads-up", "12:00:03", "old")
+    assert parse_line("[12:00:04] excephalon (heads-up)> new") == ("heads-up", "12:00:04", "new")

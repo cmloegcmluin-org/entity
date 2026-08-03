@@ -52,7 +52,7 @@ class MessageLog:
     the moment it is said, and read straight back.
 
     One object per message: {"at": "<date time>", "role": ..., "text": ...}. Roles are the
-    conversation's own - "you", "entity", "heads-up", "status" - and the text is exact, newlines
+    conversation's own - "you", "excephalon", "heads-up", "status" - and the text is exact, newlines
     and all."""
 
     def __init__(self, path, *, clock=datetime.now):
@@ -86,7 +86,8 @@ def messages_in(path):
             continue
         at = str(held.get("at", ""))
         date, _, clock = at.partition(" ")
-        kept.append((held.get("role", "status"), date, clock, held.get("text", "")))
+        role = held.get("role", "status")
+        kept.append((SELF if role == WAS_SELF else role, date, clock, held.get("text", "")))
     return kept
 
 
@@ -120,13 +121,13 @@ def messages_from_log(path):
         if role in ("day", "session"):
             continue
         if (kept and role == "status" and clock == kept[-1][2]
-                and kept[-1][0] in ("you", "entity", "heads-up")
+                and kept[-1][0] in ("you", SELF, "heads-up")
                 and not text.startswith(("(", "["))):
             joined = kept[-1][3].rstrip("\n") + "\n" + text
             kept[-1] = kept[-1][:3] + (joined,)
             continue
         if role == "status" and not text.startswith(("(", "[")):
-            role = "entity"  # spoken, never printed: the app talking in its own voice
+            role = SELF  # spoken, never printed: the app talking in its own voice
         kept.append((role, date, clock, text))
     return kept
 
@@ -223,21 +224,39 @@ def day_of(line):
     return None
 
 
+# What every archive calls Excephalon's own side, and what it is stored as from here on. The
+# displayed name was never in these files - it is looked up from the role when the page draws -
+# so this string is a STORAGE format, and everything ever written carries the old spelling of it.
+SELF = "excephalon"
+WAS_SELF = "entity"  # what the same side is called in everything recorded before the rename
+
 # The prefixes an agent's exchange is written under. Named here because the desk writes them and
 # `parse_line` reads them back, and two spellings of one format is a bug nothing would catch.
-ENTITY_SAID = "ENTITY> "
+ENTITY_SAID = "EXCEPHALON> "
 AGENT_SAID = "AGENT> "
 AGENT_DID = "WORK> "  # what it ran, and what came back - the machinery under its words
+
+# What Console writes, and what an agent's desk used to. Both spellings are read; only the first
+# of each pair is ever written. Dropping the old ones would not lose a setting - it would lose his
+# history, since a line whose role nothing recognises stops being a message at all: no name, no
+# side, not a bubble.
+SELF_SAID = f"{SELF}> "
+SELF_HEADS_UP = f"{SELF} (heads-up)> "
 
 
 # Both archives this reads: their own conversation (Console's prefixes) and an agent exchange (the
 # desk's). "you" is whoever opened the exchange - them in their own thread, Excephalon in an agent's.
+# Longest first within a spelling: "excephalon (heads-up)> " starts with "excephalon", so tried the
+# other way round an unprompted line comes back as an ordinary reply and stops being marked as one.
 _ROLE_PREFIXES = (
     ("you said: ", "you"),
-    ("entity (heads-up)> ", "heads-up"),
-    ("entity> ", "entity"),
+    (SELF_HEADS_UP, "heads-up"),
+    (SELF_SAID, SELF),
+    (f"{WAS_SELF} (heads-up)> ", "heads-up"),
+    (f"{WAS_SELF}> ", SELF),
     (ENTITY_SAID, "you"),
-    (AGENT_SAID, "entity"),
+    ("ENTITY> ", "you"),
+    (AGENT_SAID, SELF),
     (AGENT_DID, "work"),
 )
 
@@ -278,7 +297,7 @@ def recent_turns(directory, keep=16):
         role, _, text = parsed
         if role == "you":
             question = text  # a question already waiting is the one the session died on - dropped
-        elif role == "entity" and question is not None:
+        elif role == SELF and question is not None:
             turns.append((question, text))
             question = None
     return turns[-keep:]

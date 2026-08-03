@@ -31,12 +31,13 @@ from entity.memory import (
 )
 from entity.links import link_parts, offers, open_link
 from entity.mirror import SIDES, TranscriptModel, sessions
+from entity.transcript import SELF
 from entity.tailing import LogTail, archive_dir, discover, safe_name
 from entity.vocabulary import translations_in_force
 
 # The role keys are the transcript's own line format and never change; the NAMES are what the
 # window shows, and the window shows Excephalon now.
-SPEAKERS = {"you": "You", "entity": "Excephalon", "heads-up": "Excephalon · heads-up"}
+SPEAKERS = {"you": "You", SELF: "Excephalon", "heads-up": "Excephalon · heads-up"}
 
 # The profile's own categories - each names only the stem of its heading, because a profile
 # glosses its headings however it likes ("Enhancements they want for you (roadmap, not now)").
@@ -540,7 +541,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
             return ({"entries": [], "at": 0, "total": 0, "sessions": []}, 404)
         # In an agent's thread Excephalon is the one asking and the agent answers.
         return _thread(agents.entries(name), request.args.get("since", 0, type=int),
-                       {"you": "Excephalon", "entity": name, "heads-up": "Excephalon · heads-up"})
+                       {"you": "Excephalon", SELF: name, "heads-up": "Excephalon · heads-up"})
 
     @app.post("/agents/<name>/rename")
     def rename_agent(name):

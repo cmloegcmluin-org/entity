@@ -40,7 +40,7 @@ def test_reply_is_shown_prefixed_so_he_can_read_it():
     console.reply("the lights are on")
 
     assert any("the lights are on" in line for line in lines)
-    assert lines[0].startswith("entity>")
+    assert lines[0].startswith("excephalon>")
 
 
 def test_heads_up_is_marked_as_unprompted():
@@ -76,7 +76,7 @@ def test_what_is_printed_is_also_written_to_the_session_record():
     console.heard("pick up the drive work")
     console.reply("on it")
 
-    assert recorded == ["you said: pick up the drive work", "entity> on it\n"]
+    assert recorded == ["you said: pick up the drive work", "excephalon> on it\n"]
 
 
 def test_a_typed_run_still_records_what_he_said_even_though_it_is_not_echoed():
@@ -97,7 +97,7 @@ def test_a_run_of_ignores_is_recorded_once_as_a_tally_not_line_by_line():
         console.ignored()
     console.reply("back with you")
 
-    assert recorded == ["(ignored 16 while asleep)", "entity> back with you\n"]
+    assert recorded == ["(ignored 16 while asleep)", "excephalon> back with you\n"]
 
 
 def test_a_run_of_ignores_collapses_onto_one_line_with_a_tally():
@@ -116,7 +116,7 @@ def test_a_reply_closes_the_ignore_run_so_it_does_not_land_on_the_counter():
     console.reply("back with you")
 
     assert lines[1] == "\n"  # the counter line is terminated first
-    assert lines[2].startswith("entity>")
+    assert lines[2].startswith("excephalon>")
 
 
 def test_a_later_ignore_starts_a_fresh_count():
@@ -143,8 +143,8 @@ def test_messages_are_reported_with_who_said_them():
 
     assert said == [
         ("you", "pick up the drive work"),
-        ("entity", "on it"),
-        ("entity", "Message received."),
+        ("excephalon", "on it"),
+        ("excephalon", "Message received."),
         ("heads-up", "the fixer agent is done"),
         ("status", "(thinking…)"),
     ]
@@ -172,5 +172,5 @@ def test_an_apps_own_aside_is_not_a_message_from_excephalon():
     console.spoke("Both agents are green.")
     console.aside("(cut off mid-utterance)")
 
-    assert said == [("entity", "Both agents are green."), ("status", "(cut off mid-utterance)")]
+    assert said == [("excephalon", "Both agents are green."), ("status", "(cut off mid-utterance)")]
     assert kept == ["Both agents are green.", "(cut off mid-utterance)"]  # both kept, as always

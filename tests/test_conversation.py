@@ -72,7 +72,7 @@ def test_the_reply_is_printed_to_the_terminal_before_it_is_spoken():
 
     convo.turn()
 
-    printed = next(e for e in events if e.startswith("print:entity>") and "reply to hi" in e)
+    printed = next(e for e in events if e.startswith("print:excephalon>") and "reply to hi" in e)
     assert events.index(printed) < events.index("say:reply to hi")  # they can read it before/while it speaks
 
 
@@ -987,7 +987,7 @@ def test_what_he_hears_is_in_the_record_even_when_the_terminal_does_not_show_it(
 
     convo.turn()
 
-    assert recorded.count("entity> reply to hi\n") == 1  # a printed reply isn't recorded twice
+    assert recorded.count("excephalon> reply to hi\n") == 1  # a printed reply isn't recorded twice
 
 
 def test_a_reply_cut_off_mid_utterance_is_noted_in_the_record():
@@ -1373,7 +1373,7 @@ def test_the_bubble_appears_while_the_voice_is_still_speaking():
 
     convo.turn()
 
-    printed = next(e for e in events if e.startswith("print:entity>"))
+    printed = next(e for e in events if e.startswith("print:excephalon>"))
     assert events.index(printed) < events.index("audio finished")  # read along, not read after
 
 

@@ -300,9 +300,9 @@ def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
     desk.close()
 
     log = (tmp_path / "fixer.log").read_text(encoding="utf-8")
-    assert "ENTITY> fix the drive link" in log
+    assert "EXCEPHALON> fix the drive link" in log
     assert "AGENT> [fixer] did: fix the drive link" in log
-    assert "ENTITY> only the subfolder" in log
+    assert "EXCEPHALON> only the subfolder" in log
     for line in log.splitlines():
         if line.startswith("====="):
             continue

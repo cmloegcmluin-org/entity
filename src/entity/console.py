@@ -14,6 +14,8 @@ right here.
 
 import sys
 
+from entity.transcript import SELF, SELF_HEADS_UP, SELF_SAID
+
 
 def _print_flushed(line):
     # Flush so the "(thinking…)" indicator actually appears while it thinks, not after.
@@ -80,15 +82,15 @@ class Console:
         self._messages("status", self._thinking_notice)
 
     def reply(self, text):
-        self._line(f"entity> {text}\n")  # trailing blank line separates turns in the transcript
-        self._messages("entity", text)
+        self._line(f"{SELF_SAID}{text}\n")  # trailing blank line separates turns in the transcript
+        self._messages(SELF, text)
 
     def spoke(self, text):
         """Something they HEARD that the terminal deliberately doesn't show - the acknowledgement, the
         still-working check-ins. It still belongs in the record: reading a session back and seeing no
         check-ins made it look like none had fired, when they had actually heard every one."""
         self._line(text, show=False)
-        self._messages("entity", text)  # they heard it, so a conversation view shows it
+        self._messages(SELF, text)  # they heard it, so a conversation view shows it
 
     def aside(self, text):
         """Something the APP noticed, in its own voice - "(cut off mid-utterance)", a voice
@@ -99,7 +101,7 @@ class Console:
         self._messages("status", text)
 
     def heads_up(self, text):
-        self._line(f"entity (heads-up)> {text}\n")  # marked so an unprompted line isn't mistaken for a reply
+        self._line(f"{SELF_HEADS_UP}{text}\n")  # marked so an unprompted line isn't mistaken for a reply
         self._messages("heads-up", text)
 
     def evidence(self, text):

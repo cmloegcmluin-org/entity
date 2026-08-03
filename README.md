@@ -65,6 +65,7 @@ and a barked stop word cuts the audio, while a sentence from the TV never can.
 | `learned.md` | Facts Excephalon captured itself, appended at the end of each session. Yours to edit. |
 | `lexicon.md` | Your working vocabulary — coined names, domain terms, the people you work with. |
 | `lexicon-path.txt` | Optional: one line naming the lexicon file, if you keep it somewhere shared. |
+| `services.json` | Optional: your own services (Asana, Gmail, Google Calendar) as standard MCP `{"mcpServers": ...}` config. See below. |
 | `mic.txt` | Optional: a device-name substring to force a specific microphone. |
 | `mic-gain.txt` | Optional: a number to boost a quiet mic (e.g. `5`). |
 | `vocab-roots.txt` | Optional: extra directories, one per line, whose folder names seed the vocabulary. |
@@ -74,6 +75,29 @@ startup, so it knows you without being re-told; at the end of a session the brai
 new durable facts came up, and those are appended to `learned.md`. The lexicon does triple duty:
 standing context, transcription bias (see `vocabulary`), and — if you point `lexicon-path.txt` at
 a shared copy — whatever else transcribes you.
+
+## Your services (Asana, Gmail, Google Calendar)
+
+Excephalon's errand hand can reach your own services, so "what's on my calendar today" or
+"anything due in Asana" is answered by looking, not guessing. `runtime/services.json` lists them
+in the standard MCP shape:
+
+```json
+{
+  "mcpServers": {
+    "asana": {"type": "sse", "url": "https://mcp.asana.com/sse"},
+    "gmail": {"type": "http", "url": "https://gmailmcp.googleapis.com/mcp/v1"},
+    "google-calendar": {"type": "http", "url": "https://calendarmcp.googleapis.com/mcp/v1"}
+  }
+}
+```
+
+Each server is authorized once, through the CLI's own sign-in: register it (`claude mcp add
+--transport sse asana https://mcp.asana.com/sse`), then run `claude`, type `/mcp`, pick the
+server and follow the browser sign-in. The tokens live with the CLI - never in this repo, its
+config, or the app. At startup Excephalon says what is connected, and the fast brain learns it
+can send errands there; the errand session does the looking, off-turn, and the answer is spoken
+as one sentence like any other news.
 
 ## The brain, concretely
 

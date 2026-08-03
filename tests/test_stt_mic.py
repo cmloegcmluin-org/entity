@@ -2,8 +2,8 @@ import threading
 
 import numpy as np
 
-from entity.mic import BackgroundMicrophone
-from entity.stt_mic import FRAME, MicSTT, NoiseFloor, _is_invented, _strip_terminator
+from excephalon.mic import BackgroundMicrophone
+from excephalon.stt_mic import FRAME, MicSTT, NoiseFloor, _is_invented, _strip_terminator
 
 
 class FakeMic:
@@ -464,7 +464,7 @@ def test_covered_by_recognizes_the_scripts_own_words_arriving_back():
     # The measured mark of Excephalon's leak: it transcribes near-verbatim ("Here, ready to go.
     # What can I do for you?" came back word for word as the user's draft). Words the script
     # contains are its voice; keep treating them as such.
-    from entity.stt_mic import covered_by
+    from excephalon.stt_mic import covered_by
 
     assert covered_by("the dropdown is reordered", "The dropdown is reordered and live now.") is True
 
@@ -472,19 +472,19 @@ def test_covered_by_recognizes_the_scripts_own_words_arriving_back():
 def test_covered_by_survives_the_transcribers_retokenizing():
     # ASR splits and joins compounds freely ("dropdown" -> "drop down"); containment is checked
     # against the squashed script so tokenization drift cannot turn leak into "the user".
-    from entity.stt_mic import covered_by
+    from excephalon.stt_mic import covered_by
 
     assert covered_by("the drop down is re ordered", "The dropdown is reordered and live.") is True
 
 
 def test_covered_by_knows_the_users_own_words_when_it_hears_them():
-    from entity.stt_mic import covered_by
+    from excephalon.stt_mic import covered_by
 
     assert covered_by("actually put it under the settings menu", "The dropdown is reordered and live.") is False
 
 
 def test_covered_by_with_no_script_covers_nothing():
-    from entity.stt_mic import covered_by
+    from excephalon.stt_mic import covered_by
 
     assert covered_by("any words at all spoken here", "") is False
 
@@ -494,7 +494,7 @@ def test_a_string_of_phantom_fillers_is_invented_even_over_real_sound():
     # runs past the deliberate line, and the bypass then waved through whole strings of fillers
     # the model invented over it. Nobody's real turn is three-plus filler phrases and nothing
     # else; a single "thank you" carried by real voice still lands.
-    from entity.stt_mic import _is_invented
+    from excephalon.stt_mic import _is_invented
 
     assert _is_invented("Thank you. Mm-hmm. Yeah. Thank you.", "over", deliberate=True) is True
     assert _is_invented("thank you", "over", deliberate=True) is False

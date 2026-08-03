@@ -24,7 +24,7 @@ A capital that is NOT one of those openers is left alone: "...on anything other 
 You're supposed to..." reads identically to a real boundary, and telling them apart needs meaning.
 Guessing there would run his sentences together all day. Mishearings of his own terms ("one A
 feature", "Entity Link copyfixes") are a different failure and belong to the transcriber's
-vocabulary pass (see entity.vocabulary), not to this one.
+vocabulary pass (see excephalon.vocabulary), not to this one.
 """
 
 import re

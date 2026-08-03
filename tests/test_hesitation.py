@@ -1,4 +1,4 @@
-from entity.hesitation import without_hesitations
+from excephalon.hesitation import without_hesitations
 
 
 def test_the_sounds_he_makes_while_thinking_are_dropped():

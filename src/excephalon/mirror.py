@@ -12,7 +12,7 @@ same id and there must be one definition of it rather than a copy in the install
 import queue
 import time
 
-from entity.transcript import DAY_BREAK, SELF, SESSION_BREAK, parse_line
+from excephalon.transcript import DAY_BREAK, SELF, SESSION_BREAK, parse_line
 
 
 # Windows groups taskbar buttons by AppUserModelID, and a process that declares none inherits the

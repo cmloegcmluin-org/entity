@@ -1,4 +1,4 @@
-from entity.console import Console
+from excephalon.console import Console
 
 
 def _recording():

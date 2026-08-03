@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from entity import machine, relauncher
+from excephalon import machine, relauncher
 
 
 def test_a_fresh_app_starts_on_this_desk_s_own_interpreter(tmp_path):
@@ -29,7 +29,7 @@ def test_the_helper_outlives_the_app_that_asked_for_it(tmp_path):
     relauncher.spawn(4321, tmp_path, start=lambda argv, **kw: started.append((argv, kw)))
 
     [(argv, kwargs)] = started
-    assert argv == [str(relauncher.app_python(tmp_path)), "-m", "entity.relauncher",
+    assert argv == [str(relauncher.app_python(tmp_path)), "-m", "excephalon.relauncher",
                     "4321", str(tmp_path)]
     assert kwargs["cwd"] == str(tmp_path)
     assert ("creationflags" in kwargs) is machine.WINDOWS
@@ -43,7 +43,7 @@ def test_the_new_app_comes_up_once_the_old_one_is_gone(tmp_path):
                                 start=lambda argv, **kw: started.append(argv))
 
     assert answers == []  # it waited for every "still here" before giving up on it
-    assert started == [[str(relauncher.app_python(tmp_path)), "-m", "entity", "--gui"]]
+    assert started == [[str(relauncher.app_python(tmp_path)), "-m", "excephalon", "--gui"]]
 
 
 def test_an_app_that_never_dies_still_gets_a_successor(tmp_path):

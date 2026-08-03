@@ -1,4 +1,4 @@
-from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
+from excephalon.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
 
 class FakeModel:

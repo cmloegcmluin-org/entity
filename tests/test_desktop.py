@@ -2,7 +2,7 @@ import json
 import socket
 import threading
 
-from entity.desktop import (
+from excephalon.desktop import (
     WINDOW,
     Controls,
     free_port,
@@ -12,7 +12,7 @@ from entity.desktop import (
     serve,
     set_app_id,
 )
-from entity.mirror import APP_ID
+from excephalon.mirror import APP_ID
 
 
 class _App:
@@ -184,7 +184,7 @@ def test_the_taskbar_identity_is_claimed_before_the_window_exists(monkeypatch):
     # whatever other pythonw-hosted app already owns one - Excephalon turned up as another app. Claimed
     # after the window is made, it is the same as never claimed.
     claimed = []
-    monkeypatch.setattr("entity.desktop.set_app_id", lambda app_id: claimed.append(app_id))
+    monkeypatch.setattr("excephalon.desktop.set_app_id", lambda app_id: claimed.append(app_id))
     webview = _Webview()
 
     open_window(_App(), webview=webview, port=8123)

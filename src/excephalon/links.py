@@ -19,12 +19,12 @@ import subprocess
 import webbrowser
 from pathlib import Path, PureWindowsPath
 
-from entity import machine
+from excephalon import machine
 
 # A drive-letter path, a UNC share, a rooted POSIX path, an http(s) address - or a LOCAL app's
 # address the way a person writes it: "localhost:5200", scheme and all dropped. That last one is
 # scoped to the two local hosts with an explicit port, because anything looser ("note:", "10:30")
-# is ordinary prose. Nothing else: a bare `src/entity` is indistinguishable from "and/or" or
+# is ordinary prose. Nothing else: a bare `src/excephalon` is indistinguishable from "and/or" or
 # "they/she", and a wrong thing offered as openable is worse than a right one left plain.
 #
 # Both path shapes count on both desks, because a path is offered by its shape and neither shape

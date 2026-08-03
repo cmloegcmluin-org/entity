@@ -14,8 +14,8 @@ import threading
 
 from claude_agent_sdk import ClaudeAgentOptions
 
-from entity.models import FAMILIES
-from entity.sdk_session import SdkSession
+from excephalon.models import FAMILIES
+from excephalon.sdk_session import SdkSession
 
 ERRAND_MODEL = FAMILIES["haiku"]  # fetch-and-carry work: the smallest, fastest tier
 

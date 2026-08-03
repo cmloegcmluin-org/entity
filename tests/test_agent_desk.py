@@ -2,8 +2,8 @@ import threading
 import time
 from types import SimpleNamespace
 
-from entity.agent_desk import AgentDesk
-from entity.outbox import Outbox
+from excephalon.agent_desk import AgentDesk
+from excephalon.outbox import Outbox
 
 
 def said(text):
@@ -868,7 +868,7 @@ def test_newest_session_for_reads_the_clis_per_cwd_store(tmp_path):
     # that ever ran in an agent's own worktree is that agent, because nothing else runs there.
     import os
 
-    from entity.agent_desk import newest_session_for
+    from excephalon.agent_desk import newest_session_for
 
     folder = tmp_path / "C--wt-stray"
     folder.mkdir()
@@ -888,7 +888,7 @@ def test_revive_recovers_a_lost_session_id_from_the_store(tmp_path, monkeypatch)
     # from the CLI's own store instead of skipping the fleet.
     import json
 
-    from entity import agent_desk
+    from excephalon import agent_desk
 
     monkeypatch.setattr(agent_desk, "newest_session_for", lambda cwd, store=None: "sess-found")
     state = tmp_path / "agents.json"
@@ -1036,7 +1036,7 @@ def test_work_cannot_be_presented_while_the_agent_is_still_working():
     # not exist yet.
     import pytest
 
-    from entity.delivery import DeliveryError
+    from excephalon.delivery import DeliveryError
 
     hold = threading.Event()
     desk, _, made = _desk(hold=hold)
@@ -1052,7 +1052,7 @@ def test_work_cannot_be_presented_while_the_agent_is_still_working():
 def test_presenting_an_agent_the_desk_does_not_have_refuses():
     import pytest
 
-    from entity.delivery import DeliveryError
+    from excephalon.delivery import DeliveryError
 
     desk, _, _ = _desk()
 
@@ -1091,7 +1091,7 @@ def test_a_rejected_verdict_carries_the_feedback_back():
 def test_a_verdict_with_no_presentation_is_refused_by_the_desk():
     import pytest
 
-    from entity.delivery import DeliveryError
+    from excephalon.delivery import DeliveryError
 
     desk, outbox, _ = _desk()
     _finished(desk, outbox)
@@ -1204,7 +1204,7 @@ def test_a_merge_before_approval_is_refused_with_a_reason():
     # The code half of the review loop: an agent must not enqueue its own PR before the user has
     # seen the work. frozen-tabs and enhancements-tab-fixes both merged with no verdict on file
     # because the persona was only ASKED to wait - a gate that cannot forget is the fix.
-    from entity.agent_desk import landing_block_reason
+    from excephalon.agent_desk import landing_block_reason
 
     reason = landing_block_reason("building", "Bash", {"command": "gh pr merge --auto"})
 
@@ -1215,7 +1215,7 @@ def test_a_merge_before_approval_is_refused_with_a_reason():
 def test_landing_is_allowed_once_the_verdict_is_in():
     # After an approved verdict the work's stage is "landing", and the mechanical push/PR/merge is
     # exactly what should run - the gate must not stand in the way of the step it was waiting for.
-    from entity.agent_desk import landing_block_reason
+    from excephalon.agent_desk import landing_block_reason
 
     assert landing_block_reason("landing", "Bash", {"command": "gh pr merge --auto"}) is None
     assert landing_block_reason("landing", "Bash", {"command": "git push -u origin HEAD"}) is None
@@ -1224,7 +1224,7 @@ def test_landing_is_allowed_once_the_verdict_is_in():
 def test_push_and_opening_a_pr_are_landing_too_not_only_the_merge():
     # "pushing PRs, auto-merging, etc." - the whole outward-facing set is gated, not just the final
     # enqueue, because a pushed branch with auto-merge armed lands with no further command.
-    from entity.agent_desk import landing_block_reason
+    from excephalon.agent_desk import landing_block_reason
 
     assert landing_block_reason("building", "Bash", {"command": "git push origin HEAD"})
     assert landing_block_reason("ready", "Bash", {"command": "gh pr create --fill --base main"})
@@ -1234,16 +1234,16 @@ def test_push_and_opening_a_pr_are_landing_too_not_only_the_merge():
 def test_local_work_and_presenting_never_trip_the_gate():
     # Rebasing onto latest main and standing the app up to present it are the steps the agent takes
     # BEFORE a verdict - blocking those would make presenting impossible and defeat the loop.
-    from entity.agent_desk import landing_block_reason
+    from excephalon.agent_desk import landing_block_reason
 
     for command in ("git fetch origin", "git rebase origin/main", "git commit -m wip",
-                    "python -m entity", "gh pr view 42", "pytest -q"):
+                    "python -m excephalon", "gh pr view 42", "pytest -q"):
         assert landing_block_reason("building", "Bash", {"command": command}) is None
 
 
 def test_only_bash_commands_are_gated():
     # The gate reads shell commands; a read or an edit carries no way to ship work outward.
-    from entity.agent_desk import landing_block_reason
+    from excephalon.agent_desk import landing_block_reason
 
     assert landing_block_reason("building", "Edit", {"file_path": "x", "new_string": "git push"}) is None
     assert landing_block_reason("building", "Read", {"file_path": "gh pr merge"}) is None
@@ -1342,10 +1342,10 @@ def test_an_agent_can_be_renamed_and_the_app_uses_the_new_name(tmp_path):
     logs = tmp_path / "agent-logs"
     state = tmp_path / "agents.json"
     desk, outbox, _ = _desk(log_dir=logs, state=state)
-    desk.start("entity-link-copy-fixes", "/wt/copy", "fix the copy buttons")
+    desk.start("excephalon-link-copy-fixes", "/wt/copy", "fix the copy buttons")
     assert _wait_for(lambda: bool(outbox))
 
-    assert desk.rename("entity-link-copy-fixes", "the copy fixes") is True
+    assert desk.rename("excephalon-link-copy-fixes", "the copy fixes") is True
 
     import json
 

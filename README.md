@@ -20,9 +20,9 @@ that CLI is the brain, and Excephalon runs it on your own Claude subscription, s
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"      # macOS/Linux: .venv/bin/python
 
-.venv/Scripts/pythonw -m entity --gui   # the window (or double-click Excephalon.bat)
-.venv/Scripts/python  -m entity         # speak to it in a terminal, hear spoken replies
-.venv/Scripts/python  -m entity --text  # type instead of speaking
+.venv/Scripts/pythonw -m excephalon --gui   # the window (or double-click Excephalon.bat)
+.venv/Scripts/python  -m excephalon         # speak to it in a terminal, hear spoken replies
+.venv/Scripts/python  -m excephalon --text  # type instead of speaking
 ```
 
 Every path below is written the Windows way. On a Mac the interpreter is `.venv/bin/python`
@@ -77,7 +77,7 @@ a shared copy — whatever else transcribes you.
 
 ## The brain, concretely
 
-One persistent Claude session held open through the Agent SDK (`entity.brain_sdk.SdkBrain`).
+One persistent Claude session held open through the Agent SDK (`excephalon.brain_sdk.SdkBrain`).
 Keeping a single warm session — instead of re-spawning the `claude` CLI every turn — is what
 makes it feel live:
 
@@ -89,11 +89,11 @@ makes it feel live:
 - `setting_sources=[]` loads **none** of your user/project/local settings, so Excephalon never
   inherits your global coding `CLAUDE.md` or hooks. (Loading them made it answer in quoted-block
   reply format and fire that format's Stop hook every turn, which exploded latency to ~50s.)
-- Acting goes through **typed in-process tools** (`entity.actions`) — `start_agent`, `tell_agent`,
+- Acting goes through **typed in-process tools** (`excephalon.actions`) — `start_agent`, `tell_agent`,
   `set_next_agent_model`, `file_improvement`, `update_persona`, `close_agent_tab`, … — with
   `permission_mode="bypassPermissions"`, because a spoken conversation has no terminal to approve
   in. The coding agents it dispatches are the opposite: those run approval-gated
-  (`entity.supervised_agent`) on Opus-tier models.
+  (`excephalon.supervised_agent`) on Opus-tier models.
 - Replies **stream**: each text delta reaches the voice as the model writes it, so the first
   sentence is sounding while the rest is still forming.
 - One session threads every turn, so it remembers what you just said. Once the conversation has
@@ -108,7 +108,7 @@ cold start.
 ## Agents
 
 Driving Claude Code agents is not a mode — it's something you ask for in conversation. The brain
-calls a typed tool (`entity.actions`, an in-process MCP server wired to the desk), and what you
+calls a typed tool (`excephalon.actions`, an in-process MCP server wired to the desk), and what you
 hear is its own sentence about what it set in motion — never a control phrase:
 
 - `start_agent(path, task)` — a fresh agent in that worktree (a new path is cut from
@@ -149,8 +149,8 @@ Three swappable adapters behind small interfaces, tied together by one orchestra
 - `SpeechToText.listen() -> str` — `Dictation` in the window, `MicSTT` ("over"-terminated) in a
   terminal, `ConsoleSTT` with `--text`.
 - `Brain.respond(utterance, on_text=...) -> str` — `SdkBrain`, streaming its reply out as it is
-  written, acting through `entity.actions`.
-- `TextToSpeech` — `Speaker` (`entity.voice`) speaking Kokoro sentences as they form, with
+  written, acting through `excephalon.actions`.
+- `TextToSpeech` — `Speaker` (`excephalon.voice`) speaking Kokoro sentences as they form, with
   `SystemTTS` (Windows System.Speech via PowerShell) serving until the model is fetched and
   `NullTTS` when muted; `SwappableTTS` swaps the upgrade in mid-session.
 - `Conversation` — the listen → think → speak loop, with farewell exit and error resilience.
@@ -169,6 +169,6 @@ display.
 The suite is green on both desks and needs neither of them: the four things that genuinely
 differ between Windows and macOS — what opens a folder, which robot voice serves as the
 fallback, whether a child process needs shielding from a console window, and how the app
-relaunches itself — each ask `entity.machine`, and each is tested from whichever machine you are
+relaunches itself — each ask `excephalon.machine`, and each is tested from whichever machine you are
 on. Add a fifth only when a thing is truly different; anything that can be written to work the
 same on both should be.

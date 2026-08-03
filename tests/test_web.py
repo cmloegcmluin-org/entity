@@ -1,6 +1,6 @@
-from entity.memory import profile_sections
-from entity.mirror import Mirror, TranscriptFeed, TranscriptModel
-from entity.web import create_app
+from excephalon.memory import profile_sections
+from excephalon.mirror import Mirror, TranscriptFeed, TranscriptModel
+from excephalon.web import create_app
 
 
 def _model(*said):
@@ -749,7 +749,7 @@ def test_the_win_enter_chord_reaches_the_page_as_one_send():
     # The chord cannot reach any window on this machine, so it arrives by keyboard hook and
     # crosses the feed. Every link of that chain but the hook itself is checked here, because the
     # port moved the far end of it from a Tk binding to a page poll.
-    from entity.chord import ENTER, LWIN, SubmitChord
+    from excephalon.chord import ENTER, LWIN, SubmitChord
 
     feed = TranscriptFeed()
     mirror = Mirror(feed, clock=lambda: "12:00:00")
@@ -794,7 +794,7 @@ def test_the_conversation_is_replayed_from_what_was_said_not_parsed_back_out_of_
     # spoke stays Excephalon's, because nothing is being decided.
     from datetime import datetime
 
-    from entity.transcript import MessageLog, past_messages
+    from excephalon.transcript import MessageLog, past_messages
 
     kept = MessageLog(tmp_path / "session-20260729-021500.jsonl",
                       clock=lambda: datetime(2026, 7, 29, 2, 15, 0))
@@ -818,7 +818,7 @@ def test_an_old_log_is_converted_once_and_read_as_messages_after(tmp_path):
     # converted rather than lost - and written down, so the guesswork runs once and never again.
     # A bare line of its own is something the app SPOKE without printing (an update offer), which
     # is Excephalon talking; only its own asides, which open with "(" or "[", are asides.
-    from entity.transcript import past_messages
+    from excephalon.transcript import past_messages
 
     (tmp_path / "session-20260718-024138.log").write_text(
         "===== 2026-07-18 =====\n"

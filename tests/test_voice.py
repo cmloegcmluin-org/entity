@@ -1,7 +1,7 @@
 import threading
 from contextlib import contextmanager
 
-from entity.voice import SentenceStream, Speaker, play_samples
+from excephalon.voice import SentenceStream, Speaker, play_samples
 
 
 class FakeEngine:

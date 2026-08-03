@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from entity.chord import (
+from excephalon.chord import (
     ENTER,
     LWIN,
     WM_KEYDOWN,

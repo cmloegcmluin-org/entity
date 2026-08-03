@@ -9,7 +9,7 @@
 # place to lose an app, not a place to find one. It is admin-writable, so no password is wanted.
 #
 # The bundle is not decoration. macOS attributes a microphone permission to the APPLICATION that
-# asked, so a bare `python -m entity --gui` asks on behalf of whatever terminal started it - the
+# asked, so a bare `python -m excephalon --gui` asks on behalf of whatever terminal started it - the
 # permission lands on Terminal, the prompt names Terminal, and revoking it later means hunting
 # for Excephalon in a list that never mentions it. Inside a bundle the ask is Excephalon's own,
 # with the reason below in the dialog, and it is Excephalon that appears under Privacy & Security.
@@ -45,7 +45,7 @@ rm -rf "$(dirname "$iconset")"
 cat > "$app/Contents/MacOS/Excephalon" <<EOF
 #!/bin/bash
 cd "$repo"
-exec "$python" -m entity --gui
+exec "$python" -m excephalon --gui
 EOF
 chmod +x "$app/Contents/MacOS/Excephalon"
 

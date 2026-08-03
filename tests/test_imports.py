@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "entity"
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "excephalon"
 
 
 def _modules():
@@ -21,7 +21,7 @@ def _modules():
 
 @pytest.mark.parametrize("name", _modules())
 def test_every_module_imports(name):
-    importlib.import_module(f"entity.{name}")
+    importlib.import_module(f"excephalon.{name}")
 
 
 def test_everything_the_window_imports_on_the_way_up_exists():
@@ -30,7 +30,7 @@ def test_everything_the_window_imports_on_the_way_up_exists():
     source = ast.parse((SOURCE / "__main__.py").read_text(encoding="utf-8"))
     inside = [node for node in ast.walk(source)
               if isinstance(node, ast.ImportFrom) and node.col_offset > 0
-              and node.module and node.module.startswith("entity.")]
+              and node.module and node.module.startswith("excephalon.")]
     assert inside, "the windowed path imports nothing - this test is watching the wrong place"
 
     for node in inside:
@@ -56,7 +56,7 @@ def test_no_function_reaches_for_a_name_its_module_never_defines():
     import dis
     from pathlib import Path
 
-    package = Path(__file__).resolve().parents[1] / "src" / "entity"
+    package = Path(__file__).resolve().parents[1] / "src" / "excephalon"
     missing = []
     for path in sorted(package.glob("*.py")):
         code = compile(path.read_text(encoding="utf-8"), str(path), "exec")

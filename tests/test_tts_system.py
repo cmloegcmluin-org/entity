@@ -1,4 +1,4 @@
-from entity.tts_system import SystemTTS
+from excephalon.tts_system import SystemTTS
 
 
 class FakeRun:
@@ -42,7 +42,7 @@ def test_this_desk_has_a_robot_voice_at_all():
     # The fallback only serves when the neural voice cannot be had - which is exactly when it has
     # to work. It knew one desk's voice (System.Speech, through PowerShell) and raised TTSError on
     # the other, so a Mac that failed to fetch Kokoro would have started up mute.
-    from entity.tts_system import command_for
+    from excephalon.tts_system import command_for
 
     argv, env, feed = command_for("hello there", rate=2)
 

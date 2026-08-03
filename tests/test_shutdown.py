@@ -1,6 +1,6 @@
 import threading
 
-from entity.shutdown import consolidate
+from excephalon.shutdown import consolidate
 
 
 def test_consolidate_returns_the_facts_the_brain_reports():
@@ -34,7 +34,7 @@ def test_consolidate_swallows_a_brain_error():
 
 
 def test_consolidate_asks_with_the_consolidation_prompt():
-    from entity.memory import CONSOLIDATION_PROMPT
+    from excephalon.memory import CONSOLIDATION_PROMPT
 
     seen = []
 

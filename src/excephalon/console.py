@@ -14,7 +14,7 @@ right here.
 
 import sys
 
-from entity.transcript import SELF, SELF_HEADS_UP, SELF_SAID
+from excephalon.transcript import SELF, SELF_HEADS_UP, SELF_SAID
 
 
 def _print_flushed(line):

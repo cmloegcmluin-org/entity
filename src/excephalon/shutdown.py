@@ -8,7 +8,7 @@ facts aren't saved, which beats a minute of dead air on the way out.
 
 import threading
 
-from entity.memory import CONSOLIDATION_PROMPT, parse_facts
+from excephalon.memory import CONSOLIDATION_PROMPT, parse_facts
 
 DEFAULT_CONSOLIDATION_TIMEOUT = 15.0
 

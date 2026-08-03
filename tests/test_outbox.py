@@ -1,4 +1,4 @@
-from entity.outbox import Outbox
+from excephalon.outbox import Outbox
 
 
 def test_pushed_messages_drain_in_order_then_the_outbox_is_empty():

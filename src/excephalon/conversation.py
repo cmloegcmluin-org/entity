@@ -5,12 +5,12 @@ import threading
 import time
 from dataclasses import dataclass
 
-from entity.console import Console
-from entity.links import as_spoken
-from entity.phrases import canonical as _canonical
-from entity.phrases import ends_with_command as _ends_with_command
-from entity.phrases import wakes as _wakes
-from entity.waiting import chosen, roll_call
+from excephalon.console import Console
+from excephalon.links import as_spoken
+from excephalon.phrases import canonical as _canonical
+from excephalon.phrases import ends_with_command as _ends_with_command
+from excephalon.phrases import wakes as _wakes
+from excephalon.waiting import chosen, roll_call
 
 # Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
 # time it names itself, so that has to be the word that works - and the coined one is the word the
@@ -698,7 +698,7 @@ class Conversation:
         # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn.
         said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
         if not said.strip():
-            # Nothing to say - the turn completed silently. A blank "entity>" line or an empty
+            # Nothing to say - the turn completed silently. A blank "excephalon>" line or an empty
             # utterance would be noise.
             self._settle(reply)
             release_floor()

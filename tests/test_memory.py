@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from entity.memory import (
+from excephalon.memory import (
     append_learned,
     compose_persona,
     lexicon_path,
@@ -63,7 +63,7 @@ def test_load_lexicon_is_empty_when_missing(tmp_path):
 
 def test_load_persona_additions_is_empty_when_missing(tmp_path):
     # Excephalon's own standing instructions - absent on a fresh checkout, so the persona still composes.
-    from entity.memory import load_persona_additions
+    from excephalon.memory import load_persona_additions
 
     assert load_persona_additions(tmp_path / "nope.md") == ""
 
@@ -71,7 +71,7 @@ def test_load_persona_additions_is_empty_when_missing(tmp_path):
 def test_persona_additions_are_saved_and_read_back(tmp_path):
     # The window edits these in full - Excephalon's persona is theirs to curate, so what they type is
     # what it reads next start, stored as typed rather than normalised.
-    from entity.memory import load_persona_additions, save_persona_additions
+    from excephalon.memory import load_persona_additions, save_persona_additions
 
     path = tmp_path / "persona.md"
     save_persona_additions("- always answer in a whisper after midnight", path)
@@ -82,7 +82,7 @@ def test_persona_additions_are_saved_and_read_back(tmp_path):
 def test_append_persona_addition_is_cumulative_and_bulleted(tmp_path):
     # How Excephalon files one when told to change how it behaves - the same accretion as its learned
     # facts, so the file reads as a list of standing instructions however it was started.
-    from entity.memory import append_persona_addition, load_persona_additions
+    from excephalon.memory import append_persona_addition, load_persona_additions
 
     path = tmp_path / "persona.md"
     append_persona_addition("never read a commit hash aloud", path=path)
@@ -230,7 +230,7 @@ def test_a_pointer_written_with_a_tilde_reaches_the_home_directory(tmp_path):
 
 
 def test_profile_sections_split_on_headings():
-    from entity.memory import profile_sections
+    from excephalon.memory import profile_sections
 
     text = "# Title\nintro\n\n## Goals\n- swim\n- cello\n\n## Projects (long-term)\n- the atlas\n"
     sections = profile_sections(text)
@@ -242,7 +242,7 @@ def test_profile_sections_split_on_headings():
 def test_append_enhancement_lands_inside_the_enhancements_section(tmp_path):
     # Filed by voice mid-session; the window re-reads the file, so the bullet must land INSIDE the
     # section it belongs to, not at the end of the file under some other heading.
-    from entity.memory import append_enhancement, profile_sections
+    from excephalon.memory import append_enhancement, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text(
@@ -263,7 +263,7 @@ def test_an_enhancement_is_filed_under_a_heading_that_merely_starts_with_the_wor
     # A profile writes its own headings and they run on ("Enhancements you want (roadmap, not
     # now)"), so the source can't carry the whole line. Matching the stem is what keeps a filing
     # inside the section that is already there instead of starting a rival one beside it.
-    from entity.memory import append_enhancement, profile_sections
+    from excephalon.memory import append_enhancement, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text(
@@ -281,7 +281,7 @@ def test_an_enhancement_is_filed_under_a_heading_that_merely_starts_with_the_wor
 def test_a_filed_enhancement_lands_as_an_unticked_box(tmp_path):
     # "As you check items off from the enhancements list, I don't want them deleted forever." So an
     # item is a checkbox from the moment it is filed, and finishing one ticks it in place.
-    from entity.memory import append_enhancement, profile_sections
+    from excephalon.memory import append_enhancement, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
@@ -293,7 +293,7 @@ def test_a_filed_enhancement_lands_as_an_unticked_box(tmp_path):
 
 
 def test_completing_an_enhancement_ticks_it_and_leaves_it_there(tmp_path):
-    from entity.memory import complete_enhancement, profile_sections
+    from excephalon.memory import complete_enhancement, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text(
@@ -310,7 +310,7 @@ def test_completing_an_enhancement_ticks_it_and_leaves_it_there(tmp_path):
 
 def test_an_item_that_isnt_there_is_reported_rather_than_invented(tmp_path):
     # A filing that silently misses is worse than one that fails: it reads as done and isn't.
-    from entity.memory import complete_enhancement
+    from excephalon.memory import complete_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
@@ -322,7 +322,7 @@ def test_an_item_that_isnt_there_is_reported_rather_than_invented(tmp_path):
 def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
     # The list predates the checkboxes, so most of it is plain bullets. Ticking one upgrades it
     # rather than refusing to find it.
-    from entity.memory import complete_enhancement
+    from excephalon.memory import complete_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- better voice\n", encoding="utf-8")
@@ -334,7 +334,7 @@ def test_a_legacy_bullet_can_still_be_ticked(tmp_path):
 def test_completing_a_numbered_enhancement_keeps_its_id(tmp_path):
     # Ticking rewrites the line, and its id has to survive that - a done item he can still refer to
     # by number is the point of numbering the done ones at all.
-    from entity.memory import complete_enhancement
+    from excephalon.memory import complete_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] #12 better voice\n", encoding="utf-8")
@@ -347,7 +347,7 @@ def test_a_section_reads_back_as_the_items_the_window_ticks():
     # The window draws boxes to click, so what it is handed is items - whether each is done and
     # what it says - rather than lines for it to parse a second time. The file stays markdown:
     # that same file is what the brain loads as standing context and what they read outside the app.
-    from entity.memory import checklist_items
+    from excephalon.memory import checklist_items
 
     stored = "- [ ] better voice\n- [x] speaker enrollment\n- a bullet from before the boxes\n\nprose"
 
@@ -363,7 +363,7 @@ def test_an_enhancement_carries_a_stable_id_read_off_its_line():
     # "add IDs to all of the enhancements so I can refer to them by ID." The number rides in the
     # line - `#7` after the box - so the brain, which reads this same file, knows which item he
     # means when he says "do seven". A line without one reads as unnumbered, not as id zero.
-    from entity.memory import checklist_items
+    from excephalon.memory import checklist_items
 
     assert checklist_items("- [ ] #7 better voice\n- [x] #3 done thing\n- plain\n- #notanid x") == [
         {"done": False, "text": "better voice", "id": 7},
@@ -374,7 +374,7 @@ def test_an_enhancement_carries_a_stable_id_read_off_its_line():
 
 
 def test_an_id_is_written_back_onto_the_line_it_belongs_to():
-    from entity.memory import checklist_markdown
+    from excephalon.memory import checklist_markdown
 
     assert checklist_markdown([{"done": False, "text": "better voice", "id": 7},
                                {"done": True, "text": "done thing", "id": 3},
@@ -387,7 +387,7 @@ def test_the_items_go_back_as_the_markdown_the_brain_reads():
     # A bullet written before the boxes existed comes back as `- [ ]`, so the list upgrades itself
     # the first time they touch it rather than needing a migration run over a personal file the
     # running app may be autosaving at that moment.
-    from entity.memory import checklist_items, checklist_markdown
+    from excephalon.memory import checklist_items, checklist_markdown
 
     items = checklist_items("- [x] done\n- a bullet from before the boxes\ntyped straight in")
 
@@ -400,7 +400,7 @@ def test_several_lines_pasted_into_one_row_become_the_items_they_read_as():
     # A row is one line in the file, so a pasted block landing in one of them would otherwise be
     # stored as a bullet with newlines inside it - which reads back as items that have lost their
     # place in the list. It is split where they pasted the breaks, which is where they meant them.
-    from entity.memory import checklist_markdown
+    from excephalon.memory import checklist_markdown
 
     assert checklist_markdown([{"done": False, "text": "better voice\nspeaker enrollment"}]) == (
         "- [ ] better voice\n- [ ] speaker enrollment"
@@ -411,14 +411,14 @@ def test_a_row_with_nothing_typed_into_it_yet_is_not_stored():
     # Pressing Enter makes the row before there are any words in it - and Enter is how every item
     # is made, so an untyped row is the normal state of the one they are about to fill in. Storing it
     # would leave a bullet with nothing after it sitting in their profile.
-    from entity.memory import checklist_markdown
+    from excephalon.memory import checklist_markdown
 
     assert checklist_markdown([{"done": False, "text": "better voice"},
                                {"done": False, "text": "  "}]) == "- [ ] better voice"
 
 
 def test_ticking_and_typing_write_the_whole_list_back_into_its_section(tmp_path):
-    from entity.memory import profile_sections, save_checklist
+    from excephalon.memory import profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("# Ada\n\n## Goals\n- swim\n- cello\n\n## Projects\n- the atlas\n",
@@ -437,7 +437,7 @@ def test_an_item_filed_while_the_page_sat_open_survives_the_next_thing_he_types(
     # Excephalon files enhancements into this same list, and the window is open all session. Every
     # keystroke writes the whole list back, so without this the next character they type deletes
     # whatever it filed a moment ago.
-    from entity.memory import append_enhancement, profile_sections, save_checklist
+    from excephalon.memory import append_enhancement, profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] better voice\n", encoding="utf-8")
@@ -456,7 +456,7 @@ def test_an_item_he_edits_after_ticking_it_is_not_filed_a_second_time(tmp_path):
     # The first save upgrades `- swim` to `- [x] swim` in the file. Comparing what the page holds
     # against the stored LINES then reads that upgrade as an item nobody had seen, and files a
     # second copy of it beside their edit - so the comparison is on the words of an item instead.
-    from entity.memory import profile_sections, save_checklist
+    from excephalon.memory import profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Goals\n- swim\n", encoding="utf-8")
@@ -476,7 +476,7 @@ def test_a_pasted_block_is_not_duplicated_when_the_page_saves_it_again(tmp_path)
     # against the combined text, find no match, and file every line a second time - which is one
     # of the ways the same task ended up here in twenty half-finished copies. The carry-over has to
     # compare on the lines an item is STORED as, the same way the file keeps them.
-    from entity.memory import profile_sections, save_checklist
+    from excephalon.memory import profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] keep\n", encoding="utf-8")
@@ -497,7 +497,7 @@ def test_numbering_gives_every_enhancement_a_stable_id(tmp_path):
     # Legacy items carry no number; numbering fills them in from the next id after the highest
     # already in use, and leaves the ones that have an id where they are. Idempotent: a second run
     # over an already-numbered list changes nothing, so it can run each time the page is opened.
-    from entity.memory import number_enhancements, profile_sections
+    from excephalon.memory import number_enhancements, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements he wants (roadmap)\n- [ ] alpha\n- [x] #5 beta\n- gamma\n",
@@ -516,7 +516,7 @@ def test_saving_enhancements_numbers_new_rows_and_never_forks_one_being_edited(t
     # A stable id is the fix at the root - the same id means the same item, so editing #1 in place
     # cannot fork it even when the page has lost track of what it last sent (drawn empty), and a
     # brand-new row (no id yet) is handed the next number.
-    from entity.memory import profile_sections, save_checklist
+    from excephalon.memory import profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] #1 alpha\n", encoding="utf-8")
@@ -535,7 +535,7 @@ def test_an_enhancement_filed_while_the_page_sat_open_keeps_its_own_new_id(tmp_p
     # Excephalon files into this list while the window is open. The filed item has no id until the page
     # saves; when it does, the carry-over must keep it AND give it a number distinct from the row he
     # was typing - not collide the two on "no id yet".
-    from entity.memory import append_enhancement, profile_sections, save_checklist
+    from excephalon.memory import append_enhancement, profile_sections, save_checklist
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements\n- [ ] #1 alpha\n", encoding="utf-8")
@@ -552,7 +552,7 @@ def test_an_enhancement_filed_while_the_page_sat_open_keeps_its_own_new_id(tmp_p
 def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
     # The window's Goals/Projects/Enhancements panes are editable; saving one writes that section
     # back into the profile without disturbing a word of the others.
-    from entity.memory import profile_sections, save_section
+    from excephalon.memory import profile_sections, save_section
 
     path = tmp_path / "profile.md"
     path.write_text(
@@ -570,7 +570,7 @@ def test_a_section_can_be_rewritten_in_place_leaving_the_rest_alone(tmp_path):
 
 
 def test_saving_a_section_that_is_not_there_yet_adds_it(tmp_path):
-    from entity.memory import profile_sections, save_section
+    from excephalon.memory import profile_sections, save_section
 
     path = tmp_path / "profile.md"
     path.write_text("## Goals\n- swim\n", encoding="utf-8")
@@ -583,7 +583,7 @@ def test_saving_a_section_that_is_not_there_yet_adds_it(tmp_path):
 def test_a_filed_enhancement_carries_its_filing_time(tmp_path):
     # "When filing enhancement items, always include timestamps pointing to the exact conversation
     # messages that spawned them" - weeks later, an undated one-liner has lost its story.
-    from entity.memory import append_enhancement
+    from excephalon.memory import append_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] old one" + chr(10),
@@ -600,7 +600,7 @@ def test_a_filed_stamp_is_split_off_so_the_page_can_link_it_instead_of_showing_t
     # to jump to that point in the conversation. So the page shows it as a link beside the words,
     # and this is where the words and the moment are told apart. Only a real date-and-time is a
     # filing stamp; an older free-text note has no moment to point at and stays part of the words.
-    from entity.memory import split_filed
+    from excephalon.memory import split_filed
 
     assert split_filed("warn about credits (filed 2026-07-28 02:23)") == (
         "warn about credits", "2026-07-28 02:23")
@@ -615,7 +615,7 @@ def test_refiling_the_same_words_does_not_pile_up_a_duplicate(tmp_path):
     # Five separate tickets in his list are one bug, refiled - and this session's drive filed the
     # auto-listen bug twice and the grammar layer twice in one evening. The same words, still
     # open, are the same ask: say so instead of stacking another copy.
-    from entity.memory import append_enhancement
+    from excephalon.memory import append_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #4 fix the auto-listen bug (filed 2026-07-26 22:11)" + chr(10),
@@ -630,7 +630,7 @@ def test_refiling_the_same_words_does_not_pile_up_a_duplicate(tmp_path):
 def test_the_same_words_already_ticked_do_file_anew(tmp_path):
     # A DONE item is history, not a standing ask: the complaint coming back means it regressed,
     # and refusing the filing would erase the news that it did.
-    from entity.memory import append_enhancement
+    from excephalon.memory import append_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [x] #4 fix the auto-listen bug" + chr(10),
@@ -646,7 +646,7 @@ def test_the_same_words_already_ticked_do_file_anew(tmp_path):
 def test_an_enhancement_can_be_rewritten_in_place_by_its_id(tmp_path):
     # "Excephalon needs the ability to edit existing enhancement items after filing them" - the #id
     # is how he names one, and the rewrite keeps both the number and the tick.
-    from entity.memory import revise_enhancement
+    from excephalon.memory import revise_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn me when low on credits" + chr(10) + "- [x] #8 the finished one" + chr(10),
@@ -662,7 +662,7 @@ def test_an_enhancement_can_be_rewritten_in_place_by_its_id(tmp_path):
 
 
 def test_rewriting_an_id_nobody_has_says_so(tmp_path):
-    from entity.memory import revise_enhancement
+    from excephalon.memory import revise_enhancement
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 an item" + chr(10),
@@ -677,7 +677,7 @@ def test_the_open_enhancements_read_out_as_lines_the_brain_can_carry(tmp_path):
     # persona copy both goes stale and gets disbelieved; this is the live rendering the loop
     # injects every turn, where nothing has ever faded. Open items only - the done ones are
     # history, not standing asks - with their #ids, so he and the brain name the same item.
-    from entity.memory import open_enhancements
+    from excephalon.memory import open_enhancements
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn about credits" + chr(10) + "- [x] #8 already done" + chr(10) + "- [ ] #9 (persona) never fragment messages" + chr(10),
@@ -691,7 +691,7 @@ def test_the_open_enhancements_read_out_as_lines_the_brain_can_carry(tmp_path):
 
 
 def test_a_missing_profile_reads_as_no_open_enhancements(tmp_path):
-    from entity.memory import open_enhancements
+    from excephalon.memory import open_enhancements
 
     assert open_enhancements(tmp_path / "absent.md") == ""
 
@@ -700,7 +700,7 @@ def test_an_enhancement_can_be_checked_off_by_its_id(tmp_path):
     # "No you idiot... I'm saying to check them off!" The brain had tools to file and rewrite but
     # nothing that flips an item to done - so it mangled the words with a literal "[x]" instead.
     # Done by number: the tick flips, the id and the words stay exactly as they were.
-    from entity.memory import complete_enhancement_by_id
+    from excephalon.memory import complete_enhancement_by_id
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 warn about credits" + chr(10) + "- [ ] #8 something else" + chr(10),
@@ -715,7 +715,7 @@ def test_an_enhancement_can_be_checked_off_by_its_id(tmp_path):
 
 
 def test_checking_off_an_id_nobody_has_says_so(tmp_path):
-    from entity.memory import complete_enhancement_by_id
+    from excephalon.memory import complete_enhancement_by_id
 
     path = tmp_path / "profile.md"
     path.write_text("# P" + chr(10) + "" + chr(10) + "## Enhancements he wants for you (roadmap, not now)" + chr(10) + "- [ ] #7 an item" + chr(10),
@@ -729,7 +729,7 @@ def test_forget_learned_drops_the_closest_line_and_says_when_nothing_matches(tmp
     # The memory inbox's delete: the brain's paraphrase still lands on the line he meant.
     learned = tmp_path / "learned.md"
     learned.write_text("- prefers metric units\n- keeps a light CRM in a sheet\n", encoding="utf-8")
-    from entity.memory import forget_learned
+    from excephalon.memory import forget_learned
 
     assert forget_learned("prefers metric units", path=learned) is True
     assert "metric" not in learned.read_text(encoding="utf-8")
@@ -743,7 +743,7 @@ def test_reconcile_lexicon_adds_and_removes_his_terms_but_never_scanned_ones(tmp
     lexicon = tmp_path / "lexicon.md"
     lexicon.write_text("# his working vocabulary\n- Notecraft - the notes app\n- Sagittal\n",
                        encoding="utf-8")
-    from entity.memory import lexicon_terms, reconcile_lexicon
+    from excephalon.memory import lexicon_terms, reconcile_lexicon
 
     reconcile_lexicon(["Notecraft", "Excephalon", "highdeas"],
                       scanned={"highdeas"}, path=lexicon)
@@ -761,7 +761,7 @@ def test_an_enhancement_filed_by_the_app_carries_its_number_at_once(tmp_path):
     # "When Excephalon files an Enhancement ticket itself, it still has the bug where the ID is
     # missing from it initially." The number is how he refers to an item - and the one he had
     # just been told about was the one he could not name back until the page happened to save.
-    from entity.memory import append_enhancement, checklist_items, profile_sections
+    from excephalon.memory import append_enhancement, checklist_items, profile_sections
 
     path = tmp_path / "profile.md"
     path.write_text("## Enhancements" + chr(10) + "- [ ] #4 better voice" + chr(10)

@@ -1,4 +1,4 @@
-from entity.tts_neural import DEFAULT_SPEED, DEFAULT_VOICE, KokoroEngine, ensure_voice, voice_choice
+from excephalon.tts_neural import DEFAULT_SPEED, DEFAULT_VOICE, KokoroEngine, ensure_voice, voice_choice
 
 
 def test_the_voice_choice_defaults_when_nothing_is_configured(tmp_path):

@@ -2,7 +2,7 @@ import asyncio
 import os.path
 from pathlib import Path
 
-from entity.actions import _resolve, fleet_actions
+from excephalon.actions import _resolve, fleet_actions
 
 
 class FakeDesk:
@@ -39,14 +39,14 @@ class FakeDesk:
         return True
 
     def present(self, name, steps):
-        from entity.delivery import DeliveryError
+        from excephalon.delivery import DeliveryError
 
         if name not in self._known:
             raise DeliveryError(f"no agent called {name} is at the desk")
         self.presented.append((name, steps))
 
     def verdict(self, name, approved, feedback=""):
-        from entity.delivery import DeliveryError
+        from excephalon.delivery import DeliveryError
 
         if name not in self._known:
             raise DeliveryError("no verdict can be recorded - nothing has been presented")

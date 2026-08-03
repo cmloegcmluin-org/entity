@@ -1,5 +1,5 @@
-from entity.inbox_watcher import InboxWatcher
-from entity.outbox import Outbox
+from excephalon.inbox_watcher import InboxWatcher
+from excephalon.outbox import Outbox
 
 
 class SpyMonitor:
@@ -131,7 +131,7 @@ def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):
 def test_with_an_events_sink_a_written_line_reports_there_instead(tmp_path):
     # The narrator words agent news in the brain's own voice; the watcher's job shrinks to saying
     # what was written and by whom.
-    from entity.outbox import Outbox
+    from excephalon.outbox import Outbox
 
     events = []
     outbox = Outbox()

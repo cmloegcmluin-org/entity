@@ -2,7 +2,7 @@ import threading
 
 import numpy as np
 
-from entity.voiceprint import Scorekeeper, Voiceprint, speechy_chunks
+from excephalon.voiceprint import Scorekeeper, Voiceprint, speechy_chunks
 
 
 def _wait_for(check, timeout=2.0):

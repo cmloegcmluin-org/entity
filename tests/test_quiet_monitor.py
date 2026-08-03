@@ -1,5 +1,5 @@
-from entity.inbox_watcher import QuietMonitor
-from entity.outbox import Outbox
+from excephalon.inbox_watcher import QuietMonitor
+from excephalon.outbox import Outbox
 
 
 class FakeClock:
@@ -122,7 +122,7 @@ def test_elapsed_time_is_reported_not_just_the_threshold():
 
 
 def test_with_an_events_sink_silence_reports_there_instead():
-    from entity.outbox import Outbox
+    from excephalon.outbox import Outbox
 
     events = []
     outbox = Outbox()

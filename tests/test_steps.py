@@ -1,4 +1,4 @@
-from entity.steps import DID, HEAD_LINES, INDENT, LINE_CHARS, SAID, TAIL_LINES, render
+from excephalon.steps import DID, HEAD_LINES, INDENT, LINE_CHARS, SAID, TAIL_LINES, render
 
 
 class FakeText:
@@ -36,13 +36,13 @@ def test_a_call_is_named_by_whatever_that_tool_acts_on():
     # Every tool says what it touched in its own key; a Read that logged an empty target would be
     # the same silence the narrated-only log already was.
     calls = [
-        FakeCall("Read", {"file_path": "src/entity/gui.py"}),
+        FakeCall("Read", {"file_path": "src/excephalon/gui.py"}),
         FakeCall("Grep", {"pattern": "on_step", "path": "src"}),
         FakeCall("Glob", {"pattern": "**/*.py"}),
     ]
 
     assert render(FakeMsg(calls)) == [
-        (DID, "Read: src/entity/gui.py"),
+        (DID, "Read: src/excephalon/gui.py"),
         (DID, "Grep: on_step"),
         (DID, "Glob: **/*.py"),
     ]
@@ -52,13 +52,13 @@ def test_an_edit_shows_the_diff_it_made():
     # "no tool calls, diffs, or command/test output" - an edit whose lines are missing says only
     # that a file was touched, which is the part nobody needed telling.
     call = FakeCall("Edit", {
-        "file_path": "src/entity/sdk_session.py",
+        "file_path": "src/excephalon/sdk_session.py",
         "old_string": "latest = \"\"\nfor message in messages:",
         "new_string": "lines = []\nfor message in messages:",
     })
 
     assert render(FakeMsg([call])) == [
-        (DID, "Edit: src/entity/sdk_session.py"),
+        (DID, "Edit: src/excephalon/sdk_session.py"),
         (DID, "    - latest = \"\""),
         (DID, "    - for message in messages:"),
         (DID, "    + lines = []"),
@@ -68,10 +68,10 @@ def test_an_edit_shows_the_diff_it_made():
 
 def test_a_write_shows_the_file_it_laid_down():
     # A whole new file is a diff too - all of it added.
-    call = FakeCall("Write", {"file_path": "src/entity/steps.py", "content": "SAID = 1\nDID = 2"})
+    call = FakeCall("Write", {"file_path": "src/excephalon/steps.py", "content": "SAID = 1\nDID = 2"})
 
     assert render(FakeMsg([call])) == [
-        (DID, "Write: src/entity/steps.py"),
+        (DID, "Write: src/excephalon/steps.py"),
         (DID, "    + SAID = 1"),
         (DID, "    + DID = 2"),
     ]

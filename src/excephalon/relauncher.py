@@ -10,7 +10,7 @@ goes, clean or crashed - then launches a fresh one on the current code.
 Both halves - how a process is watched, and how one is started so it survives its parent - are
 the desk's business rather than the button's, so both live here and the window just asks.
 
-Run as: pythonw -m entity.relauncher <old-pid> <repo-root>   (the Mac's own python, on a Mac)
+Run as: pythonw -m excephalon.relauncher <old-pid> <repo-root>   (the Mac's own python, on a Mac)
 """
 
 import os
@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from entity import machine
+from excephalon import machine
 
 
 def app_python(repo):
@@ -40,7 +40,7 @@ def _detached():
 
 def spawn(pid, repo, *, start=subprocess.Popen):
     """Set the helper going: from here on the relaunch is out of the old process's hands."""
-    start([str(app_python(repo)), "-m", "entity.relauncher", str(pid), str(repo)],
+    start([str(app_python(repo)), "-m", "excephalon.relauncher", str(pid), str(repo)],
           cwd=str(repo), close_fds=True, **_detached())
 
 
@@ -89,7 +89,7 @@ def wait_then_launch(pid, repo, *, timeout=120.0, poll=0.5, alive=None, start=su
     while time.monotonic() < deadline and alive():
         time.sleep(poll)
     # Timed out or died - either way the old window is not coming back; bring up the new one.
-    start([str(app_python(repo)), "-m", "entity", "--gui"], cwd=str(repo), close_fds=True,
+    start([str(app_python(repo)), "-m", "excephalon", "--gui"], cwd=str(repo), close_fds=True,
           **_detached())
 
 

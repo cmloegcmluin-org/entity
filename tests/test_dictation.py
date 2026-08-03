@@ -3,8 +3,8 @@ import time
 
 import numpy as np
 
-from entity.dictation import Dictation
-from entity.hearing import Hearing
+from excephalon.dictation import Dictation
+from excephalon.hearing import Hearing
 
 LOUD = 0.05
 QUIET = 0.001

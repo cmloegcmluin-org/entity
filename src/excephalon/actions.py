@@ -19,15 +19,15 @@ from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from entity.delivery import DeliveryError
-from entity.memory import (append_enhancement, append_learned, append_persona_addition,
+from excephalon.delivery import DeliveryError
+from excephalon.memory import (append_enhancement, append_learned, append_persona_addition,
                            forget_learned,
                            complete_enhancement_by_id, revise_enhancement)
-from entity.models import resolve as resolve_model
-from entity.tailing import safe_name
-from entity.worktrees import find_worktrees, is_worktree, prepare_worktree_for
+from excephalon.models import resolve as resolve_model
+from excephalon.tailing import safe_name
+from excephalon.worktrees import find_worktrees, is_worktree, prepare_worktree_for
 
-SERVER = "entity"
+SERVER = "excephalon"
 
 # The names the model calls, and the only tools its options allow: the conversational brain has no
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.

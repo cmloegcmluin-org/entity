@@ -9,8 +9,8 @@ and returns what it says back, which the fleet layer relays onward.
 
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultAllow, PermissionResultDeny
 
-from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL
-from entity.sdk_session import SdkSession
+from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL
+from excephalon.sdk_session import SdkSession
 
 
 def _permission_handler(name, decide):
@@ -35,7 +35,7 @@ def _agent_options(cwd, model, effort, can_use_tool, resume=None):
     return ClaudeAgentOptions(
         cwd=cwd,
         model=model,
-        effort=effort,  # how hard it is told to think; their choice, said out loud (see entity.models)
+        effort=effort,  # how hard it is told to think; their choice, said out loud (see excephalon.models)
         # Only the PROJECT's settings: the worktree's checked-in CLAUDE.md - TDD, the merge
         # process, everything a repo demands of anyone working in it - loads into every agent.
         # The USER scope stays out, deliberately and verified: his global CLAUDE.md carries

@@ -111,7 +111,7 @@ def _spill_system_prompt(options):
     """
     if not isinstance(options.system_prompt, str):  # an agent carries no persona of its own
         return options, None
-    handle, path = tempfile.mkstemp(prefix="entity-persona-", suffix=".txt", text=True)
+    handle, path = tempfile.mkstemp(prefix="excephalon-persona-", suffix=".txt", text=True)
     with os.fdopen(handle, "w", encoding="utf-8") as spilled:
         spilled.write(options.system_prompt)
     return replace(options, system_prompt={"type": "file", "path": path}), path
@@ -218,7 +218,7 @@ class SdkSession:
 
         Whole, and not boiled down to its text first: a message carries what the agent RAN as well
         as what it said, and reducing it here is what left the logs with the narration and none of
-        the work. What to keep is the caller's decision - see `entity.steps`.
+        the work. What to keep is the caller's decision - see `excephalon.steps`.
 
         `on_text` is the other tempo: each user-facing text delta the moment it is written, for a
         session opened with `include_partial_messages=True` - what lets a voice start speaking a

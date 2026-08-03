@@ -8,7 +8,7 @@ the names they coined and the domain terms of their fields (see `vocabulary`). S
 no hotword hook, the bias is applied after recognition.
 """
 
-from entity.vocabulary import correct_terms, translations_in_force
+from excephalon.vocabulary import correct_terms, translations_in_force
 
 DEFAULT_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 

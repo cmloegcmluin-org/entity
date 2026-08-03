@@ -1,4 +1,4 @@
-from entity.relay import notice
+from excephalon.relay import notice
 
 
 def test_an_agents_report_arrives_as_a_notice_not_as_its_own_words():

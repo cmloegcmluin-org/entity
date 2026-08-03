@@ -6,9 +6,9 @@ for a window to exist, and a merged agent's ticket sat unticked for the same rea
 the files freehand risks drifting from the formats the app's own savers keep. So the same savers
 get a command-line door:
 
-    python -m entity.cards drop-instruction "leave the codebase cleaner" "end-to-end demo"
-    python -m entity.cards tick 117
-    python -m entity.cards retire entity-link-copy-fixes --tick 115
+    python -m excephalon.cards drop-instruction "leave the codebase cleaner" "end-to-end demo"
+    python -m excephalon.cards tick 117
+    python -m excephalon.cards retire excephalon-link-copy-fixes --tick 115
 
 `drop-instruction` removes Instructions rows by unique fragment - a fragment matching no row, or
 more than one, refuses the whole run rather than guessing. `tick` checks an Enhancements item off
@@ -27,13 +27,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from entity.memory import (
+from excephalon.memory import (
     DEFAULT_PERSONA_ADDITIONS_PATH,
     complete_enhancement_by_id,
     load_persona_additions,
     save_persona_additions,
 )
-from entity.tailing import archive_dir
+from excephalon.tailing import archive_dir
 
 _RUNTIME = Path(__file__).resolve().parents[2] / "runtime"
 DEFAULT_STATE_PATH = _RUNTIME / "agents.json"
@@ -113,9 +113,9 @@ def main(argv=None):
         done = retire(argv[1])
         print(f"{argv[1]}: " + (", ".join(done) if done else "nothing to wrap up"))
         return 0
-    print("usage: python -m entity.cards drop-instruction <unique fragment>...\n"
-          "       python -m entity.cards tick <enhancement number>\n"
-          "       python -m entity.cards retire <agent> [--tick <enhancement number>]")
+    print("usage: python -m excephalon.cards drop-instruction <unique fragment>...\n"
+          "       python -m excephalon.cards tick <enhancement number>\n"
+          "       python -m excephalon.cards retire <agent> [--tick <enhancement number>]")
     return 2
 
 

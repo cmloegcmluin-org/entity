@@ -1,6 +1,6 @@
 import threading
 
-from entity.mic import BackgroundMicrophone, choose_input_device
+from excephalon.mic import BackgroundMicrophone, choose_input_device
 
 
 def _dev(name, in_ch=2, sr=44100):

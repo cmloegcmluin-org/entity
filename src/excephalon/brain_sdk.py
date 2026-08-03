@@ -11,7 +11,7 @@ Built for the conversation's tempo, not an agent's. The model is the fast tier: 
 talk, decide, and pull typed levers - never to investigate, which is why `tools=[]` strips every
 built-in tool. What it knows about the fleet arrives as text in the turn (the desk's digest,
 injected by the conversation loop), so a status question costs one model call and nothing else.
-Acting goes through the in-process action tools (entity.actions), and the reply streams out
+Acting goes through the in-process action tools (excephalon.actions), and the reply streams out
 delta by delta so a voice can start speaking the first sentence while the rest is still being
 written.
 
@@ -33,10 +33,10 @@ from collections import deque
 
 from claude_agent_sdk import ClaudeAgentOptions
 
-from entity.actions import TOOL_NAMES
-from entity.memory import ANONYMOUS_USER
-from entity.models import FAMILIES
-from entity.sdk_session import BrainUnavailable, SdkSession
+from excephalon.actions import SERVER, TOOL_NAMES
+from excephalon.memory import ANONYMOUS_USER
+from excephalon.models import FAMILIES
+from excephalon.sdk_session import BrainUnavailable, SdkSession
 
 
 # How long one ask may sit unanswered before the session is declared dead and shed. Generous -
@@ -55,7 +55,7 @@ def _wedge_evidence():
         import faulthandler
         import time
 
-        from entity.memory import DEFAULT_PERSONA_ADDITIONS_PATH
+        from excephalon.memory import DEFAULT_PERSONA_ADDITIONS_PATH
 
         path = WEDGE_EVIDENCE_PATH or DEFAULT_PERSONA_ADDITIONS_PATH.parent / "brain-wedge.log"
         with open(path, "a", encoding="utf-8") as log:
@@ -84,7 +84,7 @@ class BrainInterrupted(Exception):
 DEFAULT_BRAIN_MODEL = FAMILIES["haiku"]
 
 # Who Excephalon is for is NOT written here: `{user}` is filled in from the user's own profile when
-# the persona is composed (entity.memory.compose_persona), so this source ships with no one's name.
+# the persona is composed (excephalon.memory.compose_persona), so this source ships with no one's name.
 DEFAULT_PERSONA = (
     "You are Excephalon, {user}'s voice companion and their hands on this machine. Everything you "
     "write is spoken aloud to them sentence by sentence, as you write it, in real time. "
@@ -191,7 +191,7 @@ def _make_options(persona, model, actions=None):
         setting_sources=[],  # load NO user/project/local settings: no global CLAUDE.md, no hooks
         model=model,
         tools=[],
-        mcp_servers={"entity": actions} if actions is not None else {},
+        mcp_servers={SERVER: actions} if actions is not None else {},
         allowed_tools=list(TOOL_NAMES) if actions is not None else [],
         include_partial_messages=True,  # the voice speaks the reply as it is written
     )

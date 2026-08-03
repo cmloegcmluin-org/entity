@@ -2,7 +2,7 @@ import wave
 
 import numpy as np
 
-from entity.recorder import AudioRecorder
+from excephalon.recorder import AudioRecorder
 
 
 def test_recorder_writes_a_readable_wav(tmp_path):

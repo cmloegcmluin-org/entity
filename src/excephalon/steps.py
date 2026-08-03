@@ -11,7 +11,7 @@ So every message the agent streams back is rendered here, as the lines its log s
 
     Bash: python -m pytest -q          a call, at the margin, named by what it acts on
         358 passed in 4.41s            what it gave back, indented under it
-    Edit: src/entity/steps.py          a change, shown as the change
+    Edit: src/excephalon/steps.py          a change, shown as the change
         - latest = ""
         + lines = []
         ! fatal: not a git repository  a call that failed, so that reads differently from output

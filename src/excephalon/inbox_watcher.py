@@ -10,7 +10,7 @@ so it just works on Windows and can't corrupt the brain's own message stream.
 
 import threading
 
-from entity.relay import notice
+from excephalon.relay import notice
 import time
 from pathlib import Path
 

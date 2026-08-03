@@ -1,7 +1,7 @@
 import numpy as np
 
-from entity.hearing import Hearing, settled
-from entity.stt_mic import Burst
+from excephalon.hearing import Hearing, settled
+from excephalon.stt_mic import Burst
 
 
 class FakeTranscriber:

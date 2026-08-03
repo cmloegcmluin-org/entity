@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from entity.transcript import Transcript
+from excephalon.transcript import Transcript
 
 
 def _at(*times):
@@ -57,7 +57,7 @@ def test_the_directory_is_created_if_it_is_not_there(tmp_path):
 
 
 def test_past_lines_hands_back_every_session_ever_recorded(tmp_path):
-    from entity.transcript import SESSION_MARK, past_lines
+    from excephalon.transcript import SESSION_MARK, past_lines
 
     for day in range(10, 16):  # more sessions than any window would have kept
         (tmp_path / f"session-202607{day}-010000.log").write_text(
@@ -75,7 +75,7 @@ def test_past_lines_hands_back_every_session_ever_recorded(tmp_path):
 
 
 def test_a_day_is_dated_once_however_many_sessions_it_held(tmp_path):
-    from entity.transcript import SESSION_MARK, past_lines
+    from excephalon.transcript import SESSION_MARK, past_lines
 
     for name, day, said in (("session-20260718-010000.log", "2026-07-18", "morning"),
                             ("session-20260718-090000.log", "2026-07-18", "afternoon"),
@@ -93,13 +93,13 @@ def test_a_day_is_dated_once_however_many_sessions_it_held(tmp_path):
 
 
 def test_past_lines_survives_an_empty_or_missing_directory(tmp_path):
-    from entity.transcript import past_lines
+    from excephalon.transcript import past_lines
 
     assert past_lines(tmp_path / "nowhere", current=None) == []
 
 
 def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     assert parse_line("[03:41:12] you said: pick up the drive work") == ("you", "03:41:12", "pick up the drive work")
     assert parse_line("[03:41:20] entity> Started 1 agent.") == ("excephalon", "03:41:20", "Started 1 agent.")
@@ -108,7 +108,7 @@ def test_a_recorded_line_reads_back_as_who_said_it_when_and_what():
 
 
 def test_what_an_agent_ran_reads_back_as_its_own_kind_with_its_shape_intact():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     # Its own role, because the tab draws the machinery differently from what the agent SAID -
     # a command and its output as messages would be one tinted box per line of a diff.
@@ -120,7 +120,7 @@ def test_what_an_agent_ran_reads_back_as_its_own_kind_with_its_shape_intact():
 
 
 def test_a_day_header_reads_back_as_a_break_that_can_be_seen():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     role, _, text = parse_line("===== 2026-07-18 =====")
 
@@ -131,7 +131,7 @@ def test_a_day_header_reads_back_as_a_break_that_can_be_seen():
 
 
 def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():
-    from entity.transcript import DAY_BREAK, parse_line, SESSION_MARK
+    from excephalon.transcript import DAY_BREAK, parse_line, SESSION_MARK
 
     role, _, text = parse_line(SESSION_MARK)
 
@@ -144,7 +144,7 @@ def test_a_session_mark_reads_back_as_its_own_break_and_not_as_another_date():
 
 
 def test_a_marker_with_a_blank_line_after_it_is_a_blank_line_not_the_marker():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     # A written line keeps no trailing space by the time it is read back, so a blank line under a
     # marker arrives as the bare marker - and turned up in the middle of the tab as a centred
@@ -154,7 +154,7 @@ def test_a_marker_with_a_blank_line_after_it_is_a_blank_line_not_the_marker():
 
 
 def test_lines_that_are_not_conversation_read_back_as_nothing():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     assert parse_line("") is None
     assert parse_line("[03:41:12] ") is None
@@ -165,7 +165,7 @@ def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
     # current session." The half that breaks is the thread of the conversation: a fresh process
     # started with no memory of five minutes ago. The transcript already holds those turns; this
     # reads them back as (their words, the reply) pairs so a restarted brain can be seeded with them.
-    from entity.transcript import recent_turns
+    from excephalon.transcript import recent_turns
 
     log = tmp_path / "session-20260719-200000.log"
     log.write_text(
@@ -189,7 +189,7 @@ def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
 def test_only_the_newest_session_is_read_back(tmp_path):
     # Continuity is with the conversation they just had, not with every session ever - the older
     # history is already in learned.md and on screen; re-feeding weeks of it would drown the seed.
-    from entity.transcript import recent_turns
+    from excephalon.transcript import recent_turns
 
     (tmp_path / "session-20260718-100000.log").write_text(
         "[10:00:00] you said: old question\n[10:00:01] entity> old answer\n", encoding="utf-8")
@@ -200,7 +200,7 @@ def test_only_the_newest_session_is_read_back(tmp_path):
 
 
 def test_recent_turns_keeps_only_the_tail_and_survives_absence(tmp_path):
-    from entity.transcript import recent_turns
+    from excephalon.transcript import recent_turns
 
     lines = "".join(f"[20:00:0{n%10}] you said: q{n}\n[20:00:0{n%10}] entity> a{n}\n" for n in range(9))
     (tmp_path / "session-20260719-200000.log").write_text(lines, encoding="utf-8")
@@ -213,7 +213,7 @@ def test_a_question_the_session_died_on_is_not_paired_with_the_next_answer(tmp_p
     # A crash between their words and the reply must not stitch their question to the answer of the
     # NEXT question - a seeded conversation where answers sit under the wrong questions is worse
     # than no seed at all.
-    from entity.transcript import recent_turns
+    from excephalon.transcript import recent_turns
 
     (tmp_path / "session-20260719-200000.log").write_text(
         "[20:00:00] you said: the one it died on\n"
@@ -226,7 +226,7 @@ def test_a_question_the_session_died_on_is_not_paired_with_the_next_answer(tmp_p
 
 
 def test_history_recorded_under_the_old_name_is_still_his_conversation(tmp_path):
-    from entity.transcript import messages_in
+    from excephalon.transcript import messages_in
 
     # Every message the app has ever stored carries `"role": "entity"`, and the .log lines it
     # wrote carry an "entity> " prefix. The displayed name was never in either file - it is looked
@@ -247,7 +247,7 @@ def test_history_recorded_under_the_old_name_is_still_his_conversation(tmp_path)
 
 
 def test_a_log_line_written_under_either_name_reads_back_the_same():
-    from entity.transcript import parse_line
+    from excephalon.transcript import parse_line
 
     assert parse_line("[12:00:01] entity> old") == ("excephalon", "12:00:01", "old")
     assert parse_line("[12:00:02] excephalon> new") == ("excephalon", "12:00:02", "new")

@@ -2,8 +2,8 @@ import asyncio
 import threading
 import time
 
-from entity.foreman import FOREMAN_MODEL, Foreman
-from entity.outbox import Outbox
+from excephalon.foreman import FOREMAN_MODEL, Foreman
+from excephalon.outbox import Outbox
 
 
 class FakeDesk:

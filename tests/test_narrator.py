@@ -1,7 +1,7 @@
 import threading
 
-from entity.narrator import Narrator
-from entity.outbox import Outbox
+from excephalon.narrator import Narrator
+from excephalon.outbox import Outbox
 
 
 class FakeBrain:

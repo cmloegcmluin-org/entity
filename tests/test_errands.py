@@ -1,6 +1,6 @@
 import time
 
-from entity.errands import ERRAND_MODEL, ErrandRunner
+from excephalon.errands import ERRAND_MODEL, ErrandRunner
 
 
 class FakeSession:

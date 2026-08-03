@@ -185,3 +185,22 @@ def test_the_code_google_sends_back_is_traded_for_tokens_and_written_down(tmp_pa
     [(url, payload, _)] = post.calls
     assert url == "https://oauth2.googleapis.com/token"
     assert "code=the-code" in payload and "grant_type=authorization_code" in payload
+
+
+def test_initialize_is_forwarded_at_the_protocol_version_google_accepts():
+    # Google 401s any initialize below protocolVersion 2025-06-18 (measured: 2024-11-05 and
+    # 2025-03-26 both bounce) instead of negotiating downward as the spec intends - and a 401
+    # here read as "not signed in", which sent the user to a sign-in that could not help. The
+    # bridge speaks the accepted version to Google whatever the CLI opened with; the response
+    # carries it back, and the CLI adapts, which is the negotiation working one hop early.
+    result = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
+    post = FakePost([(200, "application/json", json.dumps(result))])
+    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
+
+    old = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                      "params": {"protocolVersion": "2024-11-05", "capabilities": {}}})
+    assert json.loads(bridge.handle(old)) == result
+
+    [(_, payload, _)] = post.calls
+    assert payload["params"]["protocolVersion"] == "2025-06-18"
+    assert payload["params"]["capabilities"] == {}  # the rest of the request rides untouched

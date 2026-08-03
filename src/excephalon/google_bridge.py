@@ -42,6 +42,11 @@ SCOPES = (
 CONNECT_HINT = ("Google is not connected yet - run Connect Google.command (or "
                 "`python -m excephalon.google_bridge --connect`) and sign in once.")
 
+# The one protocol version Google's servers accept. They 401 any initialize below it (measured:
+# 2024-11-05 and 2025-03-26 both bounce) instead of negotiating downward as the spec intends -
+# and that 401 read as "not signed in", which sent the user to a sign-in that could not help.
+GOOGLE_PROTOCOL = "2025-06-18"
+
 
 def load_client(path):
     """His OAuth client, from the file Google's console hands out, dropped in as it came.
@@ -137,10 +142,17 @@ class Bridge:
         traded and the request retried once, invisibly. Past that, a request with an id gets a
         well-formed JSON-RPC error naming the one thing the user can do - a bridge that crashes
         or goes silent is a server that "failed", with nothing saying why."""
+        request = json.loads(line)
+        if request.get("method") == "initialize":
+            # Speak the version Google accepts whatever the CLI opened with; the response
+            # carries it back, and the CLI adapts - the negotiation working one hop early.
+            params = dict(request.get("params") or {})
+            params["protocolVersion"] = GOOGLE_PROTOCOL
+            line = json.dumps({**request, "params": params})
         status, content_type, body = self._ask(line)
         if status in (401, 403) and self._refresh():
             status, content_type, body = self._ask(line)
-        request_id = json.loads(line).get("id")
+        request_id = request.get("id")
         if request_id is None:
             return None  # a notification: answering it would desync the whole stdio stream
         if status in (401, 403):
@@ -200,7 +212,7 @@ def serve(url, *, stdin=sys.stdin, stdout=sys.stdout):
             answer = bridge.handle(line)
         except Exception as exc:  # one bad request must not kill the server for the session
             try:
-                request_id = json.loads(line).get("id")
+                request_id = request.get("id")
             except ValueError:
                 continue
             if request_id is None:

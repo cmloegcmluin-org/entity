@@ -204,3 +204,22 @@ def test_initialize_is_forwarded_at_the_protocol_version_google_accepts():
     [(_, payload, _)] = post.calls
     assert payload["params"]["protocolVersion"] == "2025-06-18"
     assert payload["params"]["capabilities"] == {}  # the rest of the request rides untouched
+
+
+def test_the_bridge_introduces_itself_as_itself():
+    # Google's servers 401 an initialize whose clientInfo.name is "claude-code" - bisected down
+    # to that one field; version, title, description, capabilities all pass. The bridge IS the
+    # MCP client on Google's wire, so it introduces itself truthfully as the bridge, and what
+    # the CLI calls itself never reaches a parser that would hang up on it.
+    result = {"jsonrpc": "2.0", "id": 1, "result": {}}
+    post = FakePost([(200, "application/json", json.dumps(result))])
+    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
+
+    bridge.handle(json.dumps({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-11-25", "capabilities": {},
+                   "clientInfo": {"name": "claude-code", "title": "Claude Code",
+                                  "version": "2.1.220"}}}))
+
+    [(_, payload, _)] = post.calls
+    assert payload["params"]["clientInfo"]["name"] == "excephalon-google-bridge"

@@ -145,9 +145,14 @@ class Bridge:
         request = json.loads(line)
         if request.get("method") == "initialize":
             # Speak the version Google accepts whatever the CLI opened with; the response
-            # carries it back, and the CLI adapts - the negotiation working one hop early.
+            # carries it back, and the CLI adapts - the negotiation working one hop early. And
+            # introduce the client on THIS wire truthfully: it is the bridge, not the CLI behind
+            # it - which also matters mechanically, because Google 401s an initialize whose
+            # clientInfo.name is "claude-code" (bisected to that one field; everything else in
+            # the request passes).
             params = dict(request.get("params") or {})
             params["protocolVersion"] = GOOGLE_PROTOCOL
+            params["clientInfo"] = {"name": "excephalon-google-bridge", "version": "1"}
             line = json.dumps({**request, "params": params})
         status, content_type, body = self._ask(line)
         if status in (401, 403) and self._refresh():

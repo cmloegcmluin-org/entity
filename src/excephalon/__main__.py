@@ -19,7 +19,7 @@ from excephalon.agent_desk import AgentDesk
 from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from excephalon.console import Console
 from excephalon.conversation import Conversation
-from excephalon.errands import ErrandRunner
+from excephalon.errands import ErrandRunner, load_services, services_note
 from excephalon.foreman import Foreman
 from excephalon.inbox_watcher import InboxWatcher, QuietMonitor
 from excephalon.mirror import TranscriptFeed
@@ -74,6 +74,7 @@ AGENT_LOGS = RUNTIME_DIR / "agent-logs"  # one timestamped exchange log per agen
 TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversation, as it happens
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
+SERVICES = RUNTIME_DIR / "services.json"  # his connected services (MCP servers), errand-hand reach
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
 WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before Excephalon flags it to the user
@@ -227,6 +228,7 @@ def _persona():
         compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon(),
                         additions=load_persona_additions())
         + _agent_inbox_note(AGENT_INBOX)
+        + services_note(load_services(SERVICES)[0])
         + _fresh_worktree_note()
         + _projects_note()
         + _window_note(AGENT_LOGS)
@@ -326,8 +328,16 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # bigger model is paid for per snag, never per turn.
     foreman = Foreman(desk, outbox)
     # The quiet errand hand: small local chores with no agent tab - "one agent per actual major
-    # task", not one per little thing. Its outcomes take the news road like everything else.
-    errands = ErrandRunner(RUNTIME_DIR, agent_events)
+    # task", not one per little thing. Its outcomes take the news road like everything else. His
+    # connected services (runtime/services.json) ride with it: "check my calendar" is a chore too,
+    # and both what connected and a file that could not be read are SAID, since a config applied
+    # unseen - or silently not applied - reads as a broken app.
+    services, services_problem = load_services(SERVICES)
+    if services_problem:
+        announce(services_problem)
+    if services:
+        announce(f"(errands can reach: {', '.join(sorted(services))})")
+    errands = ErrandRunner(RUNTIME_DIR, agent_events, services=services)
     if hooks is not None:
         # His name for an agent, from the page's own heading - the desk owns the key, the log and
         # the record, so the window asks it rather than moving files behind its back.

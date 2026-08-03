@@ -88,3 +88,71 @@ def test_one_helper_session_serves_every_chore():
     assert _wait_for(lambda: len(events) == 2)
 
     assert len(made) == 1
+
+
+def test_no_services_file_means_no_services_and_no_complaint(tmp_path):
+    from excephalon.errands import load_services
+
+    assert load_services(tmp_path / "services.json") == ({}, "")
+
+
+def test_a_services_file_is_read_and_a_broken_one_is_said_not_swallowed(tmp_path):
+    # The standard {"mcpServers": ...} shape, so any service's docs paste straight in. A file he
+    # edited that silently does nothing reads as a broken app, so the problem comes back as a
+    # sentence - and a bad file refuses WHOLE rather than connecting half of what he wrote.
+    from excephalon.errands import load_services
+
+    good = tmp_path / "services.json"
+    good.write_text('{"mcpServers": {"asana": {"type": "sse", "url": "https://mcp.asana.com/sse"}}}',
+                    encoding="utf-8")
+    assert load_services(good) == ({"asana": {"type": "sse", "url": "https://mcp.asana.com/sse"}}, "")
+
+    torn = tmp_path / "torn.json"
+    torn.write_text('{"mcpServers": {', encoding="utf-8")
+    servers, problem = load_services(torn)
+    assert servers == {} and "torn.json" in problem
+
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text('{"asana": "https://mcp.asana.com/sse"}', encoding="utf-8")
+    servers, problem = load_services(wrong)
+    assert servers == {} and "mcpServers" in problem
+
+
+def test_connected_services_reach_the_errand_session():
+    # The fast brain stays tools=[] - nothing mid-turn may outlast a breath - so his services
+    # belong to the errand hand: "check my calendar" is a chore like any other, done off-turn in
+    # the helper session and narrated back. The session gets the servers, and each is allowed
+    # whole (mcp__<name> covers every tool it offers).
+    session, events, made = FakeSession(), [], []
+    services = {"asana": {"type": "sse", "url": "https://mcp.asana.com/sse"}}
+    runner = ErrandRunner("C:/runtime", lambda *event: events.append(event),
+                          services=services, session_factory=lambda o: made.append(o) or session)
+
+    runner.run("what's due in Asana this week?")
+
+    assert _wait_for(lambda: bool(made))
+    assert made[0].mcp_servers == services
+    assert "mcp__asana" in made[0].allowed_tools
+    assert "Read" in made[0].allowed_tools  # the file tools stay - it is still the chore hand
+
+
+def test_without_services_the_errand_session_is_unchanged():
+    runner, session, events, made = _runner()
+
+    runner.run("tidy the archive")
+
+    assert _wait_for(lambda: bool(made))
+    assert made[0].mcp_servers == {}
+    assert not any(name.startswith("mcp__") for name in made[0].allowed_tools)
+
+
+def test_the_brain_is_told_what_errands_can_reach_and_told_nothing_when_nothing():
+    # A lever nobody mentions is a lever never pulled: without this note the brain answers "I
+    # can't see your calendar" while the errand hand sits right there able to look. And when
+    # nothing is connected the note is EMPTY - a brain told about services that are not there
+    # would promise checks that can only fail.
+    from excephalon.errands import services_note
+
+    note = services_note({"asana": {}, "gmail": {}})
+    assert "asana" in note and "gmail" in note and "run_errand" in note
+    assert services_note({}) == ""

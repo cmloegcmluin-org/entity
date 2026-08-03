@@ -7,7 +7,7 @@ through `anyio.open_process`, which accepts `creationflags` but is never given a
 to be injected at that seam.
 """
 
-from entity import machine
+from excephalon import machine
 
 CREATE_NO_WINDOW = 0x08000000
 

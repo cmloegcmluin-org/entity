@@ -1,6 +1,6 @@
 import asyncio
 
-from entity.supervised_agent import SupervisedAgent, _agent_options, _permission_handler
+from excephalon.supervised_agent import SupervisedAgent, _agent_options, _permission_handler
 
 
 class FakeSession:

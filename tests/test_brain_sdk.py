@@ -1,7 +1,7 @@
 import pytest
 
-from entity.brain_sdk import DEFAULT_PERSONA, BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
-from entity.memory import compose_persona
+from excephalon.brain_sdk import DEFAULT_PERSONA, BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
+from excephalon.memory import compose_persona
 
 _LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
 
@@ -274,8 +274,8 @@ def test_the_brain_has_no_built_in_tools_only_the_typed_actions():
     opts = _make_options("PERSONA", "haiku", actions)
 
     assert opts.tools == []  # every built-in tool is off
-    assert opts.mcp_servers == {"entity": actions}
-    assert all(name.startswith("mcp__entity__") for name in opts.allowed_tools)
+    assert opts.mcp_servers == {"excephalon": actions}
+    assert all(name.startswith("mcp__excephalon__") for name in opts.allowed_tools)
     assert opts.include_partial_messages is True  # the voice speaks the reply as it is written
 
 
@@ -543,7 +543,7 @@ def test_a_lock_whose_holder_survives_the_shed_is_abandoned_not_waited_out(tmp_p
     # does not free it, it is ABANDONED - the stranded thread keeps the old object, which
     # nothing else ever touches again - and the turn proceeds on a fresh lock and session,
     # writing the holder's stack down at the moment of failure.
-    from entity import brain_sdk
+    from excephalon import brain_sdk
 
     monkeypatch.setattr(brain_sdk, "WEDGE_EVIDENCE_PATH", tmp_path / "brain-wedge.log")
 
@@ -574,7 +574,7 @@ def test_a_machine_that_is_not_signed_in_still_opens_and_says_so():
     # warmup that raises is an app that simply never appears. It says the one thing he can act on
     # instead, as an app aside: this is the machine reporting its own state, not Excephalon
     # talking, and there is no /login to type at a microphone anyway.
-    from entity.sdk_session import BrainUnavailable
+    from excephalon.sdk_session import BrainUnavailable
 
     class SignedOutSession:
         def ask(self, prompt, **kwargs):

@@ -12,7 +12,7 @@ once - so this module only measures. The cutoff between "theirs" and "not theirs
 later, from scores logged across real sessions, and until that evidence exists a missing
 fingerprint or model yields None: no opinion, and the caller keeps the words.
 
-Run `python -m entity.voiceprint` (or double-click "Learn my voice.bat") to record the minute
+Run `python -m excephalon.voiceprint` (or double-click "Learn my voice.bat") to record the minute
 and save the fingerprint.
 """
 

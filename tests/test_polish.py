@@ -1,4 +1,4 @@
-from entity.polish import mend
+from excephalon.polish import mend
 
 
 def test_a_period_before_a_lowercase_continuation_is_healed():

@@ -19,9 +19,9 @@ import threading
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
 
-from entity.models import FAMILIES
-from entity.narrator import _HANDLED_LEAD
-from entity.sdk_session import SdkSession
+from excephalon.models import FAMILIES
+from excephalon.narrator import _HANDLED_LEAD
+from excephalon.sdk_session import SdkSession
 
 # Smarter than the talker by definition, whatever the working agents happen to run on - the whole
 # point of the layer is senior judgment, so it does not follow the next-agent model choice.

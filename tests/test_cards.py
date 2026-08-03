@@ -2,7 +2,7 @@
 
 import pytest
 
-from entity.cards import main, without_rows
+from excephalon.cards import main, without_rows
 
 
 def test_rows_named_by_unique_fragment_are_dropped_and_the_rest_stand():
@@ -22,7 +22,7 @@ def test_a_fragment_matching_zero_or_many_rows_refuses_the_whole_edit():
 
 
 def test_tick_checks_an_enhancement_off_by_number(tmp_path, monkeypatch):
-    from entity import cards, memory
+    from excephalon import cards, memory
 
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements he wants (roadmap, not now)" + chr(10)
@@ -38,7 +38,7 @@ def test_tick_checks_an_enhancement_off_by_number(tmp_path, monkeypatch):
 
 
 def test_drop_instruction_rewrites_the_card_through_its_own_saver(tmp_path, monkeypatch):
-    from entity import cards
+    from excephalon import cards
 
     card = tmp_path / "persona.md"
     card.write_text("- first rule" + chr(10) + "- second rule" + chr(10), encoding="utf-8")
@@ -55,7 +55,7 @@ def test_drop_instruction_rewrites_the_card_through_its_own_saver(tmp_path, monk
 def test_retire_wraps_an_agent_up_with_no_app_running(tmp_path):
     import json
 
-    from entity.cards import retire
+    from excephalon.cards import retire
 
     logs = tmp_path / "agent-logs"
     logs.mkdir()
@@ -79,7 +79,7 @@ def test_retire_wraps_an_agent_up_with_no_app_running(tmp_path):
 def test_a_worktree_that_refuses_removal_does_not_fail_the_wrap_up(tmp_path):
     import json
 
-    from entity.cards import retire
+    from excephalon.cards import retire
 
     logs = tmp_path / "agent-logs"
     logs.mkdir()

@@ -12,7 +12,7 @@ cannot answer, because news must never die with a wedged session.
 import re
 import threading
 
-from entity.relay import notice
+from excephalon.relay import notice
 
 # The routing word, wherever it leads the reply. "Handled - <news>" reached the user verbatim and
 # he had to ask what it referred to ("The word 'handled' doesn't appear to refer to anything...").

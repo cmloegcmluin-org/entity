@@ -1,4 +1,4 @@
-"""Run Excephalon: `python -m entity` (speak to it), or double-click Excephalon.bat for the window.
+"""Run Excephalon: `python -m excephalon` (speak to it), or double-click Excephalon.bat for the window.
 
   --gui         a window instead of the terminal: live transcript + a STOP button
   --text        type instead of speaking
@@ -13,18 +13,18 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from entity import machine
-from entity.actions import fleet_actions
-from entity.agent_desk import AgentDesk
-from entity.brain_sdk import DEFAULT_PERSONA, SdkBrain
-from entity.console import Console
-from entity.conversation import Conversation
-from entity.errands import ErrandRunner
-from entity.foreman import Foreman
-from entity.inbox_watcher import InboxWatcher, QuietMonitor
-from entity.mirror import TranscriptFeed
-from entity.narrator import Narrator
-from entity.memory import (
+from excephalon import machine
+from excephalon.actions import fleet_actions
+from excephalon.agent_desk import AgentDesk
+from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
+from excephalon.console import Console
+from excephalon.conversation import Conversation
+from excephalon.errands import ErrandRunner
+from excephalon.foreman import Foreman
+from excephalon.inbox_watcher import InboxWatcher, QuietMonitor
+from excephalon.mirror import TranscriptFeed
+from excephalon.narrator import Narrator
+from excephalon.memory import (
     DEFAULT_PROFILE_PATH,
     append_learned,
     complete_enhancement,
@@ -40,16 +40,16 @@ from entity.memory import (
     translation_pairs,
     user_name,
 )
-from entity.outbox import Outbox
-from entity.polish import mend
-from entity.relay import notice
-from entity.shutdown import consolidate
-from entity.stt_console import ConsoleSTT
-from entity.tailing import safe_name
-from entity.transcript import MessageLog, Transcript, recent_turns
-from entity.tts_neural import KokoroEngine, ensure_voice, voice_choice
-from entity.tts_system import NullTTS, SystemTTS
-from entity.voice import Speaker, play_samples
+from excephalon.outbox import Outbox
+from excephalon.polish import mend
+from excephalon.relay import notice
+from excephalon.shutdown import consolidate
+from excephalon.stt_console import ConsoleSTT
+from excephalon.tailing import safe_name
+from excephalon.transcript import MessageLog, Transcript, recent_turns
+from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
+from excephalon.tts_system import NullTTS, SystemTTS
+from excephalon.voice import Speaker, play_samples
 
 RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
 
@@ -58,7 +58,7 @@ def _live_instructions():
     """His standing instructions, read from the file THIS turn - an edit on the Config page is in
     force for the very next thing said, not the next launch. They are also composed into the boot
     persona; carrying them here too is what makes the edit immediate."""
-    from entity.memory import DEFAULT_PERSONA_ADDITIONS_PATH
+    from excephalon.memory import DEFAULT_PERSONA_ADDITIONS_PATH
 
     try:
         told = DEFAULT_PERSONA_ADDITIONS_PATH.read_text(encoding="utf-8").strip()
@@ -93,7 +93,7 @@ def _fresh_worktree_note():
 def _projects_note():
     """Persona line: where the user's projects live, so the brain never has to ask. It asked for
     the path to a repo whose name alone identified it; the directory listings already knew."""
-    from entity.worktrees import projects
+    from excephalon.worktrees import projects
 
     homes = [(root, projects(root)) for root in _project_roots()]
     homes = [(root, known) for root, known in homes if known]
@@ -134,7 +134,7 @@ def _vocab_terms():
     hand-kept lexicon - coined names and domain vocabulary alike, the same file the brain carries
     as standing context, so a term added in one place fixes both. The app's own name rides along,
     because "hey Excephalon" only wakes the mic if the transcriber can produce the word."""
-    from entity.vocabulary import scan_terms
+    from excephalon.vocabulary import scan_terms
 
     return scan_terms(_project_roots()) | set(lexicon_terms(load_lexicon())) | {"Excephalon"}
 
@@ -145,7 +145,7 @@ def _other_apps():
     agent in that project's own repo, and file_improvement refuses to file it (see
     actions.names_another_app) - twice it was filed anyway, and twice the remedy was a written
     instruction that held until it didn't."""
-    from entity.vocabulary import scan_terms
+    from excephalon.vocabulary import scan_terms
 
     return sorted(name for name in scan_terms(_project_roots())
                   if name.lower() not in ("excephalon", "entity"))
@@ -180,13 +180,13 @@ def _window_note(logs):
 def _open_ears(announce):
     """The hardware half of listening - transcriber, mic, recorder - shared by both voice modes.
 
-    Not "hearing", which is `entity.hearing`: that module is the live line, and one name for both
+    Not "hearing", which is `excephalon.hearing`: that module is the live line, and one name for both
     would have the next reader looking for a screen in the microphone code."""
     import sounddevice as sd
 
-    from entity.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
-    from entity.recorder import AudioRecorder
-    from entity.transcribe import CorrectingTranscriber, ParakeetTranscriber
+    from excephalon.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
+    from excephalon.recorder import AudioRecorder
+    from excephalon.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
     # Bias transcription toward the user's own vocabulary, so their coined names survive it, and
     # swap outright the phrases that come back as ordinary English ("cloud agent"). The window's
@@ -262,7 +262,7 @@ def _build_ears(text_mode, stop, interrupt, announce=print):
     `interrupt` lets a quiet moment be broken off so Excephalon can pass on queued agent news."""
     if text_mode:
         return ConsoleSTT(), None, None
-    from entity.stt_mic import MicSTT
+    from excephalon.stt_mic import MicSTT
 
     transcriber, mic, recorder = _open_ears(announce)
     cue = lambda: announce("  ✓ got it")  # visual "registered" the instant you say "over"
@@ -306,7 +306,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
 
     announce("Excephalon is waking up...")
     # The chop mender: spurious sentence breaks healed instantly and deterministically (see
-    # entity.polish - the model-based repairman is retired; it cost eight seconds a submit and
+    # excephalon.polish - the model-based repairman is retired; it cost eight seconds a submit and
     # often did nothing).
     # The desk holds each agent as a live session on its own thread; the brain drives it through
     # typed in-process tools (start_agent, tell_agent, ...), so starting or messaging an agent
@@ -356,8 +356,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     if gui:
         # The window's mic is a STATE, not a walkie-talkie: continuous dictation into the editable
         # draft, controlled by voice ("hey entity" / "stop listening"), the mic button, and Submit.
-        from entity.dictation import Dictation
-        from entity.hearing import Hearing
+        from excephalon.dictation import Dictation
+        from excephalon.hearing import Hearing
 
         transcriber, mic, recorder = _open_ears(announce)
         if hooks is not None:
@@ -427,9 +427,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # what it always was: prose for people.
     session_messages = MessageLog(TRANSCRIPTS / f"{_session_name}.jsonl")
     # The memory inbox's nudge: in genuine downtime - fleet idle, conversation quiet - one
-    # remembered fact is raised for his verdict, worked toward inbox zero (see entity.review).
-    from entity.memory import DEFAULT_LEARNED_PATH as LEARNED
-    from entity.review import MemoryNudger
+    # remembered fact is raised for his verdict, worked toward inbox zero (see excephalon.review).
+    from excephalon.memory import DEFAULT_LEARNED_PATH as LEARNED
+    from excephalon.review import MemoryNudger
 
     def _memories():
         try:
@@ -583,18 +583,18 @@ def main(argv=None):
     # the way down - goodbye said, memory consolidated - `done` lets the window end itself.
     import anyio
 
-    from entity.chord import ChordListener, SubmitChord, foreground_is_ours
-    from entity.desktop import open_window
-    from entity.worktrees import head_commit
-    from entity.memory import (
+    from excephalon.chord import ChordListener, SubmitChord, foreground_is_ours
+    from excephalon.desktop import open_window
+    from excephalon.worktrees import head_commit
+    from excephalon.memory import (
         DEFAULT_LEARNED_PATH,
         DEFAULT_PERSONA_ADDITIONS_PATH,
         DEFAULT_TRANSLATIONS_PATH,
     )
-    from entity.no_console import silence_child_consoles
-    from entity.transcript import past_messages
-    from entity.mirror import Mirror
-    from entity.web import create_app
+    from excephalon.no_console import silence_child_consoles
+    from excephalon.transcript import past_messages
+    from excephalon.mirror import Mirror
+    from excephalon.web import create_app
 
     # With no console of its own to lend them, Windows gives each console child a new window: the
     # Claude CLI the brain runs was turning up as a second window on their desktop.
@@ -620,8 +620,8 @@ def main(argv=None):
 
     _REPO = Path(__file__).resolve().parents[2]
     booted_from = head_commit(_REPO)
-    from entity.memory import reconcile_lexicon
-    from entity.vocabulary import scan_terms
+    from excephalon.memory import reconcile_lexicon
+    from excephalon.vocabulary import scan_terms
 
     scanned_now = scan_terms(_project_roots()) | {"Excephalon"}
 
@@ -649,7 +649,7 @@ def main(argv=None):
             # which interpreter brings the app back, are the desk's business and live with it.
             import os
 
-            from entity.relauncher import spawn
+            from excephalon.relauncher import spawn
 
             spawn(os.getpid(), _REPO)
             control.restart()
@@ -716,7 +716,7 @@ def main(argv=None):
     stop.set()  # the window was closed: ask the loop to wind down, as closing the Tk one did
     # Wait the wind-down out on EVERY close, not only a restart: the process used to exit while
     # the worker was still mid-goodbye, tearing native audio down under a live thread. The
-    # restart's relaunch needs nothing here - a detached helper (entity.relauncher) is already
+    # restart's relaunch needs nothing here - a detached helper (excephalon.relauncher) is already
     # waiting for this pid to die, however the wind-down goes.
     session.join(timeout=30)
 

@@ -41,9 +41,9 @@ import re
 import threading
 import time
 
-from entity.hesitation import without_hesitations
-from entity.phrases import canonical, ends_with_command, strip_leading_command, wakes
-from entity.stt_mic import (
+from excephalon.hesitation import without_hesitations
+from excephalon.phrases import canonical, ends_with_command, strip_leading_command, wakes
+from excephalon.stt_mic import (
     PAUSE_FRAMES,
     STOP_WORDS,
     Burst,
@@ -189,7 +189,7 @@ class Dictation:
 
         The draft's pause-chopped punctuation is repaired on the way through (`polish`) - his
         call: the brain "will be able to make more sense of what I'm saying if the fix is done
-        before submitting". The repair is deterministic and instant (entity.polish.mend), so
+        before submitting". The repair is deterministic and instant (excephalon.polish.mend), so
         the submit costs nothing - the model that once sat here added eight seconds."""
         text = text.strip()
         if self._polish is not None and text:

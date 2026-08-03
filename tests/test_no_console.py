@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from entity import machine
-from entity.no_console import CREATE_NO_WINDOW, silence_child_consoles
+from excephalon import machine
+from excephalon.no_console import CREATE_NO_WINDOW, silence_child_consoles
 
 
 @pytest.fixture

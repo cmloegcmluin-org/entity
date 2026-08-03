@@ -162,8 +162,8 @@ a known weakness rather than a solution.
   turn you find it. Twice the diagnosis was right and the chore was handed back to him instead
   ("tell Excephalon to check #114 off"), leaving him with a list that called his finished work
   open — and he had to notice it himself, which is the whole failure. A closed app is not a
-  reason to hand it over: `python -m entity.cards tick <n>` and
-  `python -m entity.cards retire <agent> --tick <n>` go through the app's own savers with no
+  reason to hand it over: `python -m excephalon.cards tick <n>` and
+  `python -m excephalon.cards retire <agent> --tick <n>` go through the app's own savers with no
   window running.
 
 ## Failure patterns that have recurred here
@@ -295,11 +295,20 @@ word (it is in the vocabulary to help). The word it prints and speaks and the wo
 for must be the SAME word: for months it said "say 'hey Entity'" and "say 'goodbye entity' to
 end" while the only spoken name that actually worked was the one it never called itself, so
 saying its own name back to it did nothing. When you touch either list, touch the sentence that
-tells him about it. Only the repo, the module, the transcript
-line format and every internal role key stay `entity`: renaming those breaks parsers of past
-transcripts for a word nobody hears. Comments quoting HIM keep his words exactly as he said
-them, "Entity" and all — a quote rewritten to match today's name is a record of something he
-never said. `links.py` decides what a message names that can be
+tells him about it. The repo, the package and the tools the brain calls are `excephalon` too —
+that clause used to also excuse the module, on a reason that was never its own, and the module
+was renamed the day he asked what the reason actually was.
+
+What genuinely cannot be renamed is what has already been WRITTEN DOWN: the `role` on every
+stored message and the `entity> ` prefix on every recorded line. The name he sees was never in
+those files — it is looked up from the role when the page draws — so the role is a storage
+format, and a stored role nothing recognises is not a message at all: no name, no side, not a
+bubble, so his history reloads as grey rows. `transcript.SELF` is what is written; `WAS_SELF` and
+the old prefixes beside it are what is still READ. Never drop the reading half, and when adding a
+prefix put the longer one first — `excephalon (heads-up)> ` starts with `excephalon> `, so the
+other order turns every unprompted line into an ordinary reply. Comments quoting HIM keep his
+words exactly as he said them, "Entity" and all — a quote rewritten to match today's name is a
+record of something he never said. `links.py` decides what a message names that can be
 opened, and opens it. A rename never fails in silence: a refused one comes back as a sentence
 the rail shows under the name ("another log is already called that"), because a name quietly
 put back reads as a broken app - and a name differing only in CASE is not a collision but this

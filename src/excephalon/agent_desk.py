@@ -24,12 +24,12 @@ import threading
 import time
 from pathlib import Path
 
-from entity.delivery import Delivery, DeliveryError
-from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
-from entity.relay import notice
-from entity.steps import SAID, render
-from entity.tailing import archive_dir, safe_name
-from entity.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
+from excephalon.delivery import Delivery, DeliveryError
+from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
+from excephalon.relay import notice
+from excephalon.steps import SAID, render
+from excephalon.tailing import archive_dir, safe_name
+from excephalon.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
 # Attached to every task the desk hands out, because asking for it each time did not hold: the
@@ -192,7 +192,7 @@ class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
                  monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
                  law_path=None, complete_enhancement=None):
-        from entity.worktrees import run_hidden
+        from excephalon.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
         # How a finished agent's Enhancements-list item gets ticked off (memory.complete_enhancement),
@@ -219,7 +219,7 @@ class AgentDesk:
         # Which model their agents run on, and how hard they are told to think. Held HERE because
         # they change it by asking - and because an agent's session is fixed at birth, so a change
         # governs the next one started, never one already working. It was hardcoded and invisible;
-        # they had to ask what their agents were running and could not be told (see entity.models).
+        # they had to ask what their agents were running and could not be told (see excephalon.models).
         self._model, self._effort = DEFAULT_MODEL, DEFAULT_EFFORT
         self._clock = clock
         self._desked = {}
@@ -718,6 +718,6 @@ class AgentDesk:
 
 def _real_agent(name, cwd, decide, *, model=DEFAULT_MODEL, effort=DEFAULT_EFFORT, resume=None):
     # Imported here so the desk can be exercised without the SDK (and without a real agent).
-    from entity.supervised_agent import SupervisedAgent
+    from excephalon.supervised_agent import SupervisedAgent
 
     return SupervisedAgent(name, cwd, decide, model=model, effort=effort, resume=resume)

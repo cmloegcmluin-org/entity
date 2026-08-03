@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from entity.worktrees import prepare_worktree, prepare_worktree_for
+from excephalon.worktrees import prepare_worktree, prepare_worktree_for
 
 
 def test_prepare_worktree_fetches_before_branching_from_current_origin_main():
@@ -60,17 +60,17 @@ def test_prepare_worktree_for_walks_up_to_the_first_existing_ancestor(tmp_path):
 def test_projects_are_the_git_repos_directly_under_the_workspace(tmp_path):
     # "you should certainly come out of the gates knowing where my projects live." The brain had
     # to ask where a repo was; the workspace's own directory listing already knew.
-    for name in ("highdeas", "entity"):
+    for name in ("highdeas", "excephalon"):
         (tmp_path / name / ".git").mkdir(parents=True)
     (tmp_path / "notes").mkdir()  # no .git - papers, not a project
 
-    from entity.worktrees import projects
+    from excephalon.worktrees import projects
 
-    assert projects(tmp_path) == ["entity", "highdeas"]
+    assert projects(tmp_path) == ["excephalon", "highdeas"]
 
 
 def test_no_workspace_means_no_projects(tmp_path):
-    from entity.worktrees import projects
+    from excephalon.worktrees import projects
 
     assert projects(tmp_path / "nowhere") == []
 
@@ -79,7 +79,7 @@ def test_head_commit_reads_the_checkout_without_a_subprocess(tmp_path):
     # The Restart button compares the disk's commit against the booted one on a poll, so this
     # has to be file reads - and a repo it cannot read answers "", which callers treat as
     # "don't know", never as "changed".
-    from entity.worktrees import head_commit
+    from excephalon.worktrees import head_commit
 
     git = tmp_path / ".git"
     (git / "refs" / "heads").mkdir(parents=True)

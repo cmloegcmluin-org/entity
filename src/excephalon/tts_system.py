@@ -15,7 +15,7 @@ import os
 import shutil
 import subprocess
 
-from entity import machine
+from excephalon import machine
 
 _SPEAK_SCRIPT = (
     "Add-Type -AssemblyName System.Speech; "

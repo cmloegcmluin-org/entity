@@ -1,5 +1,5 @@
-from entity.outbox import News
-from entity.waiting import chosen, roll_call
+from excephalon.outbox import News
+from excephalon.waiting import chosen, roll_call
 
 
 def _three():

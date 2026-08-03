@@ -1,4 +1,4 @@
-from entity.links import as_spoken, link_in, open_link
+from excephalon.links import as_spoken, link_in, open_link
 
 
 def test_a_web_address_and_a_path_on_this_machine_are_both_openable():
@@ -57,7 +57,7 @@ def test_a_file_not_written_yet_opens_the_nearest_folder_that_is_there(tmp_path)
 
 
 def test_a_path_with_a_space_is_one_link_when_the_disk_confirms_it():
-    from entity.links import link_parts
+    from excephalon.links import link_parts
 
     # "C:\Users\ada\Field Notes\inbox." broke on the space and came out a broken link.
     # The filesystem settles it: the run that exists is the whole path, folder-with-a-space and all.
@@ -71,7 +71,7 @@ def test_a_path_with_a_space_is_one_link_when_the_disk_confirms_it():
 
 
 def test_a_real_word_after_a_real_path_is_not_swallowed_into_it():
-    from entity.links import link_parts
+    from excephalon.links import link_parts
 
     here = r"C:\ada\notes"
     parts = link_parts(f"{here} and then lunch", exists=lambda p: p == here)
@@ -80,7 +80,7 @@ def test_a_real_word_after_a_real_path_is_not_swallowed_into_it():
 
 
 def test_a_path_that_exists_nowhere_is_still_the_one_word_it_was():
-    from entity.links import link_parts
+    from excephalon.links import link_parts
 
     parts = link_parts(r"See C:\ada\gone.md now", exists=lambda p: False)
 
@@ -90,7 +90,7 @@ def test_a_path_that_exists_nowhere_is_still_the_one_word_it_was():
 
 
 def test_only_what_the_module_would_offer_can_be_opened():
-    from entity.links import offers
+    from excephalon.links import offers
 
     real = r"C:\Users\ada\Field Notes\inbox"
     assert offers("https://ex.com/x") is True
@@ -163,7 +163,7 @@ def test_a_click_reaches_this_desk_s_own_opener(tmp_path, monkeypatch):
     # The default `shell` is the one thing here that is not the same on both desks: `os.startfile`
     # exists only on Windows, so on a Mac the click that used to open a folder was an
     # AttributeError at the moment of the click - the failure a person reads as a broken window.
-    from entity import links, machine
+    from excephalon import links, machine
 
     opened = []
     if machine.WINDOWS:

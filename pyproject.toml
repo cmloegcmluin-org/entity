@@ -1,5 +1,5 @@
 [project]
-name = "entity"
+name = "excephalon"
 version = "0.1.0"
 description = "Excephalon — a local, voice-in/voice-out, memory-persistent Claude pairing partner."
 requires-python = ">=3.11"

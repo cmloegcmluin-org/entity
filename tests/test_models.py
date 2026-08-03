@@ -1,4 +1,4 @@
-from entity.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe, resolve
+from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe, resolve
 
 
 def test_the_default_is_the_model_he_would_have_used_himself():

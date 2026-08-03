@@ -1,4 +1,4 @@
-from entity.tailing import LogTail, archive_dir, discover
+from excephalon.tailing import LogTail, archive_dir, discover
 
 
 def test_discover_lists_log_files_by_name(tmp_path):

@@ -23,7 +23,7 @@ a comma. So a word is shown once it has been heard the same way twice, and the l
 import threading
 import time
 
-from entity.phrases import canonical
+from excephalon.phrases import canonical
 
 READ_EVERY = 10  # frames of new audio between readings - 300 ms, comfortably above one reading
 IDLE = 0.02      # how long the worker sleeps with nothing to read

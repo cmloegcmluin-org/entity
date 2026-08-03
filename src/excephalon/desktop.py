@@ -14,7 +14,7 @@ import socket
 import threading
 from pathlib import Path
 
-from entity.mirror import APP_ID
+from excephalon.mirror import APP_ID
 
 # The X still asks first - "Godddamnit, I accidentally closed this app. There should definitely
 # be an 'are you sure' confirmation dialog!!" - but the asking is the page's own styled dialog
@@ -52,7 +52,7 @@ def serve(app, port, host="127.0.0.1"):
     thread = threading.Thread(
         target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False,
                                threaded=True),
-        daemon=True, name="entity-web")
+        daemon=True, name="excephalon-web")
     thread.start()
     return thread
 

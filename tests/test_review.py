@@ -1,6 +1,6 @@
 import threading
 
-from entity.review import MemoryNudger
+from excephalon.review import MemoryNudger
 
 
 class Sink:

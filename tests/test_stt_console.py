@@ -1,4 +1,4 @@
-from entity.stt_console import ConsoleSTT
+from excephalon.stt_console import ConsoleSTT
 
 
 def test_listen_returns_the_typed_line():

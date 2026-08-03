@@ -1,4 +1,4 @@
-# Put "Excephalon" in the Start Menu: a shortcut to pythonw -m entity --gui with the repo's icon.
+# Put "Excephalon" in the Start Menu: a shortcut to pythonw -m excephalon --gui with the repo's icon.
 # Run from anywhere; everything is derived from this script's own location. Re-run after moving
 # the repo. Run it once after cloning; it creates the entry, nothing else is needed.
 $repo = Split-Path -Parent $PSScriptRoot
@@ -10,7 +10,7 @@ $shortcut = Join-Path $programs "Excephalon.lnk"
 $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($shortcut)
 $link.TargetPath = $pythonw
-$link.Arguments = "-m entity --gui"
+$link.Arguments = "-m excephalon --gui"
 $link.WorkingDirectory = $repo
 $link.IconLocation = $icon
 $link.Description = "Excephalon - voice companion"

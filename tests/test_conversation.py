@@ -1,9 +1,9 @@
 import threading
 import time
 
-from entity.console import Console
-from entity.conversation import Conversation, Turn
-from entity.outbox import Outbox
+from excephalon.console import Console
+from excephalon.conversation import Conversation, Turn
+from excephalon.outbox import Outbox
 
 
 class FakeSTT:
@@ -1347,7 +1347,7 @@ def test_the_real_farewell_still_says_its_line():
 def test_a_streamed_reply_speaks_paths_the_way_a_person_would():
     # The one sanctioned difference between ear and screen, carried over from the one-shot path:
     # the screen shows the real path (it is what gets clicked); the voice says its filename.
-    from entity.links import as_spoken
+    from excephalon.links import as_spoken
 
     tts = StreamingTTS()
     convo = Conversation(FakeSTT(["where"]), StreamingBrain(), tts)

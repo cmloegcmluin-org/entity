@@ -1,4 +1,4 @@
-from entity.vocabulary import DEFAULT_TRANSLATIONS, correct_terms, scan_terms
+from excephalon.vocabulary import DEFAULT_TRANSLATIONS, correct_terms, scan_terms
 
 
 def test_a_near_miss_token_is_corrected_to_the_known_term():

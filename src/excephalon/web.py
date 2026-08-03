@@ -18,7 +18,7 @@ from pathlib import Path
 
 from flask import Flask, redirect, render_template, request
 
-from entity.memory import (
+from excephalon.memory import (
     ENHANCEMENTS_HEADING,
     checklist_items,
     profile_sections,
@@ -29,11 +29,11 @@ from entity.memory import (
     split_filed,
     translation_pairs,
 )
-from entity.links import link_parts, offers, open_link
-from entity.mirror import SIDES, TranscriptModel, sessions
-from entity.transcript import SELF
-from entity.tailing import LogTail, archive_dir, discover, safe_name
-from entity.vocabulary import translations_in_force
+from excephalon.links import link_parts, offers, open_link
+from excephalon.mirror import SIDES, TranscriptModel, sessions
+from excephalon.transcript import SELF
+from excephalon.tailing import LogTail, archive_dir, discover, safe_name
+from excephalon.vocabulary import translations_in_force
 
 # The role keys are the transcript's own line format and never change; the NAMES are what the
 # window shows, and the window shows Excephalon now.
@@ -153,7 +153,7 @@ def _started(log):
     The day the agent was STARTED, not the day it stopped - "the date should be when the agent was
     started, not when it finished" - which is the first line the desk ever wrote to it. A log with
     no header falls back to the file's own last write, the only other date there is."""
-    from entity.transcript import day_of
+    from excephalon.transcript import day_of
 
     try:
         with open(log, "r", encoding="utf-8", errors="replace") as lines:

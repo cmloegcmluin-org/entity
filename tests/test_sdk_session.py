@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, StreamEvent
 
-from entity.sdk_session import BrainUnavailable, SdkSession, _context_tokens, extract_text
+from excephalon.sdk_session import BrainUnavailable, SdkSession, _context_tokens, extract_text
 
 
 class FakeBlock:

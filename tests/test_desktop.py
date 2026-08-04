@@ -253,9 +253,27 @@ def test_the_mac_dock_face_is_claimed_at_startup_and_a_failure_costs_only_cosmet
     from excephalon.desktop import set_mac_identity
 
     claimed = []
-    set_mac_identity("/repo/assets/excephalon.png", api=claimed.append)
+    set_mac_identity("/repo/assets/excephalon.png", api=claimed.append, bundled=lambda: None)
     assert claimed == ["/repo/assets/excephalon.png"]
 
     def refuses(icon):
         raise RuntimeError("no AppKit here")
-    set_mac_identity("/repo/assets/excephalon.png", api=refuses)  # must not raise
+    set_mac_identity("/repo/assets/excephalon.png", api=refuses,  # must not raise
+                     bundled=lambda: None)
+
+
+def test_a_bundle_launched_app_keeps_the_icon_the_system_gave_it():
+    # "the Dock icon keeps losing its squircle" - this OS drapes every app icon on its rounded
+    # plate, but only when the icon comes from the BUNDLE: an image set at runtime shows raw. So
+    # the startup claim, added for bare-python launches, was stripping the plate off every proper
+    # launch a moment after it appeared. Inside the bundle the system's icon is already right;
+    # the claim is only for a process the bundle never dressed.
+    from excephalon.desktop import set_mac_identity
+
+    claimed = []
+    set_mac_identity("/repo/assets/excephalon.png", api=claimed.append,
+                     bundled=lambda: "Excephalon.VoiceCompanion")
+    assert claimed == []
+
+    set_mac_identity("/repo/assets/excephalon.png", api=claimed.append, bundled=lambda: None)
+    assert claimed == ["/repo/assets/excephalon.png"]

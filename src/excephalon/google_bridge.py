@@ -161,6 +161,19 @@ class Bridge:
         if request_id is None:
             return None  # a notification: answering it would desync the whole stdio stream
         if status in (401, 403):
+            # Google delivers real, actionable answers INSIDE denial statuses - "Calendar MCP
+            # API has not been used in project ... Enable it by visiting <url>" arrived as a
+            # well-formed JSON-RPC result under a 403, and swallowing it into the sign-in hint
+            # pointed the user at a sign-in that could not help while the fix sat in the eaten
+            # body. A denial that carries a JSON-RPC answer IS the answer; the hint is only for
+            # a denial that says nothing.
+            told = _unwrap(content_type, body)
+            try:
+                held = json.loads(told)
+            except ValueError:
+                held = None
+            if isinstance(held, dict) and "jsonrpc" in held:
+                return told
             return json.dumps({"jsonrpc": "2.0", "id": request_id,
                                "error": {"code": -32000, "message": CONNECT_HINT}})
         return _unwrap(content_type, body)

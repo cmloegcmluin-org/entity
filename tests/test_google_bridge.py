@@ -223,3 +223,23 @@ def test_the_bridge_introduces_itself_as_itself():
 
     [(_, payload, _)] = post.calls
     assert payload["params"]["clientInfo"]["name"] == "excephalon-google-bridge"
+
+
+def test_googles_own_explanation_outranks_the_connect_hint():
+    # Google delivers real, actionable answers INSIDE denial statuses: "Calendar MCP API has not
+    # been used in project ... or it is disabled. Enable it by visiting <url>" arrived as a
+    # well-formed JSON-RPC result under a 403 - and the bridge swallowed it into "not connected
+    # yet - sign in", pointing at a sign-in that could not help while the fix sat in the eaten
+    # body. A denial that carries a JSON-RPC answer IS the answer; the hint is only for a denial
+    # that says nothing.
+    told = {"jsonrpc": "2.0", "id": 5, "result": {
+        "content": [{"type": "text", "text": "Calendar MCP API has not been used in project"}],
+        "isError": True}}
+    post = FakePost([(403, "application/json", json.dumps(told))])
+    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"), client={})
+
+    answer = json.loads(bridge.handle(json.dumps(
+        {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+         "params": {"name": "list_calendars", "arguments": {}}})))
+
+    assert answer == told  # forwarded whole, not replaced by the sign-in hint

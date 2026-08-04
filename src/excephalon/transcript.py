@@ -269,24 +269,34 @@ SESSION_BREAK = "•   •   •"  # filled, not middle dots: at this size those
 
 
 def recent_turns(directory, keep=16):
-    """The tail of the newest session, as (their words, the reply) pairs - the seed that lets a
-    restarted process pick the conversation back up instead of greeting them as a stranger.
+    """The tail of the recorded conversation, as (their words, the reply) pairs - the seed that
+    lets a restarted process pick the thread back up instead of greeting them as a stranger.
 
     "There should be a way to reload Excephalon so that it gets any fixes but without breaking the
     current session." The half of a restart that breaks the session is the lost thread; the
-    transcript already holds it. Only the newest file: continuity is with the conversation they
-    just had, and the older history is already in learned.md. A question with no reply under it
-    (the line the session died on) is skipped, never stitched to the next answer - a seed where
-    answers sit under the wrong questions is worse than no seed at all.
+    transcript already holds it. The tail walks BACK across session files until it is full,
+    because the boundary that matters is his ("the stuff we were just talking about a few minutes
+    ago"), not the process's: a window opened, never spoken into, and closed used to be the whole
+    seed - one unanswered greeting - and the next boot answered "I don't have access to previous
+    sessions" about a conversation minutes old. A question with no reply under it (the line a
+    session died on) is skipped, never stitched to the next answer - a seed where answers sit
+    under the wrong questions is worse than no seed at all.
     """
     directory = Path(directory)
     if not directory.is_dir():
         return []
-    newest = max(directory.glob("*.log"), default=None)  # filenames sort chronologically
-    if newest is None:
-        return []
+    turns = []
+    for record in sorted(directory.glob("*.log"), reverse=True):  # filenames sort chronologically
+        turns = _session_turns(record) + turns
+        if len(turns) >= keep:
+            break
+    return turns[-keep:]
+
+
+def _session_turns(record):
+    """One session's (question, reply) pairs, oldest first."""
     try:
-        lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = record.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     turns, question = [], None
@@ -300,7 +310,7 @@ def recent_turns(directory, keep=16):
         elif role == SELF and question is not None:
             turns.append((question, text))
             question = None
-    return turns[-keep:]
+    return turns
 
 
 def parse_line(line):

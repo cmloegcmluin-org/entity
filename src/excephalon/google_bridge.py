@@ -47,6 +47,12 @@ SCOPES = (
 CONNECT_HINT = ("Google is not connected yet - run Connect Google.command (or "
                 "`python -m excephalon.google_bridge --connect`) and sign in once.")
 
+# The sign-in catcher's FIXED port. Google's MCP guides call for a Web-application OAuth client,
+# and a Web client honors only redirect URIs registered in advance, exactly - so the port cannot
+# be whatever the machine had free. http://127.0.0.1:8765 is the one URI to register, spelled
+# with the number, because Google treats localhost and 127.0.0.1 as different strings.
+CONNECT_PORT = 8765
+
 # The one protocol version Google's servers accept. They 401 any initialize below it (measured:
 # 2024-11-05 and 2025-03-26 both bounce) instead of negotiating downward as the spec intends -
 # and that 401 read as "not signed in", which sent the user to a sign-in that could not help.
@@ -250,7 +256,6 @@ def serve(url, *, stdin=sys.stdin, stdout=sys.stdout):
 def connect():
     """The one-time browser sign-in: catch Google's redirect on a loopback port, trade the code,
     write the tokens. Run by a person, so it talks in plain sentences."""
-    import socket
     import threading
     import webbrowser
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -261,9 +266,7 @@ def connect():
               f"  {RUNTIME_GOOGLE / 'client.json'}\nand run this again.")
         return 1
 
-    with socket.socket() as probe:  # a port the machine says is free, for the redirect catcher
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    port = CONNECT_PORT
 
     caught = {}
     done = threading.Event()

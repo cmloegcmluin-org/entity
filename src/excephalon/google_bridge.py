@@ -30,13 +30,18 @@ RUNTIME_GOOGLE = Path(__file__).resolve().parents[2] / "runtime" / "google"
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# What the user is asked to grant, chosen from each server's own advertised scopes: enough to
-# read, organize, draft and send mail and to keep his calendar - none of the permanent-delete or
-# settings scopes, which nothing here needs.
+# EXACTLY the scopes Google's own MCP-server guides name, and no others - learned the hard way:
+# a token carrying the broad auth/calendar scope instead of these granular ones gets "The caller
+# does not have permission" on every calendar tool, and gmail.modify in place of gmail.readonly
+# reads as "insufficient authentication scopes". The same five URLs must be registered on the
+# consent screen's Data Access page. (developers.google.com/workspace/{gmail,calendar}/api/
+# guides/configure-mcp-server)
 SCOPES = (
-    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    "https://www.googleapis.com/auth/calendar.events.freebusy",
+    "https://www.googleapis.com/auth/calendar.events.readonly",
 )
 
 CONNECT_HINT = ("Google is not connected yet - run Connect Google.command (or "

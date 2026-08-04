@@ -128,6 +128,12 @@ def choose_input_device(devices, probe, *, override=None, hostapi=None):
         for index, device in inputs:
             if want and want in device["name"].lower():
                 return index, device["name"]
+    # A phone offering itself as a mic (macOS lists an iPhone or iPad via Continuity) is not a
+    # candidate: PROBING it is what makes the phone ring itself awake trying to serve - "that's
+    # annoying and I won't ever want to do that" - so it is dropped before the probe, however
+    # lively it would read. The override above runs first: asked for BY NAME, it still works.
+    inputs = [(i, d) for i, d in inputs
+              if not any(phone in d["name"].lower() for phone in ("iphone", "ipad"))]
     best_index, best_name, best_level = None, None, None
     seen = set()
     for index, device in inputs:

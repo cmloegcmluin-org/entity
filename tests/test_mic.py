@@ -153,3 +153,27 @@ def test_a_device_returning_a_non_finite_level_is_ignored():
     idx, name = choose_input_device(devices, probe)
 
     assert (idx, name) == (1, "Good")
+
+
+def test_a_continuity_iphone_is_never_chosen_and_never_even_probed():
+    # macOS lists his iPhone as an input (Continuity), and PROBING it is what makes the phone
+    # ring itself awake trying to serve as a microphone - "that's annoying and I won't ever want
+    # to do that." It is not a candidate: not probed, not picked, however lively. Only an
+    # explicit mic.txt override naming it can reach it.
+    devices = [
+        {"name": "DOUGLAS's iPhone Microphone", "max_input_channels": 1},
+        {"name": "MacBook Neo Microphone", "max_input_channels": 1},
+    ]
+    probed = []
+
+    def probe(index):
+        probed.append(index)
+        return 0.5 if index == 0 else 0.1  # the phone reads livelier; it must still lose
+
+    index, name = choose_input_device(devices, probe)
+
+    assert (index, name) == (1, "MacBook Neo Microphone")
+    assert probed == [1]  # the phone was never even touched
+
+    index, name = choose_input_device(devices, probe, override="iphone")
+    assert index == 0  # asked for BY NAME, it is still reachable

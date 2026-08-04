@@ -40,7 +40,8 @@ def test_the_new_app_comes_up_once_the_old_one_is_gone(tmp_path):
     started, answers = [], [True, True, False]
 
     relauncher.wait_then_launch(4321, tmp_path, poll=0, alive=lambda: answers.pop(0),
-                                start=lambda argv, **kw: started.append(argv))
+                                start=lambda argv, **kw: started.append(argv),
+                                bundled=lambda: None)  # the machine running the suite may have one
 
     assert answers == []  # it waited for every "still here" before giving up on it
     assert started == [[str(relauncher.app_python(tmp_path)), "-m", "excephalon", "--gui"]]
@@ -52,7 +53,8 @@ def test_an_app_that_never_dies_still_gets_a_successor(tmp_path):
     started = []
 
     relauncher.wait_then_launch(4321, tmp_path, timeout=0, poll=0, alive=lambda: True,
-                                start=lambda argv, **kw: started.append(argv))
+                                start=lambda argv, **kw: started.append(argv),
+                                bundled=lambda: None)
 
     assert len(started) == 1
 
@@ -75,3 +77,28 @@ def test_a_process_that_is_not_this_helper_s_parent_is_asked_directly():
     assert relauncher.watcher_for(os.getpid(), parent=lambda: 1)() is True
     # A pid nothing could hold: 0 is the whole process group, and no ordinary pid is negative.
     assert relauncher.watcher_for(2 ** 31 - 1, parent=lambda: 1)() is False
+
+
+@pytest.mark.skipif(machine.WINDOWS, reason="the bundle is the Mac's launcher")
+def test_a_mac_relaunch_goes_through_the_app_bundle_when_there_is_one(tmp_path):
+    # The relaunch used to exec the venv python directly, and the app came back as "Python" with
+    # the interpreter's own icon - a stranger in the Dock, beside the real pinned tile. The
+    # bundle IS the app's identity on a Mac, so a restart that has one goes through it.
+    started = []
+
+    relauncher.wait_then_launch(4321, tmp_path, timeout=0, poll=0, alive=lambda: False,
+                                start=lambda argv, **kw: started.append(argv),
+                                bundled=lambda: "/Applications/Excephalon.app")
+
+    assert started == [["open", "-n", "/Applications/Excephalon.app"]]
+
+
+@pytest.mark.skipif(machine.WINDOWS, reason="the bundle is the Mac's launcher")
+def test_a_mac_without_the_bundle_still_comes_back(tmp_path):
+    started = []
+
+    relauncher.wait_then_launch(4321, tmp_path, timeout=0, poll=0, alive=lambda: False,
+                                start=lambda argv, **kw: started.append(argv),
+                                bundled=lambda: None)
+
+    assert started == [[str(relauncher.app_python(tmp_path)), "-m", "excephalon", "--gui"]]

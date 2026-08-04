@@ -14,6 +14,7 @@ import socket
 import threading
 from pathlib import Path
 
+from excephalon import machine
 from excephalon.mirror import APP_ID
 
 # The X still asks first - "Godddamnit, I accidentally closed this app. There should definitely
@@ -35,6 +36,26 @@ def set_app_id(app_id, api=_set_app_id_via_shell32):
     API just doesn't get one - a cosmetic nicety must never keep the window from opening."""
     try:
         api(app_id)
+    except Exception:
+        pass
+
+
+def _set_mac_identity_via_appkit(icon):
+    from AppKit import NSApplication, NSImage  # noqa: PLC0415 - pyobjc, present under the cocoa backend
+
+    image = NSImage.alloc().initWithContentsOfFile_(str(icon))
+    if image is not None:
+        NSApplication.sharedApplication().setApplicationIconImage_(image)
+
+
+def set_mac_identity(icon, api=_set_mac_identity_via_appkit):
+    """Claim the Dock face on a Mac. Launched outside its bundle - the old relauncher's bare
+    python, a terminal run - the app sat in the Dock as "Python" with the interpreter's icon:
+    "it came back with a different icon ... and is named Python". Same shape as the Windows
+    AppUserModelID claim: best-effort, and a platform where it fails just doesn't get one."""
+    try:
+        if icon:
+            api(icon)
     except Exception:
         pass
 
@@ -231,6 +252,9 @@ def open_window(app, *, title="Excephalon", icon=None, webview=None, port=None,
     # pythonw-hosted app already owns one - Excephalon window turned up under another app's icon,
     # wearing its name. It did so again the moment this call was dropped in a move.
     set_app_id(APP_ID)
+    if machine.MACOS and icon:
+        # The .png beside the .ico: NSImage reads it directly, and both are cut from one source.
+        set_mac_identity(str(Path(icon).with_suffix(".png")))
     port = port or free_port()
     serve(app, port)
     saved = {}

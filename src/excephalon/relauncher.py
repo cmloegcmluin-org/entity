@@ -83,12 +83,28 @@ def watcher_for(pid, *, parent=os.getppid):
     return lambda: _signalable(pid)
 
 
-def wait_then_launch(pid, repo, *, timeout=120.0, poll=0.5, alive=None, start=subprocess.Popen):
+MAC_BUNDLE = Path("/Applications/Excephalon.app")
+
+
+def _installed_bundle():
+    """The Mac app bundle to relaunch through, or None off-Mac or before it is installed."""
+    return str(MAC_BUNDLE) if machine.MACOS and MAC_BUNDLE.exists() else None
+
+
+def wait_then_launch(pid, repo, *, timeout=120.0, poll=0.5, alive=None, start=subprocess.Popen,
+                     bundled=_installed_bundle):
     alive = watcher_for(pid) if alive is None else alive
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and alive():
         time.sleep(poll)
     # Timed out or died - either way the old window is not coming back; bring up the new one.
+    # On a Mac that means the BUNDLE when there is one: relaunching the venv python directly
+    # brought the app back as "Python" with the interpreter's own icon - a stranger in the Dock
+    # beside the real pinned tile - because the bundle is the app's identity there.
+    bundle = bundled()
+    if bundle is not None:
+        start(["open", "-n", bundle], close_fds=True)
+        return
     start([str(app_python(repo)), "-m", "excephalon", "--gui"], cwd=str(repo), close_fds=True,
           **_detached())
 

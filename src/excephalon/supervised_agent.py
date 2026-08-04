@@ -44,6 +44,11 @@ def _agent_options(cwd, model, effort, can_use_tool, resume=None):
         # ruins. "how to TDD etc. is ultra critical" - that is project law; the quoting rules are
         # his-conversation law; the split keeps each where it belongs.
         setting_sources=["project"],
+        # Pinned against account-level claude.ai connectors, which attach to any session and
+        # wedge a headless one on a browserless OAuth (anthropics/claude-code#36060). This also
+        # keeps out any .mcp.json a repo might carry - none of his do today, and a wedged agent
+        # mid-landing costs more than a hypothetical project server.
+        extra_args={"strict-mcp-config": None},
         permission_mode="default",  # approvals ON: nothing runs without a decision
         can_use_tool=can_use_tool,
         # Reattach to everything the agent already knew: a restart used to strand the fleet, and

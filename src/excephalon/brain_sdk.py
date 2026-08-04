@@ -194,6 +194,11 @@ def _make_options(persona, model, actions=None):
         mcp_servers={SERVER: actions} if actions is not None else {},
         allowed_tools=list(TOOL_NAMES) if actions is not None else [],
         include_partial_messages=True,  # the voice speaks the reply as it is written
+        # Pinned to its own in-process server - account-level claude.ai connectors attach to any
+        # session the CLI opens, and a headless one that tries to OAuth them has no browser and
+        # no user; a brain replacement session wedged on exactly that, 90 seconds of silence
+        # into a spoken error and a force-quit (anthropics/claude-code#36060).
+        extra_args={"strict-mcp-config": None},
     )
 
 

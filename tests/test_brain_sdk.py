@@ -587,3 +587,18 @@ def test_a_machine_that_is_not_signed_in_still_opens_and_says_so():
 
     assert len(said) == 1
     assert "sign" in said[0].lower() and "claude" in said[0].lower()
+
+
+def test_every_session_the_app_spawns_is_pinned_to_its_own_servers():
+    # Account-level claude.ai connectors attach to ANY session the CLI opens, and a headless one
+    # that tries to OAuth them has no browser and no user (anthropics/claude-code#36060). It
+    # wedged a real evening: the brain's replacement session hung on initialize for 90 seconds
+    # ("Control request timeout: initialize"), the error reply was spoken, and his quit stalled
+    # into a force-quit. Every session this app spawns is headless, so every one is pinned.
+    from excephalon.brain_sdk import _make_options
+    from excephalon.foreman import _foreman_options
+    from excephalon.supervised_agent import _agent_options
+
+    assert _make_options("p", "m").extra_args == {"strict-mcp-config": None}
+    assert _foreman_options("/wt").extra_args == {"strict-mcp-config": None}
+    assert _agent_options("/wt", "m", "high", lambda *a: None).extra_args == {"strict-mcp-config": None}

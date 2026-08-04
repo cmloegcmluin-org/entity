@@ -50,6 +50,11 @@ def _foreman_options(server):
         effort=FOREMAN_EFFORT,
         permission_mode="bypassPermissions",  # an in-process tool with nowhere to ask a yes/no
         setting_sources=[],
+        # Pinned to the servers named here - account-level claude.ai connectors attach to any
+        # session the CLI opens, and a headless one that tries to OAuth them has no browser and
+        # no user; a brain replacement session wedged on exactly that, 90 seconds of silence
+        # into a spoken error and a force-quit (anthropics/claude-code#36060).
+        extra_args={"strict-mcp-config": None},
     )
 
 

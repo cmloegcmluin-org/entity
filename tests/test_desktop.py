@@ -277,3 +277,24 @@ def test_a_bundle_launched_app_keeps_the_icon_the_system_gave_it():
 
     set_mac_identity("/repo/assets/excephalon.png", api=claimed.append, bundled=lambda: None)
     assert claimed == ["/repo/assets/excephalon.png"]
+
+
+def test_the_mac_never_hands_the_raw_icon_to_the_view_layer(monkeypatch):
+    # pywebview's cocoa backend paints the Dock itself from start(icon=...) - raw file, no plate
+    # - so every proper launch had its squircle stripped a moment after it appeared, whatever the
+    # bundle's icns carried ("Excephalon icon still broken in the same way"). On a Mac the baked
+    # bundle icns serves every Dock state; the view layer gets no icon to paint over it with. The
+    # desk that needs the parameter (the Windows taskbar) still gets it.
+    from excephalon import machine
+
+    monkeypatch.setattr(machine, "MACOS", True)
+    monkeypatch.setattr(machine, "WINDOWS", False)
+    webview = _Webview()
+    open_window(_App(), icon="/repo/assets/excephalon.ico", webview=webview, port=8123)
+    assert webview.started == [{}]
+
+    monkeypatch.setattr(machine, "MACOS", False)
+    monkeypatch.setattr(machine, "WINDOWS", True)
+    webview = _Webview()
+    open_window(_App(), icon="/repo/assets/excephalon.ico", webview=webview, port=8123)
+    assert webview.started == [{"icon": "/repo/assets/excephalon.ico"}]

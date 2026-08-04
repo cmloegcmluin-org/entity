@@ -287,6 +287,9 @@ def open_window(app, *, title="Excephalon", icon=None, webview=None, port=None,
         # The X asks, in the app's own styling, instead of closing: see Controls.asked_to_close.
         window.events.closing += controls.asked_to_close
     # pywebview's winforms backend applies the icon to the window, and so to the taskbar button;
-    # without it Windows shows pythonw.exe's. (Its "GTK/QT only" docstring is stale.)
-    webview.start(icon=icon) if icon else webview.start()
+    # without it Windows shows pythonw.exe's. (Its "GTK/QT only" docstring is stale - and stale
+    # for cocoa too, which is why the Mac must NOT get it: that backend paints the Dock with the
+    # raw file, stripping the system's rounded plate off every proper launch, whatever the
+    # bundle's baked icns carried. On a Mac the bundle serves every Dock state by itself.)
+    webview.start(icon=icon) if icon and machine.WINDOWS else webview.start()
     return controls

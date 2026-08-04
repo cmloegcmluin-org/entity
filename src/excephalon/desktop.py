@@ -48,13 +48,25 @@ def _set_mac_identity_via_appkit(icon):
         NSApplication.sharedApplication().setApplicationIconImage_(image)
 
 
-def set_mac_identity(icon, api=_set_mac_identity_via_appkit):
-    """Claim the Dock face on a Mac. Launched outside its bundle - the old relauncher's bare
-    python, a terminal run - the app sat in the Dock as "Python" with the interpreter's icon:
-    "it came back with a different icon ... and is named Python". Same shape as the Windows
-    AppUserModelID claim: best-effort, and a platform where it fails just doesn't get one."""
+def _launching_bundle():
+    """The bundle identity LaunchServices launched us under, or None for a bare process. Read
+    from the environment because it survives the bundle script's exec into the venv python,
+    while NSBundle.mainBundle follows the executable and answers "Python" either way."""
+    import os
+
+    return os.environ.get("__CFBundleIdentifier")
+
+
+def set_mac_identity(icon, api=_set_mac_identity_via_appkit, bundled=_launching_bundle):
+    """Claim the Dock face on a Mac - but ONLY outside the bundle. Launched bare - the old
+    relauncher's venv python, a terminal run - the app sat in the Dock as "Python" with the
+    interpreter's icon: "it came back with a different icon ... and is named Python". Launched
+    properly, the system already shows the bundle's icon on its rounded plate, and an image set
+    at runtime shows RAW - so claiming it anyway was "the Dock icon keeps losing its squircle",
+    the plate stripped off every good launch a moment after it appeared. Best-effort, and a
+    platform where the claim fails just doesn't get one."""
     try:
-        if icon:
+        if icon and not bundled():
             api(icon)
     except Exception:
         pass

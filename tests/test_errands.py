@@ -171,3 +171,61 @@ def test_an_errand_session_sees_only_the_servers_it_was_given():
 
     assert _wait_for(lambda: bool(made))
     assert made[0].extra_args == {"strict-mcp-config": None}
+
+
+def test_two_chores_at_once_take_turns_on_the_one_session():
+    # "Both running—results in a moment," then fifteen minutes of nothing: the first time the
+    # brain dispatched two errands in one turn, both asks hit the one session together, collided
+    # on its stream, and BOTH wedged - no answer, no error, no event. One session means one
+    # chore at a time; the second waits its turn instead of destroying the first.
+    import threading
+
+    inside, overlapped = [], []
+
+    class SlowSession:
+        def ask(self, prompt, on_message=None, on_text=None):
+            if inside:
+                overlapped.append(prompt)
+            inside.append(prompt)
+            time.sleep(0.05)
+            inside.pop()
+            return f"did: {prompt[-20:]}"
+
+    events = []
+    runner = ErrandRunner("C:/runtime", lambda *event: events.append(event),
+                          session_factory=lambda o: SlowSession())
+
+    runner.run("check the calendar")
+    runner.run("check the mail")
+
+    assert _wait_for(lambda: len(events) == 2)
+    assert overlapped == []  # never two asks inside the session at once
+    runner.close()
+
+
+def test_a_chore_that_never_answers_is_reported_not_vanished():
+    # An ask with no deadline is a chore that can disappear: the thread blocks forever and the
+    # user hears nothing at all - not even a failure. Past the deadline the session is shed (a
+    # dead session makes the stranded ask raise, same as the brain's own recovery) and the
+    # outcome says what happened.
+    import threading
+
+    hang = threading.Event()
+
+    class WedgedSession:
+        def ask(self, prompt, on_message=None, on_text=None):
+            hang.wait(5.0)
+            raise RuntimeError("session closed under the ask")
+
+        def close(self):
+            hang.set()  # closing is what frees the stranded ask, as with the real session
+
+    events = []
+    runner = ErrandRunner("C:/runtime", lambda *event: events.append(event),
+                          session_factory=lambda o: WedgedSession(), deadline=0.1)
+
+    runner.run("check the mail")
+
+    assert _wait_for(lambda: bool(events), timeout=3.0)
+    assert "could not" in events[0][2]
+    runner.close()

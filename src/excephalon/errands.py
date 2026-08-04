@@ -95,16 +95,25 @@ def _errand_options(cwd, services=None):
     )
 
 
-class ErrandRunner:
-    """One quiet helper session, opened on first use, reused for every chore after."""
+DEFAULT_DEADLINE = 180.0  # a chore is a small thing; one that outlives this is stuck, not slow
 
-    def __init__(self, cwd, events, *, services=None, session_factory=SdkSession):
+
+class ErrandRunner:
+    """One quiet helper session, opened on first use, reused for every chore after - one chore
+    AT A TIME. The first turn that dispatched two at once put both asks on the one session
+    together; they collided on its stream and both wedged - "Both running—results in a moment,"
+    then fifteen minutes of nothing, no answer and no error either."""
+
+    def __init__(self, cwd, events, *, services=None, session_factory=SdkSession,
+                 deadline=DEFAULT_DEADLINE):
         self._cwd = cwd
         self._events = events  # (kind, agent, report) - the same sink the desk's news takes
         self._services = services or {}
         self._session_factory = session_factory
         self._session = None
+        self._deadline = deadline
         self._lock = threading.Lock()
+        self._one_at_a_time = threading.Lock()
 
     def run(self, chore):
         """Take one chore. Returns at once; the outcome arrives as an "errand" event, worded by
@@ -112,13 +121,42 @@ class ErrandRunner:
         threading.Thread(target=self._work, args=(chore,), daemon=True).start()
 
     def _work(self, chore):
-        try:
-            said = self._ensure_session().ask(PROMPT.format(chore=chore))
-        except Exception as exc:
-            # A chore that silently evaporated would be the lost-agent failure in miniature.
-            self._events("errand", "errands", f"the errand could not run: {exc}")
-            return
+        with self._one_at_a_time:
+            try:
+                said = self._bounded_ask(PROMPT.format(chore=chore))
+            except Exception as exc:
+                # A chore that silently evaporated would be the lost-agent failure in miniature.
+                self._events("errand", "errands", f"the errand could not run: {exc}")
+                return
         self._events("errand", "errands", said.strip() or "(finished without a word)")
+
+    def _bounded_ask(self, prompt):
+        """One ask that cannot vanish: past the deadline the session is closed - a dead session
+        makes the stranded ask raise, the same recovery the brain uses - and the outcome SAYS the
+        chore was given up on, because no answer and no error is the worst of the three."""
+        outcome, answered = {}, threading.Event()
+        session = self._ensure_session()
+
+        def ask():
+            try:
+                outcome["said"] = session.ask(prompt)
+            except Exception as exc:
+                outcome["raised"] = exc
+            finally:
+                answered.set()
+
+        threading.Thread(target=ask, daemon=True).start()
+        if not answered.wait(self._deadline):
+            with self._lock:
+                self._session = None  # the next chore builds a fresh one
+            try:
+                session.close()
+            except Exception:
+                pass
+            raise RuntimeError(f"it could not finish within {self._deadline:.0f}s and was given up on")
+        if "raised" in outcome:
+            raise outcome["raised"]
+        return outcome["said"]
 
     def _ensure_session(self):
         with self._lock:

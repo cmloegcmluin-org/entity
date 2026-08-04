@@ -186,19 +186,6 @@ def test_the_last_conversation_can_be_read_back_as_turns(tmp_path):
     ]
 
 
-def test_only_the_newest_session_is_read_back(tmp_path):
-    # Continuity is with the conversation they just had, not with every session ever - the older
-    # history is already in learned.md and on screen; re-feeding weeks of it would drown the seed.
-    from excephalon.transcript import recent_turns
-
-    (tmp_path / "session-20260718-100000.log").write_text(
-        "[10:00:00] you said: old question\n[10:00:01] entity> old answer\n", encoding="utf-8")
-    (tmp_path / "session-20260719-200000.log").write_text(
-        "[20:00:00] you said: new question\n[20:00:01] entity> new answer\n", encoding="utf-8")
-
-    assert recent_turns(tmp_path) == [("new question", "new answer")]
-
-
 def test_recent_turns_keeps_only_the_tail_and_survives_absence(tmp_path):
     from excephalon.transcript import recent_turns
 
@@ -255,3 +242,31 @@ def test_a_log_line_written_under_either_name_reads_back_the_same():
     # line comes back as an ordinary reply and stops being marked as one.
     assert parse_line("[12:00:03] entity (heads-up)> old") == ("heads-up", "12:00:03", "old")
     assert parse_line("[12:00:04] excephalon (heads-up)> new") == ("heads-up", "12:00:04", "new")
+
+
+def test_an_empty_newest_session_does_not_erase_the_thread(tmp_path):
+    # He opened a window, said nothing, and closed it - then the next boot greeted him as a
+    # stranger: "I don't have access to previous sessions". The seed read ONLY the newest log,
+    # and the newest log held one unanswered greeting. Continuity is with the conversation he
+    # was just having, wherever the session boundaries fell: walk back until the tail is full.
+    from excephalon.transcript import recent_turns
+
+    (tmp_path / "session-20260804-000146.log").write_text(
+        "[00:01:58] you said: are the connections up?\n"
+        "[00:02:07] excephalon> The check is running.\n", encoding="utf-8")
+    (tmp_path / "session-20260804-001022.log").write_text(
+        "[00:10:22] excephalon> I'm ready. What can I do for you?\n", encoding="utf-8")
+
+    assert recent_turns(tmp_path) == [("are the connections up?", "The check is running.")]
+
+
+def test_the_tail_spans_sessions_but_stays_a_tail(tmp_path):
+    from excephalon.transcript import recent_turns
+
+    (tmp_path / "session-20260803-232934.log").write_text(
+        "[23:30:26] you said: oldest\n[23:30:35] excephalon> old answer\n", encoding="utf-8")
+    (tmp_path / "session-20260804-000146.log").write_text(
+        "[00:01:58] you said: newer\n[00:02:07] excephalon> new answer\n", encoding="utf-8")
+
+    assert recent_turns(tmp_path) == [("oldest", "old answer"), ("newer", "new answer")]
+    assert recent_turns(tmp_path, keep=1) == [("newer", "new answer")]  # newest wins the cap

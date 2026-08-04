@@ -76,4 +76,42 @@ touch "$app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "$app" 2>/dev/null || true
 
+# Bake the system's TREATED rendering back into the icns - the squircle fix, proven in Highdeas
+# after many attempts (its "One squircle to rule every Dock state" saga). The OS drapes a raw
+# icon on its rounded plate only in SOME Dock states; the launch bounce and the running tile can
+# read the icns file itself, un-plated - "it's a squircle when closed and when open not". Asking
+# the system for the icon it SHOWS for this bundle and writing that back means every consumer of
+# the file shows the same tile.
+"$python" - "$app" <<'PYEOF'
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from AppKit import (NSBitmapImageRep, NSCompositingOperationCopy, NSGraphicsContext,
+                    NSMakeRect, NSPNGFileType, NSWorkspace)
+
+app = sys.argv[1]
+icon = NSWorkspace.sharedWorkspace().iconForFile_(app)
+work = Path(tempfile.mkdtemp()) / "excephalon.iconset"
+work.mkdir()
+for size in (16, 32, 128, 256, 512):
+    for scale in (1, 2):
+        px = size * scale
+        rep = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
+            None, px, px, 8, 4, True, False, "NSCalibratedRGBColorSpace", 0, 0)
+        ctx = NSGraphicsContext.graphicsContextWithBitmapImageRep_(rep)
+        NSGraphicsContext.setCurrentContext_(ctx)
+        icon.drawInRect_fromRect_operation_fraction_(
+            NSMakeRect(0, 0, px, px), NSMakeRect(0, 0, 0, 0), NSCompositingOperationCopy, 1.0)
+        ctx.flushGraphics()
+        name = f"icon_{size}x{size}" + ("@2x" if scale == 2 else "") + ".png"
+        rep.representationUsingType_properties_(NSPNGFileType, None).writeToFile_atomically_(
+            str(work / name), True)
+subprocess.run(["iconutil", "-c", "icns", str(work),
+                "-o", f"{app}/Contents/Resources/excephalon.icns"], check=True)
+print("baked the treated icns")
+PYEOF
+touch "$app"
+
 echo "installed $app"

@@ -243,3 +243,19 @@ def test_a_menu_that_cannot_be_restored_costs_a_menu_and_nothing_else():
     # Best-effort: Ctrl+C keeps working either way, so a backend without a winforms control
     # underneath it must not take the window down with it.
     restore_context_menus(_Window(form=None))
+
+
+def test_the_mac_dock_face_is_claimed_at_startup_and_a_failure_costs_only_cosmetics():
+    # Launched outside its bundle (the old relauncher's bare python, a terminal run), the app sat
+    # in the Dock as "Python" with the interpreter's icon - "it came back with a different icon
+    # ... and is named Python". The window claims its own face at startup, the same shape as the
+    # Windows AppUserModelID claim, and a platform where the claim fails just doesn't get one.
+    from excephalon.desktop import set_mac_identity
+
+    claimed = []
+    set_mac_identity("/repo/assets/excephalon.png", api=claimed.append)
+    assert claimed == ["/repo/assets/excephalon.png"]
+
+    def refuses(icon):
+        raise RuntimeError("no AppKit here")
+    set_mac_identity("/repo/assets/excephalon.png", api=refuses)  # must not raise

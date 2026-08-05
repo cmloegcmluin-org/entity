@@ -46,3 +46,17 @@ def test_consolidate_asks_with_the_consolidation_prompt():
     consolidate(Brain(), timeout=1.0)
 
     assert seen == [CONSOLIDATION_PROMPT]  # it asks the memory question, and "none" -> no facts
+
+
+def test_the_process_leaves_without_letting_the_interpreter_tear_native_audio_down():
+    # "Python quit unexpectedly" on every close. The crash report says it whole: main thread in
+    # Py_Finalize unloading modules, thread 27 mid-call into native audio whose code pages were
+    # already gone - daemon threads (the mic pump, playback) are BY DESIGN still alive at exit,
+    # and interpreter finalization pulls the floor out from under them. Everything durable is
+    # already on disk by the time the wind-down finishes (transcripts write per line, the fleet
+    # record on the way down), so finalization buys nothing but that roulette: leave hard.
+    from excephalon.shutdown import leave_process
+
+    left = []
+    leave_process(exit=left.append)
+    assert left == [0]

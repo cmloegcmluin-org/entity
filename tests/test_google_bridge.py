@@ -1,37 +1,39 @@
-"""The stdio bridge to Google's hosted MCP servers.
+"""The Gmail/Calendar MCP server, serving over Google's classic APIs.
 
-It exists because the CLI's own remote transport fails against them: the tools/list response
-comes back VALID and the transport throws anyway - "Failed to fetch tools: ... Error POSTing to
-endpoint: {...\"result\":{\"tools\":[..." with the successful body inside the error, on 2.1.212
-and 2.1.220 both, read straight out of the CLI's own MCP logs. Stdio servers are the transport
-that demonstrably works, so the bridge speaks stdio to the CLI and plain HTTPS to Google.
+It began as a forwarder to Google's hosted MCP servers, and every layer of that road was made to
+work except the last: with a verified-perfect sign-in, every tools/call still answered "The
+caller does not have permission" - while the classic APIs answered the same token flawlessly.
+These tests pin the server it became; the OAuth half (the sign-in, the tokens, the refresh) is
+what survived the pivot unchanged.
 """
 
 import json
+import urllib.error
 
-from excephalon.google_bridge import Bridge
+from excephalon.google_bridge import Bridge, FileTokens
 
 
-class FakePost:
-    """The HTTPS side, scripted: each call pops the next (status, content_type, body) answer."""
+class FakeAsk:
+    """The classic-API side, scripted: url fragment -> the JSON Google would answer."""
 
-    def __init__(self, answers):
-        self.answers = list(answers)
-        self.calls = []  # (url, payload_dict, auth_header)
+    def __init__(self, answers=None, denies=None):
+        self.answers = answers or {}
+        self.denies = denies  # an HTTPError to raise, once, then answer normally
+        self.calls = []  # (method, url, token, body)
 
-    def __call__(self, url, body, headers):
-        try:
-            payload = json.loads(body)
-        except ValueError:
-            payload = body.decode("utf-8")  # the refresh trade is form-encoded, not JSON
-        self.calls.append((url, payload, headers.get("Authorization")))
-        status, content_type, answer = self.answers.pop(0)
-        return status, content_type, answer
+    def __call__(self, method, url, token, body=None):
+        self.calls.append((method, url, token, body))
+        if self.denies is not None:
+            raised, self.denies = self.denies, None
+            raise raised
+    # falls through to the scripted answer
+        for match, data in self.answers.items():
+            if match in url:
+                return data
+        raise AssertionError(f"unexpected url: {url}")
 
 
 class Tokens:
-    """A token store held in memory: what refresh writes is what later reads see."""
-
     def __init__(self, access=None, refresh=None):
         self.held = {k: v for k, v in (("access_token", access), ("refresh_token", refresh)) if v}
 
@@ -42,87 +44,109 @@ class Tokens:
         self.held = dict(tokens)
 
 
-URL = "https://gmailmcp.googleapis.com/mcp/v1"
+GMAIL_URL = "https://gmailmcp.googleapis.com/mcp/v1"
+CALENDAR_URL = "https://calendarmcp.googleapis.com/mcp/v1"
 
 
-def _initialize_line(request_id=1):
-    return json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "initialize",
-                       "params": {"protocolVersion": "2025-06-18"}})
+def _bridge(url=GMAIL_URL, *, ask=None, tokens=None, post=None, client=None):
+    return Bridge(url, ask=ask or FakeAsk(), tokens=tokens or Tokens(access="tok-1"),
+                  post=post or (lambda *a: (500, "", "")), client=client or {})
 
 
-def test_a_request_line_is_forwarded_and_its_answer_comes_back_as_a_line():
-    result = {"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "StatelessServer"}}}
-    post = FakePost([(200, "application/json; charset=UTF-8", json.dumps(result))])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
-
-    answer = bridge.handle(_initialize_line())
-
-    assert json.loads(answer) == result
-    [(url, payload, auth)] = post.calls
-    assert url == URL and payload["method"] == "initialize"
-    assert auth == "Bearer tok-1"
+def _call_line(name, arguments=None, request_id=2):
+    return json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "tools/call",
+                       "params": {"name": name, "arguments": arguments or {}}})
 
 
-def test_an_expired_token_is_refreshed_once_and_the_request_retried():
-    # Google access tokens die hourly. The bridge notices the 401, trades the refresh token for a
-    # fresh access token, writes it down for every later request, and retries - all invisible to
-    # the CLI, which just sees its answer.
-    result = {"jsonrpc": "2.0", "id": 2, "result": {"tools": []}}
-    post = FakePost([
-        (401, "application/json", ""),
-        (200, "application/json", json.dumps({"access_token": "tok-new", "expires_in": 3599})),
-        (200, "application/json", json.dumps(result)),
-    ])
-    tokens = Tokens(access="tok-stale", refresh="refresh-1")
-    bridge = Bridge(URL, post=post, tokens=tokens,
-                    client={"client_id": "id-1", "client_secret": "secret-1"})
+def test_initialize_and_listing_are_the_bridges_own_and_name_the_service():
+    # The hosted servers' initialize was a minefield (one accepted protocol version, a client
+    # name they hang up on); answered locally there is no field to step on. The url in the
+    # registration says which service this instance is, so nothing already registered changes.
+    ask = FakeAsk()
+    answer = json.loads(_bridge(CALENDAR_URL, ask=ask).handle(json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})))
+    assert answer["result"]["serverInfo"]["name"] == "excephalon-calendar"
 
-    answer = bridge.handle(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}))
-
-    assert json.loads(answer) == result
-    refresh_call = post.calls[1]
-    assert "oauth2.googleapis.com/token" in refresh_call[0]
-    assert post.calls[2][2] == "Bearer tok-new"  # the retry wears the fresh token
-    assert tokens.held["access_token"] == "tok-new"  # and it is written down, not just used once
-    assert tokens.held["refresh_token"] == "refresh-1"  # the refresh token itself survives
-
-
-def test_unauthorized_with_no_way_back_answers_with_a_plain_error_naming_the_fix():
-    # No tokens at all, or a refresh that fails: the CLI must get a well-formed JSON-RPC error -
-    # a bridge that crashes or goes silent is a server that "failed", with nothing saying why.
-    # The message names the one thing the user can do.
-    post = FakePost([(401, "application/json", "")])
-    bridge = Bridge(URL, post=post, tokens=Tokens(), client={})
-
-    answer = json.loads(bridge.handle(json.dumps(
+    listed = json.loads(_bridge(CALENDAR_URL, ask=ask).handle(json.dumps(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})))
+    assert {t["name"] for t in listed["result"]["tools"]} == {
+        "list_calendars", "list_events", "search_events"}
+    listed = json.loads(_bridge(GMAIL_URL, ask=ask).handle(json.dumps(
         {"jsonrpc": "2.0", "id": 3, "method": "tools/list"})))
-
-    assert answer["id"] == 3
-    assert "Connect Google" in answer["error"]["message"]
-
-
-def test_a_notification_is_forwarded_but_owes_no_answer_line():
-    # notifications/initialized has no id; JSON-RPC forbids answering it, and a line written
-    # anyway would desync the whole stdio stream.
-    post = FakePost([(202, "text/plain", "")])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
-
-    answer = bridge.handle(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
-
-    assert answer is None
-    assert post.calls  # forwarded all the same
+    assert "search_threads" in {t["name"] for t in listed["result"]["tools"]}
+    assert ask.calls == []  # its own knowledge, no network trip
 
 
-def test_an_sse_wrapped_answer_is_unwrapped_to_its_json():
-    # The spec lets the server answer a POST as a one-event SSE stream instead of plain JSON;
-    # the CLI's stdio side speaks only JSON lines, so the unwrap happens here.
-    result = {"jsonrpc": "2.0", "id": 4, "result": {"ok": True}}
-    sse = f"event: message\ndata: {json.dumps(result)}\n\n"
-    post = FakePost([(200, "text/event-stream", sse)])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
+def test_a_tool_call_reaches_the_classic_api_with_the_token_and_trims_the_answer():
+    ask = FakeAsk(answers={"/users/me/calendarList": {"items": [
+        {"id": "c1", "summary": "Personal", "primary": True, "etag": "noise",
+         "conferenceProperties": {"noise": True}}]}})
 
-    assert json.loads(bridge.handle(json.dumps(
-        {"jsonrpc": "2.0", "id": 4, "method": "tools/list"}))) == result
+    answer = json.loads(_bridge(CALENDAR_URL, ask=ask).handle(_call_line("list_calendars")))
+
+    held = json.loads(answer["result"]["content"][0]["text"])
+    assert held == [{"id": "c1", "summary": "Personal", "primary": True}]  # the facts, not the noise
+    [(method, url, token, body)] = ask.calls
+    assert method == "GET" and token == "tok-1" and body is None
+
+
+def test_an_expired_token_is_refreshed_once_and_the_call_retried():
+    # Google access tokens die hourly. The 401 is traded for a fresh token, written down, and
+    # the call retried - invisible to the CLI, which just sees its answer.
+    denied = urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)
+    ask = FakeAsk(answers={"/labels": {"labels": [{"id": "L1", "name": "guitar"}]}},
+                  denies=denied)
+    tokens = Tokens(access="tok-stale", refresh="refresh-1")
+    post = lambda url, body, headers: (200, "application/json",
+                                       json.dumps({"access_token": "tok-new"}))
+
+    answer = json.loads(_bridge(ask=ask, tokens=tokens, post=post,
+                                client={"client_id": "id-1"}).handle(_call_line("list_labels")))
+
+    assert json.loads(answer["result"]["content"][0]["text"]) == [{"id": "L1", "name": "guitar"}]
+    assert tokens.held["access_token"] == "tok-new"  # written down, not just used once
+    assert ask.calls[1][2] == "tok-new"  # the retry wears the fresh token
+
+
+def test_no_sign_in_answers_with_the_one_thing_he_can_do():
+    answer = json.loads(_bridge(tokens=Tokens()).handle(_call_line("list_labels")))
+    held = answer["result"]
+    assert held["isError"] and "Connect Google" in held["content"][0]["text"]
+
+
+def test_googles_own_error_words_pass_through_as_the_answer():
+    # "insufficient authentication scopes", "API has not been used in project..." - the denial's
+    # words ARE the answer; a swallowed reason sends whoever asked off to fix the wrong thing.
+    import io
+
+    denied = urllib.error.HTTPError("url", 403, "Forbidden", {},
+                                    io.BytesIO(b'{"error": {"message": "Gmail API has not been used in project 42"}}'))
+    ask = FakeAsk(denies=denied)
+    ask.answers["/labels"] = None  # the retry path must not be taken for a 403
+
+    answer = json.loads(_bridge(ask=ask).handle(_call_line("list_labels")))
+
+    held = answer["result"]
+    assert held["isError"] and "has not been used in project" in held["content"][0]["text"]
+
+
+def test_a_notification_owes_no_answer_line():
+    assert _bridge().handle(json.dumps(
+        {"jsonrpc": "2.0", "method": "notifications/initialized"})) is None
+
+
+def test_a_draft_is_a_real_rfc822_message_saved_to_drafts_never_sent():
+    ask = FakeAsk(answers={"/drafts": {"id": "d-9", "message": {"id": "m-1"}}})
+
+    answer = json.loads(_bridge(ask=ask).handle(_call_line(
+        "create_draft", {"to": "ada@example.com", "subject": "strings", "body": "two dozen"})))
+
+    assert json.loads(answer["result"]["content"][0]["text"]) == {"draft_id": "d-9"}
+    [(method, url, _, body)] = ask.calls
+    assert method == "POST" and url.endswith("/drafts")
+    import base64
+    raw = base64.urlsafe_b64decode(body["message"]["raw"] + "==").decode("utf-8")
+    assert "To: ada@example.com" in raw and "two dozen" in raw
 
 
 def test_the_client_file_google_hands_out_is_read_as_it_comes(tmp_path):
@@ -144,8 +168,6 @@ def test_the_client_file_google_hands_out_is_read_as_it_comes(tmp_path):
 
 
 def test_tokens_survive_the_trip_to_disk(tmp_path):
-    from excephalon.google_bridge import FileTokens
-
     store = FileTokens(tmp_path / "google" / "tokens.json")
     assert store.read() == {}  # never signed in: empty, not an error
 
@@ -160,86 +182,32 @@ def test_the_sign_in_url_asks_for_a_refresh_token_and_only_the_needed_scopes():
     # and the bridge would ask him to sign in again every hour of his life.
     from excephalon.google_bridge import SCOPES, auth_url
 
-    url = auth_url({"client_id": "id-7"}, port=49152)
+    url = auth_url({"client_id": "id-7"}, port=8765)
 
     assert url.startswith("https://accounts.google.com/o/oauth2/v2/auth?")
     assert "access_type=offline" in url and "prompt=consent" in url
     assert "client_id=id-7" in url
-    assert "127.0.0.1%3A49152" in url  # the loopback catcher the browser is sent back to
+    assert "127.0.0.1%3A8765" in url  # the loopback catcher the browser is sent back to
     for scope in SCOPES:
         from urllib.parse import quote
         assert quote(scope, safe="") in url
 
 
 def test_the_code_google_sends_back_is_traded_for_tokens_and_written_down(tmp_path):
-    from excephalon.google_bridge import FileTokens, exchange_code
+    from excephalon.google_bridge import exchange_code
 
-    post = FakePost([(200, "application/json", json.dumps(
-        {"access_token": "tok-1", "refresh_token": "refresh-1", "expires_in": 3599}))])
+    calls = []
+
+    def post(url, body, headers):
+        calls.append((url, body.decode("utf-8")))
+        return (200, "application/json", json.dumps(
+            {"access_token": "tok-1", "refresh_token": "refresh-1"}))
+
     store = FileTokens(tmp_path / "tokens.json")
-
     exchange_code("the-code", {"client_id": "id-7", "client_secret": "s-7"},
-                  port=49152, tokens=store, post=post)
+                  port=8765, tokens=store, post=post)
 
     assert store.read()["refresh_token"] == "refresh-1"
-    [(url, payload, _)] = post.calls
+    [(url, payload)] = calls
     assert url == "https://oauth2.googleapis.com/token"
     assert "code=the-code" in payload and "grant_type=authorization_code" in payload
-
-
-def test_initialize_is_forwarded_at_the_protocol_version_google_accepts():
-    # Google 401s any initialize below protocolVersion 2025-06-18 (measured: 2024-11-05 and
-    # 2025-03-26 both bounce) instead of negotiating downward as the spec intends - and a 401
-    # here read as "not signed in", which sent the user to a sign-in that could not help. The
-    # bridge speaks the accepted version to Google whatever the CLI opened with; the response
-    # carries it back, and the CLI adapts, which is the negotiation working one hop early.
-    result = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
-    post = FakePost([(200, "application/json", json.dumps(result))])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
-
-    old = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                      "params": {"protocolVersion": "2024-11-05", "capabilities": {}}})
-    assert json.loads(bridge.handle(old)) == result
-
-    [(_, payload, _)] = post.calls
-    assert payload["params"]["protocolVersion"] == "2025-06-18"
-    assert payload["params"]["capabilities"] == {}  # the rest of the request rides untouched
-
-
-def test_the_bridge_introduces_itself_as_itself():
-    # Google's servers 401 an initialize whose clientInfo.name is "claude-code" - bisected down
-    # to that one field; version, title, description, capabilities all pass. The bridge IS the
-    # MCP client on Google's wire, so it introduces itself truthfully as the bridge, and what
-    # the CLI calls itself never reaches a parser that would hang up on it.
-    result = {"jsonrpc": "2.0", "id": 1, "result": {}}
-    post = FakePost([(200, "application/json", json.dumps(result))])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"))
-
-    bridge.handle(json.dumps({
-        "jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": {"protocolVersion": "2025-11-25", "capabilities": {},
-                   "clientInfo": {"name": "claude-code", "title": "Claude Code",
-                                  "version": "2.1.220"}}}))
-
-    [(_, payload, _)] = post.calls
-    assert payload["params"]["clientInfo"]["name"] == "excephalon-google-bridge"
-
-
-def test_googles_own_explanation_outranks_the_connect_hint():
-    # Google delivers real, actionable answers INSIDE denial statuses: "Calendar MCP API has not
-    # been used in project ... or it is disabled. Enable it by visiting <url>" arrived as a
-    # well-formed JSON-RPC result under a 403 - and the bridge swallowed it into "not connected
-    # yet - sign in", pointing at a sign-in that could not help while the fix sat in the eaten
-    # body. A denial that carries a JSON-RPC answer IS the answer; the hint is only for a denial
-    # that says nothing.
-    told = {"jsonrpc": "2.0", "id": 5, "result": {
-        "content": [{"type": "text", "text": "Calendar MCP API has not been used in project"}],
-        "isError": True}}
-    post = FakePost([(403, "application/json", json.dumps(told))])
-    bridge = Bridge(URL, post=post, tokens=Tokens(access="tok-1"), client={})
-
-    answer = json.loads(bridge.handle(json.dumps(
-        {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
-         "params": {"name": "list_calendars", "arguments": {}}})))
-
-    assert answer == told  # forwarded whole, not replaced by the sign-in hint

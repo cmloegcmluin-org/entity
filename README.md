@@ -103,11 +103,10 @@ Asana authorizes through the CLI's own sign-in: register it (`claude mcp add --t
 asana https://mcp.asana.com/sse`), then run `claude`, type `/mcp`, pick it and follow the
 browser sign-in.
 
-Gmail and Calendar go through `excephalon.google_bridge` instead - a small stdio bridge to
-Google's own hosted MCP servers, needed twice over: Google's sign-in does not register clients
-on the fly (the CLI's `/mcp` flow fails with "does not support dynamic client registration"),
-and the CLI's remote transport mishandles these servers' responses ("tools fetch failed" on a
-valid reply). The bridge owns its auth: create an OAuth client once in Google's Cloud console
+Gmail and Calendar go through `excephalon.google_bridge` instead - a small stdio MCP server
+over Google's classic APIs (their hosted MCP servers refuse third-party clients however
+correctly configured, and the CLI's own sign-in flow cannot register a client with Google
+at all). The bridge owns its auth: create an OAuth client once in Google's Cloud console
 (Desktop app; enable the Gmail and Calendar APIs, add yourself as a test user), save the
 downloaded JSON as `runtime/google/client.json`, and double-click `Connect Google.command` to
 sign in. Tokens land in `runtime/google/tokens.json` - personal, gitignored, never the source.

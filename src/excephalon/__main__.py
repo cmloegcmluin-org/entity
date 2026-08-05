@@ -43,7 +43,7 @@ from excephalon.memory import (
 from excephalon.outbox import Outbox
 from excephalon.polish import mend
 from excephalon.relay import notice
-from excephalon.shutdown import consolidate
+from excephalon.shutdown import consolidate, leave_process
 from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
 from excephalon.transcript import MessageLog, Transcript, recent_turns
@@ -585,7 +585,7 @@ def main(argv=None):
                    timings=timings, stop=stop, barge_in=barge_in)
     if not gui:
         _session(**running)
-        return
+        leave_process()  # same daemon threads, same finalization segfault - see the gui path's exit
 
     # Windowed: the window opens FIRST and the whole session runs on a worker, so a click puts
     # something on screen at once instead of after a 2.4 GB model has loaded. Closing the window
@@ -729,6 +729,10 @@ def main(argv=None):
     # restart's relaunch needs nothing here - a detached helper (excephalon.relauncher) is already
     # waiting for this pid to die, however the wind-down goes.
     session.join(timeout=30)
+    # The wind-down is done and everything durable is on disk; interpreter finalization would
+    # only tear native audio down under the daemon threads that are alive by design - which was
+    # "Python quit unexpectedly" on every close (see shutdown.leave_process).
+    leave_process()
 
 
 if __name__ == "__main__":

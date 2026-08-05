@@ -29,3 +29,18 @@ def consolidate(brain, *, timeout=DEFAULT_CONSOLIDATION_TIMEOUT, prompt=CONSOLID
     thread.start()
     thread.join(timeout)
     return parse_facts(result["reply"]) if "reply" in result else []
+
+
+def leave_process(*, exit=None):
+    """End the process without interpreter finalization - the last line of a clean wind-down.
+
+    "Python quit unexpectedly" on every close: the crash report shows the main thread inside
+    Py_Finalize unloading modules while a daemon audio thread was mid-call into native code whose
+    pages were already unmapped. The mic pump and playback are daemon threads by design - they
+    cannot all be joined - and everything durable is already on disk before this line (the
+    transcript writes per line, the fleet record on the way down, consolidation just above). So
+    interpreter teardown buys nothing but the segfault, and the process leaves the way native-
+    audio GUI apps do: immediately."""
+    import os
+
+    (exit or os._exit)(0)

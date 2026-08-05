@@ -1,26 +1,31 @@
-"""A stdio MCP bridge to Google's hosted Gmail and Calendar servers.
+"""An MCP server for the user's Gmail and Calendar, over Google's classic APIs.
 
-Google runs real MCP servers (gmailmcp.googleapis.com, calendarmcp.googleapis.com) and the CLI's
-remote transport cannot talk to them: the tools/list response comes back VALID and the transport
-throws anyway - its own log shows "Failed to fetch tools: ... Error POSTing to endpoint:" with
-the successful tool list inside the error, on 2.1.212 and 2.1.220 both. Stdio servers are the
-transport that demonstrably works, so this speaks newline-delimited JSON-RPC to the CLI on stdin
-and stdout, and plain HTTPS to Google, forwarding each line as it is.
+It BEGAN as a forwarder to Google's hosted MCP servers (gmailmcp.googleapis.com,
+calendarmcp.googleapis.com), and every layer of that road was made to work - their one accepted
+protocol version, the client name they don't hang up on, the CLI transport bug walked around by
+speaking stdio - until the last: with a verified-perfect sign-in (web client, their own guides'
+five scopes, every API enabled), every tools/call still came back "The caller does not have
+permission", while the CLASSIC APIs answered the same token flawlessly - calendars, 99 labels.
+So the bridge now IS the server: same registrations, same tools/call surface, but the work done
+against the classic endpoints that provably answer. Do not point anything back at the hosted
+servers without watching a tools/call actually succeed.
 
-It also owns its auth, which fixes the other half of the story: Google's sign-in refuses to
-register clients on the fly (no dynamic client registration), and the CLI keeps what tokens it
-does win in the macOS Keychain, where a headless session may not be able to follow. Here the
-user's own OAuth client (runtime/google/client.json, the file Google's console hands out) and
-the tokens (runtime/google/tokens.json) live in runtime/ - personal, gitignored, and readable
-by every session the app spawns, on either desk. `--connect` runs the one-time browser sign-in;
-`--serve <url>` is what the CLI launches per server.
+Auth is its own, which is the other half of why it exists: Google's sign-in refuses dynamic
+client registration (the CLI's /mcp flow cannot start), and the CLI keeps what tokens it wins in
+the macOS Keychain, where a headless session may not follow. The user's OAuth client
+(runtime/google/client.json) and tokens (runtime/google/tokens.json) live in runtime/ - personal,
+gitignored, readable by every session the app spawns, and copyable between machines: the PC needs
+no browser dance at all. `--connect` is the one-time sign-in; `--serve <url>` is what the CLI
+launches per server, the url naming which service's tools this instance offers.
 """
 
+import base64
 import json
 import os
 import sys
 import urllib.error
 import urllib.request
+from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -30,12 +35,11 @@ RUNTIME_GOOGLE = Path(__file__).resolve().parents[2] / "runtime" / "google"
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# EXACTLY the scopes Google's own MCP-server guides name, and no others - learned the hard way:
-# a token carrying the broad auth/calendar scope instead of these granular ones gets "The caller
-# does not have permission" on every calendar tool, and gmail.modify in place of gmail.readonly
-# reads as "insufficient authentication scopes". The same five URLs must be registered on the
-# consent screen's Data Access page. (developers.google.com/workspace/{gmail,calendar}/api/
-# guides/configure-mcp-server)
+# EXACTLY the scopes Google's own MCP-server guides name, and no others - a token carrying the
+# broad auth/calendar instead of the granular three got "The caller does not have permission",
+# and gmail.modify in place of gmail.readonly read as "insufficient authentication scopes". The
+# same five URLs are registered on the consent screen's Data Access page. They also bound what
+# the classic-API tools below may do: read mail, draft mail, read the calendar.
 SCOPES = (
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
@@ -47,16 +51,13 @@ SCOPES = (
 CONNECT_HINT = ("Google is not connected yet - run Connect Google.command (or "
                 "`python -m excephalon.google_bridge --connect`) and sign in once.")
 
-# The sign-in catcher's FIXED port. Google's MCP guides call for a Web-application OAuth client,
-# and a Web client honors only redirect URIs registered in advance, exactly - so the port cannot
-# be whatever the machine had free. http://127.0.0.1:8765 is the one URI to register, spelled
-# with the number, because Google treats localhost and 127.0.0.1 as different strings.
+# The sign-in catcher's FIXED port: a Web-application OAuth client honors only redirect URIs
+# registered in advance, exactly, so the port cannot be whatever the machine had free.
+# http://127.0.0.1:8765 is the one URI registered, spelled with the number, because Google
+# treats localhost and 127.0.0.1 as different strings.
 CONNECT_PORT = 8765
 
-# The one protocol version Google's servers accept. They 401 any initialize below it (measured:
-# 2024-11-05 and 2025-03-26 both bounce) instead of negotiating downward as the spec intends -
-# and that 401 read as "not signed in", which sent the user to a sign-in that could not help.
-GOOGLE_PROTOCOL = "2025-06-18"
+PROTOCOL = "2025-06-18"
 
 
 def load_client(path):
@@ -95,14 +96,6 @@ class FileTokens:
         os.chmod(self._path, 0o600)  # his sign-in; no other account on the machine needs it
 
 
-def _unwrap(content_type, body):
-    """The JSON a response carries, whether it came as plain JSON or a one-event SSE stream."""
-    if "text/event-stream" not in (content_type or ""):
-        return body
-    held = [line[5:].strip() for line in body.splitlines() if line.startswith("data:")]
-    return held[-1] if held else ""
-
-
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
@@ -137,69 +130,222 @@ def exchange_code(code, client, *, port, tokens, post):
                   "refresh_token": fresh.get("refresh_token", "")})
 
 
-class Bridge:
-    """One server's forwarding: a JSON-RPC line in, the same request against Google, a line back."""
+def _https_post(url, body, headers):
+    """The real HTTPS side: (status, content_type, text). An HTTP error status is an answer here,
+    not an exception - the caller's whole job is deciding what a 401 means."""
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return (response.status, response.headers.get("Content-Type", ""),
+                    response.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as denied:
+        return (denied.code, denied.headers.get("Content-Type", ""),
+                denied.read().decode("utf-8", errors="replace"))
 
-    def __init__(self, url, *, post, tokens, client=None):
-        self._url = url
+
+def _https_json(method, url, token, body=None):
+    """One classic-API request as JSON, or HTTPError for the caller to word."""
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8") if body is not None else None,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                 "User-Agent": "excephalon-google-bridge/1"},
+        method=method)
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+# ---------- the tools, per service, over the classic endpoints that provably answer ----------
+
+CALENDAR = "https://www.googleapis.com/calendar/v3"
+GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me"
+
+
+def _trim_event(event):
+    return {"summary": event.get("summary", ""), "start": event.get("start"),
+            "end": event.get("end"), "location": event.get("location"),
+            "status": event.get("status"), "id": event.get("id")}
+
+
+def _list_events(ask, a, extra=None):
+    calendar = a.get("calendar_id") or "primary"
+    query = urlencode({k: v for k, v in {
+        "timeMin": a.get("time_min"), "timeMax": a.get("time_max"),
+        "maxResults": a.get("max_results") or 25,
+        "singleEvents": "true", "orderBy": "startTime", **(extra or {})}.items() if v})
+    held = ask("GET", f"{CALENDAR}/calendars/{calendar}/events?{query}")
+    return [_trim_event(e) for e in held.get("items", [])]
+
+
+def _headers_of(message):
+    wanted = {"From", "To", "Subject", "Date"}
+    held = {h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])
+            if h.get("name") in wanted}
+    held["snippet"] = message.get("snippet", "")
+    held["id"] = message.get("id", "")
+    return held
+
+
+def _text_of(payload):
+    """The text/plain body under a message payload, decoded; parts walked depth-first."""
+    if payload.get("mimeType", "").startswith("text/plain"):
+        data = payload.get("body", {}).get("data", "")
+        return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace") if data else ""
+    for part in payload.get("parts", []) or []:
+        text = _text_of(part)
+        if text:
+            return text
+    return ""
+
+
+def _draft_raw(a):
+    mail = EmailMessage()
+    mail["To"] = a["to"]
+    mail["Subject"] = a.get("subject", "")
+    mail.set_content(a.get("body", ""))
+    return base64.urlsafe_b64encode(mail.as_bytes()).decode("ascii")
+
+
+# name -> (description, {argument: (json_type, required, description)}, handler(ask, args))
+CALENDAR_TOOLS = {
+    "list_calendars": (
+        "Every calendar on this account.",
+        {},
+        lambda ask, a: [{"id": c.get("id"), "summary": c.get("summary"),
+                         "primary": c.get("primary", False)}
+                        for c in ask("GET", f"{CALENDAR}/users/me/calendarList").get("items", [])]),
+    "list_events": (
+        "Events in a window, soonest first. Times are RFC3339 (2026-08-04T00:00:00Z).",
+        {"calendar_id": ("string", False, "which calendar; the primary if omitted"),
+         "time_min": ("string", False, "earliest start"),
+         "time_max": ("string", False, "latest start"),
+         "max_results": ("integer", False, "cap, default 25")},
+        _list_events),
+    "search_events": (
+        "Events matching words, soonest first.",
+        {"query": ("string", True, "words to match"),
+         "calendar_id": ("string", False, "which calendar; the primary if omitted"),
+         "time_min": ("string", False, "earliest start"),
+         "max_results": ("integer", False, "cap, default 25")},
+        lambda ask, a: _list_events(ask, a, extra={"q": a["query"]})),
+}
+
+GMAIL_TOOLS = {
+    "list_labels": (
+        "Every label on this mailbox.",
+        {},
+        lambda ask, a: [{"id": l.get("id"), "name": l.get("name")}
+                        for l in ask("GET", f"{GMAIL}/labels").get("labels", [])]),
+    "search_threads": (
+        "Find mail threads with Gmail's own search syntax (from:, is:unread, newer_than:7d...).",
+        {"query": ("string", True, "the Gmail search"),
+         "max_results": ("integer", False, "cap, default 20")},
+        lambda ask, a: ask("GET", f"{GMAIL}/threads?" + urlencode(
+            {"q": a["query"], "maxResults": a.get("max_results") or 20})).get("threads", [])),
+    "get_thread": (
+        "One thread's messages: who, when, subject, snippet.",
+        {"thread_id": ("string", True, "from search_threads")},
+        lambda ask, a: [_headers_of(m) for m in ask(
+            "GET", f"{GMAIL}/threads/{a['thread_id']}?format=metadata"
+            "&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject"
+            "&metadataHeaders=Date").get("messages", [])]),
+    "get_message": (
+        "One message in full: headers and its plain-text body.",
+        {"message_id": ("string", True, "from get_thread or search_threads")},
+        lambda ask, a: (lambda m: {**_headers_of(m), "body": _text_of(m.get("payload", {}))})(
+            ask("GET", f"{GMAIL}/messages/{a['message_id']}?format=full"))),
+    "create_draft": (
+        "Write a DRAFT reply or email - saved to Drafts for his review, never sent.",
+        {"to": ("string", True, "recipient address"),
+         "subject": ("string", False, "the subject line"),
+         "body": ("string", False, "the message text")},
+        lambda ask, a: {"draft_id": ask("POST", f"{GMAIL}/drafts",
+                                        {"message": {"raw": _draft_raw(a)}}).get("id", "")}),
+}
+
+
+def toolset_for(url):
+    """Which service this instance serves, named by the registered URL - so every existing
+    registration and services.json entry keeps meaning what it always did."""
+    return CALENDAR_TOOLS if "calendar" in url else GMAIL_TOOLS
+
+
+class Bridge:
+    """One service's MCP server: initialize and tools answered locally, the work done against
+    the classic endpoints with the user's token, an hourly-expired token refreshed invisibly."""
+
+    def __init__(self, url, *, post=_https_post, ask=None, tokens=None, client=None):
+        self._tools = toolset_for(url)
+        self._name = "excephalon-calendar" if self._tools is CALENDAR_TOOLS else "excephalon-gmail"
         self._post = post
-        self._tokens = tokens
-        self._client = client or {}
+        self._ask_raw = ask or _https_json
+        self._tokens = tokens if tokens is not None else FileTokens(RUNTIME_GOOGLE / "tokens.json")
+        self._client = client if client is not None else load_client(RUNTIME_GOOGLE / "client.json")
 
     def handle(self, line):
-        """Answer one stdin line: the forwarded response as a line, or None when none is owed.
-
-        A 401 is an hourly-expired access token before it is anything else, so the refresh is
-        traded and the request retried once, invisibly. Past that, a request with an id gets a
-        well-formed JSON-RPC error naming the one thing the user can do - a bridge that crashes
-        or goes silent is a server that "failed", with nothing saying why."""
+        """One JSON-RPC line in, the answer line out - or None where none is owed."""
         request = json.loads(line)
-        if request.get("method") == "initialize":
-            # Speak the version Google accepts whatever the CLI opened with; the response
-            # carries it back, and the CLI adapts - the negotiation working one hop early. And
-            # introduce the client on THIS wire truthfully: it is the bridge, not the CLI behind
-            # it - which also matters mechanically, because Google 401s an initialize whose
-            # clientInfo.name is "claude-code" (bisected to that one field; everything else in
-            # the request passes).
-            params = dict(request.get("params") or {})
-            params["protocolVersion"] = GOOGLE_PROTOCOL
-            params["clientInfo"] = {"name": "excephalon-google-bridge", "version": "1"}
-            line = json.dumps({**request, "params": params})
-        status, content_type, body = self._ask(line)
-        if status in (401, 403) and self._refresh():
-            status, content_type, body = self._ask(line)
         request_id = request.get("id")
         if request_id is None:
-            return None  # a notification: answering it would desync the whole stdio stream
-        if status in (401, 403):
-            # Google delivers real, actionable answers INSIDE denial statuses - "Calendar MCP
-            # API has not been used in project ... Enable it by visiting <url>" arrived as a
-            # well-formed JSON-RPC result under a 403, and swallowing it into the sign-in hint
-            # pointed the user at a sign-in that could not help while the fix sat in the eaten
-            # body. A denial that carries a JSON-RPC answer IS the answer; the hint is only for
-            # a denial that says nothing.
-            told = _unwrap(content_type, body)
-            try:
-                held = json.loads(told)
-            except ValueError:
-                held = None
-            if isinstance(held, dict) and "jsonrpc" in held:
-                return told
+            return None
+        method = request.get("method")
+        if method == "initialize":
+            result = {"protocolVersion": PROTOCOL,
+                      "capabilities": {"tools": {"listChanged": False}},
+                      "serverInfo": {"name": self._name, "version": "2"}}
+        elif method == "tools/list":
+            result = {"tools": [
+                {"name": name, "description": described,
+                 "inputSchema": {"type": "object",
+                                 "properties": {arg: {"type": kind, "description": about}
+                                                for arg, (kind, _, about) in arguments.items()},
+                                 "required": [arg for arg, (_, need, _a) in arguments.items()
+                                              if need]}}
+                for name, (described, arguments, _) in self._tools.items()]}
+        elif method == "tools/call":
+            result = self._run_tool(request.get("params") or {})
+        elif method == "ping":
+            result = {}
+        else:
             return json.dumps({"jsonrpc": "2.0", "id": request_id,
-                               "error": {"code": -32000, "message": CONNECT_HINT}})
-        return _unwrap(content_type, body)
+                               "error": {"code": -32601, "message": f"unknown method: {method}"}})
+        return json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
 
-    def _ask(self, line):
-        headers = {"Content-Type": "application/json",
-                   "Accept": "application/json, text/event-stream"}
-        access = self._tokens.read().get("access_token")
-        if access:
-            headers["Authorization"] = f"Bearer {access}"
-        return self._post(self._url, line.encode("utf-8"), headers)
+    def _run_tool(self, params):
+        """A tool call's result - and a failure is an ANSWER (isError content), never a dead
+        server: no sign-in names the fix, and Google's own error words pass through whole,
+        because a swallowed reason sends whoever asked off to fix the wrong thing."""
+        tool = self._tools.get(params.get("name"))
+        if tool is None:
+            return {"content": [{"type": "text", "text": f"no such tool: {params.get('name')}"}],
+                    "isError": True}
+        if not self._tokens.read().get("access_token"):
+            return {"content": [{"type": "text", "text": CONNECT_HINT}], "isError": True}
+        try:
+            answer = tool[2](self._ask, params.get("arguments") or {})
+        except urllib.error.HTTPError as denied:
+            return {"content": [{"type": "text",
+                                 "text": denied.read().decode("utf-8", errors="replace")[:1000]}],
+                    "isError": True}
+        except Exception as broke:
+            return {"content": [{"type": "text", "text": f"bridge error: {broke}"}],
+                    "isError": True}
+        return {"content": [{"type": "text", "text": json.dumps(answer, ensure_ascii=False)}]}
+
+    def _ask(self, method, url, body=None):
+        """One authed classic-API call. A 401 is an hourly-expired access token before it is
+        anything else: the refresh token is traded, written down, and the request retried once,
+        invisibly - the CLI just sees its answer."""
+        try:
+            return self._ask_raw(method, url, self._tokens.read().get("access_token", ""), body)
+        except urllib.error.HTTPError as denied:
+            if denied.code != 401 or not self._refresh():
+                raise
+            return self._ask_raw(method, url, self._tokens.read().get("access_token", ""), body)
 
     def _refresh(self):
         """Trade the refresh token for a fresh access token, and write it down. False when there
-        is nothing to trade or Google declines - the caller falls through to the plain error."""
+        is nothing to trade or Google declines - the caller's error then stands as it was."""
         held = self._tokens.read()
         if not (held.get("refresh_token") and self._client.get("client_id")):
             return False
@@ -217,23 +363,9 @@ class Bridge:
         return True
 
 
-def _https_post(url, body, headers):
-    """The real HTTPS side: (status, content_type, text). An HTTP error status is an answer here,
-    not an exception - the caller's whole job is deciding what a 401 means."""
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return (response.status, response.headers.get("Content-Type", ""),
-                    response.read().decode("utf-8", errors="replace"))
-    except urllib.error.HTTPError as denied:
-        return (denied.code, denied.headers.get("Content-Type", ""),
-                denied.read().decode("utf-8", errors="replace"))
-
-
 def serve(url, *, stdin=sys.stdin, stdout=sys.stdout):
     """The stdio loop the CLI runs: one JSON-RPC line in, one out, until stdin closes."""
-    bridge = Bridge(url, post=_https_post, tokens=FileTokens(RUNTIME_GOOGLE / "tokens.json"),
-                    client=load_client(RUNTIME_GOOGLE / "client.json"))
+    bridge = Bridge(url)
     for line in stdin:
         if not line.strip():
             continue
@@ -241,7 +373,7 @@ def serve(url, *, stdin=sys.stdin, stdout=sys.stdout):
             answer = bridge.handle(line)
         except Exception as exc:  # one bad request must not kill the server for the session
             try:
-                request_id = request.get("id")
+                request_id = json.loads(line).get("id")
             except ValueError:
                 continue
             if request_id is None:
@@ -254,8 +386,8 @@ def serve(url, *, stdin=sys.stdin, stdout=sys.stdout):
 
 
 def connect():
-    """The one-time browser sign-in: catch Google's redirect on a loopback port, trade the code,
-    write the tokens. Run by a person, so it talks in plain sentences."""
+    """The one-time browser sign-in: catch Google's redirect on the registered loopback port,
+    trade the code, write the tokens. Run by a person, so it talks in plain sentences."""
     import threading
     import webbrowser
     from http.server import BaseHTTPRequestHandler, HTTPServer
